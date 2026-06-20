@@ -144,6 +144,7 @@ declare global {
         unmaximize: () => Promise<boolean>;
         isMaximized: () => Promise<boolean>;
         close: () => Promise<void>;
+        openDevTools: () => Promise<void>;
       };
       managedRecorder: {
         getStatus: () => Promise<ManagedRecorderStatus>;

@@ -14,6 +14,8 @@ import { WhatsNewReleaseTabs } from "./WhatsNewReleaseTabs/WhatsNewReleaseTabs";
 
 const COMMIT_URL_PATTERN = /\/commit\//;
 const GITHUB_USER_PATTERN = /^@/;
+const whatsNewBadgeClass =
+  "!border-[#f5e6c8]/45 !bg-[#f5e6c8]/10 !text-[#f5e6c8]";
 
 function getPlainText(children: ReactNode): string {
   if (typeof children === "string" || typeof children === "number") {
@@ -45,7 +47,12 @@ const whatsNewComponents: Partial<Components> = {
 
     if (href && COMMIT_URL_PATTERN.test(href)) {
       return (
-        <Badge variant="info" size="sm" soft icon={<FiGitCommit size={11} />}>
+        <Badge
+          variant="ghost"
+          size="sm"
+          className={whatsNewBadgeClass}
+          icon={<FiGitCommit size={11} />}
+        >
           <a
             href={href}
             target="_blank"
@@ -64,9 +71,9 @@ const whatsNewComponents: Partial<Components> = {
       const isMaintainer = CORE_MAINTAINERS.has(username);
       return (
         <Badge
-          variant={isMaintainer ? "success" : "info"}
+          variant="ghost"
           size="sm"
-          soft
+          className={whatsNewBadgeClass}
           icon={isMaintainer ? <FiShield size={11} /> : <FiUser size={11} />}
         >
           <a
@@ -123,6 +130,7 @@ const WhatsNewModal = () => {
     <Modal
       ref={modalRef}
       size="lg"
+      surface="base-100"
       className="flex h-[628px] max-h-[calc(100vh-4rem)] flex-col"
       onClose={closeWhatsNew}
     >

@@ -7,18 +7,23 @@ import { TroubleshootingSettingsCard } from "./TroubleshootingSettingsCard";
 let container: HTMLDivElement;
 let root: Root;
 const revealLogFile = vi.fn();
+const openDevTools = vi.fn();
 
-async function renderCard(): Promise<HTMLButtonElement> {
-  await act(async () => {
-    root.render(<TroubleshootingSettingsCard />);
-  });
-
-  const button = container.querySelector<HTMLButtonElement>("button");
+function getButtonByText(label: string): HTMLButtonElement {
+  const button = [
+    ...container.querySelectorAll<HTMLButtonElement>("button"),
+  ].find((candidate) => candidate.textContent?.includes(label));
   if (!button) {
-    throw new Error("Expected troubleshooting button to render");
+    throw new Error(`Expected ${label} button to render`);
   }
 
   return button;
+}
+
+async function renderCard(): Promise<void> {
+  await act(async () => {
+    root.render(<TroubleshootingSettingsCard />);
+  });
 }
 
 describe("TroubleshootingSettingsCard", () => {
@@ -27,11 +32,15 @@ describe("TroubleshootingSettingsCard", () => {
     document.body.append(container);
     root = createRoot(container);
     revealLogFile.mockResolvedValue({ success: true });
+    openDevTools.mockResolvedValue(undefined);
     Object.defineProperty(window, "electron", {
       configurable: true,
       value: {
         diagLog: {
           revealLogFile,
+        },
+        mainWindow: {
+          openDevTools,
         },
       },
     });
@@ -44,7 +53,8 @@ describe("TroubleshootingSettingsCard", () => {
   });
 
   it("opens the diagnostic log through preload", async () => {
-    const button = await renderCard();
+    await renderCard();
+    const button = getButtonByText("Open log file");
 
     await act(async () => {
       button.click();
@@ -59,7 +69,8 @@ describe("TroubleshootingSettingsCard", () => {
       success: false,
       error: "shell failed",
     });
-    const button = await renderCard();
+    await renderCard();
+    const button = getButtonByText("Open log file");
 
     await act(async () => {
       button.click();
@@ -67,5 +78,30 @@ describe("TroubleshootingSettingsCard", () => {
 
     expect(container.textContent).toContain("Could not open diagnostic log.");
     expect(revealLogFile).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens developer tools through preload", async () => {
+    await renderCard();
+    const button = getButtonByText("Open DevTools");
+
+    await act(async () => {
+      button.click();
+    });
+
+    expect(container.textContent).toContain("Developer Tools");
+    expect(openDevTools).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a failure message when developer tools cannot be opened", async () => {
+    openDevTools.mockRejectedValueOnce(new Error("devtools failed"));
+    await renderCard();
+    const button = getButtonByText("Open DevTools");
+
+    await act(async () => {
+      button.click();
+    });
+
+    expect(container.textContent).toContain("Could not open developer tools.");
+    expect(openDevTools).toHaveBeenCalledTimes(1);
   });
 });

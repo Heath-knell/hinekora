@@ -1,14 +1,16 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import clsx from "clsx";
-import { FiActivity, FiCrop, FiEdit3, FiVideo } from "react-icons/fi";
-import { PiFilmSlate } from "react-icons/pi";
+import { FiCrop } from "react-icons/fi";
+import { IoIosRecording } from "react-icons/io";
+import { MdMovieEdit } from "react-icons/md";
+import { PiFilmSlate, PiVideo } from "react-icons/pi";
 
 const navItems = [
-  { to: "/", label: "Dashboard", icon: FiActivity },
-  { to: "/editor", label: "Editor", icon: FiEdit3 },
+  { to: "/", label: "Dashboard", icon: PiVideo },
   { to: "/clips", label: "Clips", icon: PiFilmSlate },
-  { to: "/recordings", label: "Recordings", icon: FiVideo },
+  { to: "/recordings", label: "Recordings", icon: IoIosRecording },
   { to: "/crop-overlay", label: "Aura Manager", icon: FiCrop },
+  { to: "/editor", label: "Editor", icon: MdMovieEdit },
 ] as const;
 
 function SidebarNav() {

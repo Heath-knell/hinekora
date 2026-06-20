@@ -33,54 +33,96 @@ env:
   NODE_MODULES_CACHE_VERSION: v1
 
 jobs:
-  checks:
-    name: Checks and Tests
+  biome:
+    name: Biome
     if: "!contains(github.event.head_commit.message, '[ci] release')"
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+      # `noobs` is a Windows-only native module and its install script includes
+      # windows.h. Linux CI skips lifecycle scripts and rebuilds only packages
+      # that are needed by the individual job.
+      - name: Setup Node.js and dependencies
+        uses: ./.github/actions/setup-pnpm-node
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-
-      - name: Cache node_modules
-        uses: actions/cache@v5
-        with:
-          path: node_modules
-          key: node-modules-${{ runner.os }}-node${{ env.NODE_VERSION }}-${{ env.NODE_MODULES_CACHE_VERSION }}-${{ hashFiles('pnpm-lock.yaml') }}
-
-      # `noobs` is a Windows-only native module and its install script includes
-      # windows.h. Linux CI skips lifecycle scripts and rebuilds only Electron,
-      # which is required by the main-process test runner.
-      - name: Install dependencies without lifecycle scripts
-        run: pnpm install --frozen-lockfile --ignore-scripts
-
-      - name: Rebuild Electron binary
-        run: pnpm rebuild electron
+          cache-version: ${{ env.NODE_MODULES_CACHE_VERSION }}
 
       - name: Run Biome checks
         run: pnpm check
 
+  typecheck:
+    name: Typecheck
+    if: "!contains(github.event.head_commit.message, '[ci] release')"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      # `noobs` is a Windows-only native module and its install script includes
+      # windows.h. Linux CI skips lifecycle scripts and rebuilds only packages
+      # that are needed by the individual job.
+      - name: Setup Node.js and dependencies
+        uses: ./.github/actions/setup-pnpm-node
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache-version: ${{ env.NODE_MODULES_CACHE_VERSION }}
+
       - name: Run type checks
         run: pnpm typecheck
 
+  test-main:
+    name: Main-process Tests
+    if: "!contains(github.event.head_commit.message, '[ci] release')"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      # `noobs` is a Windows-only native module and its install script includes
+      # windows.h. Linux CI skips lifecycle scripts and rebuilds only packages
+      # that are needed by the individual job.
+      - name: Setup Node.js and dependencies
+        uses: ./.github/actions/setup-pnpm-node
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache-version: ${{ env.NODE_MODULES_CACHE_VERSION }}
+
+      - name: Rebuild Electron binary
+        run: pnpm rebuild electron
+
       - name: Run main-process tests
         run: pnpm test:main
+
+  test-renderer:
+    name: Renderer Tests
+    if: "!contains(github.event.head_commit.message, '[ci] release')"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      # `noobs` is a Windows-only native module and its install script includes
+      # windows.h. Linux CI skips lifecycle scripts and rebuilds only packages
+      # that are needed by the individual job.
+      - name: Setup Node.js and dependencies
+        uses: ./.github/actions/setup-pnpm-node
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache-version: ${{ env.NODE_MODULES_CACHE_VERSION }}
 
       - name: Run renderer tests
         run: pnpm test:renderer
 
   package-windows:
     name: Windows Package Check
-    needs: checks
+    needs: [biome, typecheck, test-main, test-renderer]
     if: "!contains(github.event.head_commit.message, '[ci] release')"
     runs-on: windows-latest
     timeout-minutes: 20
@@ -88,23 +130,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+      - name: Setup Node.js and dependencies
+        uses: ./.github/actions/setup-pnpm-node
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-
-      - name: Cache node_modules
-        uses: actions/cache@v5
-        with:
-          path: node_modules
-          key: node-modules-${{ runner.os }}-node${{ env.NODE_VERSION }}-${{ env.NODE_MODULES_CACHE_VERSION }}-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+          cache-version: ${{ env.NODE_MODULES_CACHE_VERSION }}
+          install-command: pnpm install --frozen-lockfile
 
       - name: Package Windows app
         run: pnpm package

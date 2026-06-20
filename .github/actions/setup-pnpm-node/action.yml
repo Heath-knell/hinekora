@@ -1,0 +1,35 @@
+name: Setup pnpm and Node
+description: Setup pnpm, Node.js, node_modules cache, and install dependencies.
+
+inputs:
+  cache-version:
+    description: node_modules cache version.
+    required: true
+  install-command:
+    description: Command used to install dependencies.
+    default: pnpm install --frozen-lockfile --ignore-scripts
+  node-version:
+    description: Node.js version to install.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v6
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: pnpm
+
+    - name: Cache node_modules
+      uses: actions/cache@v5
+      with:
+        path: node_modules
+        key: node-modules-${{ runner.os }}-node${{ inputs.node-version }}-${{ inputs.cache-version }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+    - name: Install dependencies
+      shell: bash
+      run: ${{ inputs.install-command }}

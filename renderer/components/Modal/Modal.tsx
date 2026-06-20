@@ -21,6 +21,7 @@ interface ModalProps {
   closeOnBackdrop?: boolean;
   onClose?: () => void;
   size?: "sm" | "md" | "lg";
+  surface?: "base-100" | "base-200" | "base-300";
 }
 
 const sizeClasses: Record<NonNullable<ModalProps["size"]>, string> = {
@@ -30,9 +31,21 @@ const sizeClasses: Record<NonNullable<ModalProps["size"]>, string> = {
 };
 
 const scrimFadeMs = 300;
+const surfaceClasses: Record<NonNullable<ModalProps["surface"]>, string> = {
+  "base-100": "bg-base-100",
+  "base-200": "bg-base-200",
+  "base-300": "bg-base-300",
+};
 
 const Modal = forwardRef<ModalHandle, ModalProps>(function Modal(
-  { children, className, closeOnBackdrop = true, onClose, size = "md" },
+  {
+    children,
+    className,
+    closeOnBackdrop = true,
+    onClose,
+    size = "md",
+    surface = "base-300",
+  },
   ref,
 ) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -125,7 +138,8 @@ const Modal = forwardRef<ModalHandle, ModalProps>(function Modal(
         )}
         <div
           className={clsx(
-            "modal-box border border-black bg-base-300 shadow-[0_0_18px_0_rgba(0,0,0,0.5)]",
+            "modal-box border border-black shadow-[0_0_18px_0_rgba(0,0,0,0.5)]",
+            surfaceClasses[surface],
             sizeClasses[size],
             className,
           )}

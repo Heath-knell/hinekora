@@ -11,6 +11,8 @@ const MainWindowAPI = {
   isMaximized: (): Promise<boolean> =>
     ipcRenderer.invoke(MainWindowChannel.IsMaximized),
   close: (): Promise<void> => ipcRenderer.invoke(MainWindowChannel.Close),
+  openDevTools: (): Promise<void> =>
+    ipcRenderer.invoke(MainWindowChannel.OpenDevTools),
 };
 
 export { MainWindowAPI };

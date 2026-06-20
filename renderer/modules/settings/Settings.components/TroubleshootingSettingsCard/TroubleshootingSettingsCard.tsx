@@ -1,12 +1,15 @@
 import { useCallback, useState } from "react";
-import { FiFileText } from "react-icons/fi";
+import { FiFileText, FiTerminal } from "react-icons/fi";
 
 type DiagnosticLogStatus = "idle" | "opening" | "error";
+type DevToolsStatus = "idle" | "opening" | "error";
 
 function TroubleshootingSettingsCard() {
   const [diagnosticLogStatus, setDiagnosticLogStatus] =
     useState<DiagnosticLogStatus>("idle");
+  const [devToolsStatus, setDevToolsStatus] = useState<DevToolsStatus>("idle");
   const isOpeningDiagnosticLog = diagnosticLogStatus === "opening";
+  const isOpeningDevTools = devToolsStatus === "opening";
 
   const handleOpenDiagnosticLog = useCallback(async () => {
     setDiagnosticLogStatus("opening");
@@ -16,6 +19,17 @@ function TroubleshootingSettingsCard() {
       setDiagnosticLogStatus(result.success ? "idle" : "error");
     } catch {
       setDiagnosticLogStatus("error");
+    }
+  }, []);
+
+  const handleOpenDevTools = useCallback(async () => {
+    setDevToolsStatus("opening");
+
+    try {
+      await window.electron.mainWindow.openDevTools();
+      setDevToolsStatus("idle");
+    } catch {
+      setDevToolsStatus("error");
     }
   }, []);
 
@@ -47,6 +61,31 @@ function TroubleshootingSettingsCard() {
           >
             <FiFileText size={15} />
             {isOpeningDiagnosticLog ? "Opening..." : "Open log file"}
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between gap-4 py-3">
+          <div className="min-w-0 [text-wrap:wrap]">
+            <h2 className="m-0 font-bold text-base-content text-sm">
+              Developer Tools
+            </h2>
+            <p className="mt-1 mb-0 text-base-content/60 text-sm">
+              Open the app inspector for checking renderer logs and UI state.
+            </p>
+            {devToolsStatus === "error" ? (
+              <p className="mt-2 mb-0 text-error text-xs" role="status">
+                Could not open developer tools.
+              </p>
+            ) : null}
+          </div>
+          <button
+            className="btn btn-secondary btn-sm shrink-0 gap-2"
+            disabled={isOpeningDevTools}
+            type="button"
+            onClick={handleOpenDevTools}
+          >
+            <FiTerminal size={15} />
+            {isOpeningDevTools ? "Opening..." : "Open DevTools"}
           </button>
         </div>
       </div>

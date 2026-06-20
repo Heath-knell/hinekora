@@ -1,7 +1,19 @@
 # Hinekora
+
 Hinekora is a desktop companion app for players who want clean gameplay
 recording, quick death clips, simple replay editing, and aura overlays without
 digging through recording software.
+
+---
+
+[![Download Latest Release](https://img.shields.io/github/v/release/navali-creations/hinekora?style=for-the-badge&label=Download+Latest+Release&labelColor=211b18&color=f5e6c8)](https://github.com/navali-creations/hinekora/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/navali-creations/hinekora/total?style=for-the-badge&label=Downloads&labelColor=211b18&color=f5e6c8)](https://github.com/navali-creations/hinekora/releases)
+
+| system | extension |
+| -- | -- |
+| Windows | `Hinekora-x.y.z.Setup.exe` |
+
+---
 
 ## What It Does
 
@@ -11,21 +23,6 @@ digging through recording software.
 - Lets you trim, split, reorder, save, and copy clips from the built-in editor.
 - Manages aura overlays for tracking important on-screen buffs or effects.
 - Organizes recordings, death clips, and manual replay saves in one place.
-
-## Why Hinekora?
-
-Path of Exile can be busy, fast, and hard to review after the fact. Hinekora is
-made to sit beside the game and handle the recording workflow for you, so you can
-focus on playing and still keep the moments that matter.
-
-## Current Status
-
-Hinekora is under active development. The app already has recording, replay
-clips, editor, and aura manager screens, but the public release flow is still
-being shaped.
-
-There is no polished installer yet. If you are not comfortable running apps from
-source, it is better to wait for a packaged release.
 
 ## For Developers
 

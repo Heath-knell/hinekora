@@ -178,6 +178,14 @@ class MainWindowService {
         this.requestClose();
       },
     );
+
+    registerGuardedIpcHandler(
+      MainWindowChannel.OpenDevTools,
+      [WindowName.Main],
+      () => {
+        this.openMainWindowDevTools();
+      },
+    );
   }
 
   private requestClose(): void {
@@ -207,6 +215,23 @@ class MainWindowService {
     }
     mainWindow.show();
     mainWindow.focus();
+  }
+
+  private openMainWindowDevTools(
+    mainWindow: BrowserWindow | null = this.mainWindow,
+  ): void {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      return;
+    }
+
+    if (mainWindow.webContents.isDevToolsOpened()) {
+      return;
+    }
+
+    mainWindow.webContents.openDevTools({
+      mode: "detach",
+      activate: true,
+    });
   }
 
   private ensureTray(): void {
@@ -338,10 +363,7 @@ class MainWindowService {
           return;
         }
 
-        window.webContents.openDevTools({
-          mode: "detach",
-          activate: true,
-        });
+        this.openMainWindowDevTools(window);
       }
     });
   }

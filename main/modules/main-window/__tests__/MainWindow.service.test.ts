@@ -648,6 +648,12 @@ describe("MainWindowService", () => {
     expect(fakeWindow.close).toHaveBeenCalled();
     expect(electronMocks.quit).toHaveBeenCalledTimes(1);
 
+    handlers.get(MainWindowChannel.OpenDevTools)?.({});
+    expect(fakeWindow.webContents.openDevTools).toHaveBeenCalledWith({
+      mode: "detach",
+      activate: true,
+    });
+
     fakeWindow.destroyed = true;
     await service.createMainWindow();
     fakeWindow.destroyed = true;
@@ -667,5 +673,7 @@ describe("MainWindowService", () => {
 
     handlers.get(MainWindowChannel.Close)?.({});
     expect(electronMocks.quit).toHaveBeenCalled();
+
+    handlers.get(MainWindowChannel.OpenDevTools)?.({});
   });
 });
