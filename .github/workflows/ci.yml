@@ -50,8 +50,14 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      # `noobs` is a Windows-only native module and its install script includes
+      # windows.h. Linux CI skips lifecycle scripts and rebuilds only Electron,
+      # which is required by the main-process test runner.
+      - name: Install dependencies without lifecycle scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Rebuild Electron binary
+        run: pnpm rebuild electron
 
       - name: Run Biome checks
         run: pnpm check
