@@ -61,6 +61,16 @@ describe("HelpSettingsCard", () => {
     storeMocks.dismissAll.mockImplementation(async () => {
       storeMocks.dismissedBeacons = [...allOnboardingBeaconIds];
     });
+    storeMocks.dismiss.mockImplementation(async (key: string) => {
+      storeMocks.dismissedBeacons = [
+        ...new Set([...storeMocks.dismissedBeacons, key]),
+      ];
+    });
+    storeMocks.resetOne.mockImplementation(async (key: string) => {
+      storeMocks.dismissedBeacons = storeMocks.dismissedBeacons.filter(
+        (beaconId) => beaconId !== key,
+      );
+    });
     storeMocks.resetAll.mockImplementation(async () => {
       storeMocks.dismissedBeacons = [];
     });
@@ -85,11 +95,57 @@ describe("HelpSettingsCard", () => {
     expect(storeMocks.dismissAll).toHaveBeenCalledTimes(1);
     expect(storeMocks.refreshBeaconHost).toHaveBeenCalledTimes(1);
     expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
+      "onboarding-dismiss-all-clicked",
+      {
+        source: "settings",
+      },
+    );
+    expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
       "onboarding-all-dismissed",
       {
         source: "settings",
       },
     );
     expect(container.textContent).toContain("All dismissed");
+  });
+
+  it("tracks individual beacon visibility toggles from settings", async () => {
+    await renderHelpSettings();
+    const showGameSelector = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Show Game selector beacon"]',
+    );
+    const dismissOverlay = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Dismiss Overlay icon beacon"]',
+    );
+
+    await act(async () => {
+      if (!showGameSelector || !dismissOverlay) {
+        throw new Error("Expected onboarding beacon toggles to render");
+      }
+
+      showGameSelector.click();
+      dismissOverlay.click();
+    });
+
+    expect(storeMocks.resetOne).toHaveBeenCalledWith("game-selector");
+    expect(storeMocks.dismiss).toHaveBeenCalledWith("overlay-icon");
+    expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
+      "onboarding-beacon-visibility-toggled",
+      {
+        beaconId: "game-selector",
+        visible: true,
+        didDismiss: false,
+        didReset: true,
+      },
+    );
+    expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
+      "onboarding-beacon-visibility-toggled",
+      {
+        beaconId: "overlay-icon",
+        visible: false,
+        didDismiss: true,
+        didReset: false,
+      },
+    );
   });
 });

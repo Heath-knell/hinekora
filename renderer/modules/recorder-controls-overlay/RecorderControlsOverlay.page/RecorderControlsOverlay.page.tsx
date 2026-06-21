@@ -7,6 +7,7 @@ import {
   FiX as X,
 } from "react-icons/fi";
 
+import { trackEvent } from "~/renderer/modules/umami";
 import {
   useManagedRecorderShallow,
   useReplayClipsShallow,
@@ -39,6 +40,9 @@ function RecorderControlsOverlayPage() {
   };
   const handleSave = () => void saveManualClip();
   const handleCloseOverlay = () => {
+    trackEvent("recorder-overlay-closed", {
+      source: "overlay",
+    });
     void window.electron.overlayWindows.hideRecorder();
   };
   const isBufferActive = status?.bufferActive === true;

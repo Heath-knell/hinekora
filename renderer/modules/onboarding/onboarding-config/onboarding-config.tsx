@@ -106,8 +106,8 @@ const beaconVisualConfigById = {
     },
     popover: {
       component: CaptureSettingsBeacon as ComponentType<unknown>,
-      anchorPoint: AnchorPoint.BottomRight,
-      offset: { x: 10 },
+      anchorPoint: AnchorPoint.TopRight,
+      offset: { x: 10, y: -16 },
     },
   },
   "aura-profile-select": {

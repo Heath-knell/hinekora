@@ -2,6 +2,7 @@ import type {
   EditorMediaReference,
   EditorProject,
 } from "~/main/modules/editor";
+import { trackEvent } from "~/renderer/modules/umami";
 
 import { roundToMilliseconds } from "../Editor.utils/Editor.utils";
 import {
@@ -52,6 +53,7 @@ function createEditorWorkspaceActions({
       try {
         const project = await window.electron.editor.createProject(input);
         setProject(project, { resetHistory: true, resetViewState: true });
+        trackEvent("editor-project-created");
       } catch (error) {
         set((state) => {
           state.editor.error =
@@ -95,6 +97,7 @@ function createEditorWorkspaceActions({
             project,
           };
         });
+        trackEvent("editor-project-deleted");
       } catch (error) {
         set((state) => {
           state.editor.error =
@@ -140,6 +143,7 @@ function createEditorWorkspaceActions({
             project,
           };
         });
+        trackEvent("editor-hydrated");
       } catch (error) {
         set((state) => {
           state.editor.error =
@@ -176,6 +180,7 @@ function createEditorWorkspaceActions({
           state.editor.projectLimit = projectLimit;
           state.editor.workspace = workspace;
         });
+        trackEvent("editor-projects-loaded-more");
       } catch (error) {
         set((state) => {
           state.editor.error =
@@ -213,6 +218,7 @@ function createEditorWorkspaceActions({
           state.editor.selectedClipId = workspace.project.activeClipId;
           state.editor.workspace = workspace;
         });
+        trackEvent("editor-project-opened");
       } catch (error) {
         set((state) => {
           state.editor.error =
@@ -248,6 +254,7 @@ function createEditorWorkspaceActions({
           state.editor.projectLimit = get().editor.projectLimit;
           state.editor.workspace = workspace;
         });
+        trackEvent("editor-media-refreshed");
       } catch (error) {
         set((state) => {
           state.editor.error =
@@ -314,6 +321,7 @@ function createEditorWorkspaceActions({
           editorMaxZoom,
         );
       });
+      trackEvent("editor-timeline-zoom-changed");
     },
   };
 }

@@ -1,3 +1,5 @@
+import { trackEvent } from "~/renderer/modules/umami";
+
 import { editorHistoryLimit } from "./Editor.slice.constants";
 import type { EditorSliceActionContext } from "./Editor.slice.context";
 import type { EditorSlice } from "./Editor.slice.types";
@@ -28,15 +30,18 @@ function createEditorHistoryActions({
       });
     },
     commitHistoryTransaction: () => {
-      set((state) => {
-        const transactionProject = state.editor.historyTransactionProject;
-        const project = state.editor.project;
-        if (!transactionProject || !project || transactionProject === project) {
+      const transactionProject = get().editor.historyTransactionProject;
+      const project = get().editor.project;
+      const transactionLabel = get().editor.historyTransactionLabel ?? "Edit";
+      if (!transactionProject || !project || transactionProject === project) {
+        set((state) => {
           state.editor.historyTransactionLabel = null;
           state.editor.historyTransactionProject = null;
-          return;
-        }
+        });
+        return;
+      }
 
+      set((state) => {
         state.editor.historyFuture = [];
         state.editor.historyFutureLabels = [];
         state.editor.historyPast = [
@@ -45,10 +50,13 @@ function createEditorHistoryActions({
         ].slice(-editorHistoryLimit);
         state.editor.historyPastLabels = [
           ...state.editor.historyPastLabels,
-          state.editor.historyTransactionLabel ?? "Edit",
+          transactionLabel,
         ].slice(-editorHistoryLimit);
         state.editor.historyTransactionLabel = null;
         state.editor.historyTransactionProject = null;
+      });
+      trackEvent("editor-history-transaction-committed", {
+        label: transactionLabel,
       });
     },
     redoProjectChange: () => {
@@ -74,6 +82,9 @@ function createEditorHistoryActions({
         state.editor.historyTransactionProject = null;
       });
       setProject(nextProject, { recordHistory: false });
+      trackEvent("editor-redone", {
+        label: nextLabel,
+      });
       void get()
         .editor.saveProject(nextProject)
         .catch((error) => {
@@ -106,6 +117,9 @@ function createEditorHistoryActions({
         state.editor.historyTransactionProject = null;
       });
       setProject(previousProject, { recordHistory: false });
+      trackEvent("editor-undone", {
+        label: previousLabel,
+      });
       void get()
         .editor.saveProject(previousProject)
         .catch((error) => {

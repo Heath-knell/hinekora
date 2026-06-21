@@ -1,3 +1,5 @@
+import { trackEvent } from "~/renderer/modules/umami";
+
 import {
   calculateTimelineDuration,
   roundToMilliseconds,
@@ -53,6 +55,7 @@ function createEditorTimelineGapActions({
         },
         { historyLabel: "Delete gap" },
       );
+      trackEvent("editor-gap-deleted");
     },
     setHoveredTimelineGap: (gap) => {
       set((state) => {

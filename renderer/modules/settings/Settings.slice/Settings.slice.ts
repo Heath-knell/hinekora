@@ -1,3 +1,4 @@
+import { trackEvent } from "~/renderer/modules/umami";
 import type {
   BoundStoreStateCreator,
   SettingsSlice,
@@ -21,6 +22,7 @@ export const createSettingsSlice: BoundStoreStateCreator<SettingsSlice> = (
       set((state) => {
         state.settings.value = value;
       });
+      trackEvent("settings-updated");
     },
   },
 });

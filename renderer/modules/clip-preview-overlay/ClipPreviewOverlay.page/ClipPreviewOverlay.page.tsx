@@ -6,6 +6,7 @@ import {
   FiX as X,
 } from "react-icons/fi";
 
+import { trackEvent } from "~/renderer/modules/umami";
 import { useReplayClipsShallow } from "~/renderer/store";
 
 import {
@@ -43,6 +44,7 @@ function ClipPreviewOverlayPage() {
     : "Waiting for clip metadata";
 
   const handleClose = () => {
+    trackEvent("clip-preview-overlay-closed");
     void window.electron.overlayWindows.hideClipPreview();
   };
 

@@ -7,6 +7,7 @@ import {
   createCropSelection,
   isUsableCropSelection,
 } from "~/renderer/modules/crop-selector-overlay/CropSelectorOverlay.utils/CropSelectorOverlay.utils";
+import { trackEvent } from "~/renderer/modules/umami";
 
 import styles from "./CropSelectorOverlayPage.module.css";
 
@@ -18,6 +19,7 @@ function CropSelectorOverlayPage() {
   const startPointRef = useRef<CropSelectorPoint | null>(null);
 
   const handleCancel = useCallback(() => {
+    trackEvent("crop-selection-cancelled");
     void window.electron.overlayWindows.cancelCropRegionSelection();
   }, []);
 
@@ -61,9 +63,11 @@ function CropSelectorOverlayPage() {
 
     if (!isUsableCropSelection(nextSelection)) {
       setSelection(null);
+      trackEvent("crop-selection-discarded");
       return;
     }
 
+    trackEvent("crop-selection-completed");
     void window.electron.overlayWindows.completeCropRegionSelection(
       nextSelection,
     );

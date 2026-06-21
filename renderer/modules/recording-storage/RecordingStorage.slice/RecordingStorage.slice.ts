@@ -1,3 +1,4 @@
+import { trackEvent } from "~/renderer/modules/umami";
 import type {
   BoundStoreStateCreator,
   RecordingStorageSlice,
@@ -76,9 +77,11 @@ export const createRecordingStorageSlice: BoundStoreStateCreator<
       refreshRecordings,
       openRecording: async (path) => {
         await window.electron.recordingStorage.openRecording(path);
+        trackEvent("recording-opened");
       },
       revealRecording: async (path) => {
         await window.electron.recordingStorage.revealRecording(path);
+        trackEvent("recording-revealed");
       },
       deleteRecording: async (path) => {
         const result =
@@ -107,6 +110,7 @@ export const createRecordingStorageSlice: BoundStoreStateCreator<
         set((state) => {
           state.recordingStorage.error = result.cleanupError ?? null;
         });
+        trackEvent("recording-deleted");
       },
       deleteSelectedRecordings: async () => {
         const state = get();
@@ -132,6 +136,7 @@ export const createRecordingStorageSlice: BoundStoreStateCreator<
             result.cleanupErrors?.[0]?.error ??
             (result.ok ? null : result.error);
         });
+        trackEvent("recordings-deleted");
       },
       setSelectedRecordingIds: (ids) => {
         set((state) => {

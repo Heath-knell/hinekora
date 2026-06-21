@@ -15,8 +15,19 @@ const storeMocks = vi.hoisted(() => ({
 
 vi.mock("@repere/react", () => {
   const ReperePopover = Object.assign(
-    ({ children, className }: { children: ReactNode; className?: string }) => (
+    ({
+      children,
+      className,
+      onClose,
+    }: {
+      children: ReactNode;
+      className?: string;
+      onClose?: () => void;
+    }) => (
       <section className={className} data-testid="repere-popover">
+        <button aria-label="Close beacon" type="button" onClick={onClose}>
+          Close
+        </button>
         {children}
       </section>
     ),
@@ -110,6 +121,35 @@ describe("Popover", () => {
     vi.clearAllMocks();
   });
 
+  it("tracks when a beacon opens", async () => {
+    await renderPopover();
+
+    expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
+      "onboarding-beacon-opened",
+      {
+        beaconId: "game-selector",
+      },
+    );
+  });
+
+  it("tracks when a beacon closes", async () => {
+    await renderPopover();
+    const closeButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Close beacon"]',
+    );
+
+    await act(async () => {
+      closeButton?.click();
+    });
+
+    expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
+      "onboarding-beacon-closed",
+      {
+        beaconId: "game-selector",
+      },
+    );
+  });
+
   it("dismisses all onboarding beacons and refreshes Repere", async () => {
     await renderPopover();
     const dismissAllButton = Array.from(
@@ -122,6 +162,13 @@ describe("Popover", () => {
 
     expect(storeMocks.dismissAll).toHaveBeenCalledTimes(1);
     expect(storeMocks.refreshBeaconHost).toHaveBeenCalledTimes(1);
+    expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
+      "onboarding-dismiss-all-clicked",
+      {
+        source: "popover",
+        beaconId: "game-selector",
+      },
+    );
     expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
       "onboarding-all-dismissed",
       {
@@ -142,7 +189,7 @@ describe("Popover", () => {
     });
 
     expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
-      "onboarding-step-acknowledged",
+      "onboarding-beacon-acknowledged",
       {
         beaconId: "game-selector",
       },

@@ -1,3 +1,5 @@
+import { trackEvent } from "~/renderer/modules/umami";
+
 import {
   calculateTimelineDuration,
   normalizeEditorDuration,
@@ -103,6 +105,7 @@ function createEditorTimelineTrimActions({
         },
         { historyLabel: "Split" },
       );
+      trackEvent("editor-clip-split");
     },
     trimTimelineClipEdge: (clipId, edge, timelineSeconds) => {
       updateProject(

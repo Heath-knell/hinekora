@@ -8,6 +8,7 @@ import {
   resolveSelectionPlacementViewport,
 } from "~/renderer/modules/crop-editor/CropEditor.utils/CropEditor.utils";
 import { isPoeProcessStateForGame } from "~/renderer/modules/game/GameStatusBadge/GameStatusBadge.utils";
+import { trackEvent } from "~/renderer/modules/umami";
 import {
   useCropEditorShallow,
   usePoeProcessSelector,
@@ -55,9 +56,13 @@ function CropEditorActions() {
       return;
     }
 
+    trackEvent("aura-capture-started", {
+      game: activeGame,
+    });
     await window.electron.mainWindow.minimize().catch(() => undefined);
     const selection = await window.electron.overlayWindows.selectCropRegion();
     if (!selection) {
+      trackEvent("aura-capture-cancelled");
       return;
     }
 
@@ -82,6 +87,9 @@ function CropEditorActions() {
     });
     selectAura(crop.id);
     await window.electron.overlayWindows.showAura(profile.id);
+    trackEvent("aura-created", {
+      overlayCount: profile.overlayPlacements.length + 1,
+    });
   };
 
   const setAuraLocked = async (locked: boolean) => {
@@ -90,6 +98,9 @@ function CropEditorActions() {
     if (!locked && profile) {
       await window.electron.overlayWindows.showAura(profile.id);
     }
+    trackEvent("aura-overlay-lock-changed", {
+      locked,
+    });
   };
 
   const handleLockClick = () => {

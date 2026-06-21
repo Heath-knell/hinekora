@@ -2,6 +2,7 @@ import type {
   EditorExportInput,
   EditorExportResolution,
 } from "~/main/modules/editor";
+import { trackEvent } from "~/renderer/modules/umami";
 
 import {
   initialExportState,
@@ -32,6 +33,7 @@ function createEditorExportActions({
     copyExport: async (exportId) => {
       const result = await window.electron.editor.copyExport(exportId);
       if (result.ok) {
+        trackEvent("editor-export-copied");
         return result;
       }
 
@@ -48,7 +50,11 @@ function createEditorExportActions({
         return { ok: false, error: "No editable clip is selected" };
       }
 
-      return window.electron.editor.copyProjectToClipboard(input);
+      const result = await window.electron.editor.copyProjectToClipboard(input);
+      trackEvent("editor-project-copied", {
+        ok: result.ok,
+      });
+      return result;
     },
     exportProject: async (input: {
       fileName: string;
@@ -72,9 +78,16 @@ function createEditorExportActions({
             status: "failed",
           };
         });
+        trackEvent("editor-export-failed", {
+          reason: "empty-project",
+        });
         return;
       }
 
+      trackEvent("editor-export-started", {
+        mode: input.mode,
+        resolution: input.resolution,
+      });
       set((state) => {
         state.editor.exportState = {
           error: null,
@@ -127,6 +140,10 @@ function createEditorExportActions({
             status: "ready",
           };
         });
+        trackEvent("editor-export-ready", {
+          mode: input.mode,
+          resolution: input.resolution,
+        });
       } catch (error) {
         set((state) => {
           if (state.editor.exportState.requestId !== requestId) {
@@ -150,10 +167,12 @@ function createEditorExportActions({
       set((state) => {
         state.editor.exportState = initialExportState;
       });
+      trackEvent("editor-export-keep-editing");
     },
     revealExport: async (exportId) => {
       const result = await window.electron.editor.revealExport(exportId);
       if (result.ok) {
+        trackEvent("editor-export-revealed");
         return;
       }
 

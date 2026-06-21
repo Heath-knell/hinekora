@@ -1,4 +1,5 @@
 import { resolveCapturePreviewSourceId } from "~/renderer/modules/capture-preview/CapturePreview.utils/CapturePreview.utils";
+import { trackEvent } from "~/renderer/modules/umami";
 import type {
   BoundStoreStateCreator,
   CapturePreviewSlice,
@@ -42,6 +43,11 @@ export const createCapturePreviewSlice: BoundStoreStateCreator<
           state.capturePreview.isLoading = false;
           state.capturePreview.error = null;
         });
+        if (options.force === true) {
+          trackEvent("capture-sources-refreshed", {
+            count: sources.length,
+          });
+        }
       } catch (error) {
         set((state) => {
           state.capturePreview.isLoading = false;
@@ -56,6 +62,7 @@ export const createCapturePreviewSlice: BoundStoreStateCreator<
       set((state) => {
         state.capturePreview.selectedSourceId = id;
       });
+      trackEvent("capture-source-selected");
     },
   },
 });

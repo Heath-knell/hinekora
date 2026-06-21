@@ -43,19 +43,37 @@ function HelpSettingsCard() {
 
   const handleDismissBeacon = useCallback(
     async (key: OnboardingBeaconId) => {
-      await runOnboardingMutation(() => dismiss(key));
+      const didDismiss = await runOnboardingMutation(() => dismiss(key));
+
+      trackEvent("onboarding-beacon-visibility-toggled", {
+        beaconId: key,
+        visible: false,
+        didDismiss,
+        didReset: false,
+      });
     },
     [dismiss, runOnboardingMutation],
   );
 
   const handleResetBeacon = useCallback(
     async (key: OnboardingBeaconId) => {
-      await runOnboardingMutation(() => resetOne(key));
+      const didReset = await runOnboardingMutation(() => resetOne(key));
+
+      trackEvent("onboarding-beacon-visibility-toggled", {
+        beaconId: key,
+        visible: true,
+        didDismiss: false,
+        didReset,
+      });
     },
     [resetOne, runOnboardingMutation],
   );
 
   const handleDismissAllBeacons = useCallback(async () => {
+    trackEvent("onboarding-dismiss-all-clicked", {
+      source: "settings",
+    });
+
     setIsDismissingAll(true);
 
     try {

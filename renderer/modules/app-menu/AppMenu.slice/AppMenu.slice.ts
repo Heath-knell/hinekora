@@ -1,4 +1,5 @@
 import type { LatestReleaseInfo } from "~/main/modules/updater/Updater.api";
+import { trackEvent } from "~/renderer/modules/umami";
 import type { BoundStoreStateCreator } from "~/renderer/store/store.types";
 
 import {
@@ -134,6 +135,7 @@ export const createAppMenuSlice: BoundStoreStateCreator<AppMenuSlice> = (
       },
 
       minimize: () => {
+        trackEvent("window-minimized");
         void window.electron.mainWindow.minimize();
       },
 
@@ -141,15 +143,18 @@ export const createAppMenuSlice: BoundStoreStateCreator<AppMenuSlice> = (
         await window.electron.mainWindow.maximize();
         const isMaximized = await window.electron.mainWindow.isMaximized();
         setAppMenu({ isMaximized }, "appMenuSlice/maximize");
+        trackEvent("window-maximized");
       },
 
       unmaximize: async () => {
         await window.electron.mainWindow.unmaximize();
         const isMaximized = await window.electron.mainWindow.isMaximized();
         setAppMenu({ isMaximized }, "appMenuSlice/unmaximize");
+        trackEvent("window-restored");
       },
 
       close: () => {
+        trackEvent("window-closed");
         void window.electron.mainWindow.close();
       },
 
@@ -165,6 +170,9 @@ export const createAppMenuSlice: BoundStoreStateCreator<AppMenuSlice> = (
           { isRecorderOverlayVisible },
           "appMenuSlice/toggleRecorderOverlay",
         );
+        trackEvent("recorder-overlay-toggled", {
+          visible: isRecorderOverlayVisible,
+        });
       },
 
       setRecorderOverlayVisible: (isRecorderOverlayVisible) => {
@@ -176,6 +184,7 @@ export const createAppMenuSlice: BoundStoreStateCreator<AppMenuSlice> = (
 
       openWhatsNew: async () => {
         setAppMenu({ isWhatsNewOpen: true }, "appMenuSlice/openWhatsNew");
+        trackEvent("whats-new-opened");
 
         const existing = get().appMenu;
         if (
@@ -267,6 +276,9 @@ export const createAppMenuSlice: BoundStoreStateCreator<AppMenuSlice> = (
           },
           "appMenuSlice/closeWhatsNew",
         );
+        trackEvent("whats-new-closed", {
+          markedVersionSeen: Boolean(versionToMarkSeen),
+        });
 
         if (versionToMarkSeen) {
           void persistLastSeenAppVersion(versionToMarkSeen).catch(
@@ -292,6 +304,7 @@ export const createAppMenuSlice: BoundStoreStateCreator<AppMenuSlice> = (
           },
           "appMenuSlice/selectWhatsNewRelease",
         );
+        trackEvent("whats-new-release-selected");
       },
 
       startListening: () =>

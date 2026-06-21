@@ -1,4 +1,5 @@
 import { SETUP_STEPS } from "~/main/modules/app-setup/AppSetup.types";
+import { trackEvent } from "~/renderer/modules/umami";
 import { useAppSetup } from "~/renderer/store";
 
 function AppSetupActions() {
@@ -19,14 +20,26 @@ function AppSetupActions() {
   const actionLabel = isLastStep ? "Finish" : "Next";
 
   const handleBack = () => {
+    trackEvent("setup-back-clicked", {
+      currentStep,
+      can_go_back: !isFirstStep,
+    });
     void goBack();
   };
 
   const handleNext = () => {
+    trackEvent("setup-next-clicked", {
+      currentStep,
+      can_continue: !isNextDisabled,
+    });
     void advanceStep();
   };
 
   const handleComplete = () => {
+    trackEvent("setup-finish-clicked", {
+      currentStep,
+      can_finish: !isNextDisabled,
+    });
     void completeSetup();
   };
 

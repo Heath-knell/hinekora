@@ -1,3 +1,4 @@
+import { trackEvent } from "~/renderer/modules/umami";
 import type {
   BoundStoreStateCreator,
   ReplayClipsSlice,
@@ -100,12 +101,15 @@ export const createReplayClipsSlice: BoundStoreStateCreator<
         await refreshReplayClipState({
           activeClip: clip ?? get().replayClips.activeClip,
         });
+        trackEvent("clip-manual-save-requested");
       },
       openClip: async (id: string) => {
         await window.electron.replayClips.open(id);
+        trackEvent("clip-opened");
       },
       revealClip: async (id: string) => {
         await window.electron.replayClips.reveal(id);
+        trackEvent("clip-revealed");
       },
       deleteClip: async (id: string) => {
         const result = await window.electron.replayClips.delete(id);
@@ -120,6 +124,7 @@ export const createReplayClipsSlice: BoundStoreStateCreator<
         set((state) => {
           state.replayClips.error = result.cleanupError ?? null;
         });
+        trackEvent("clip-deleted");
       },
       deleteSelectedClips: async () => {
         const selectedIds = Object.entries(get().replayClips.selectedClipIds)
@@ -141,6 +146,7 @@ export const createReplayClipsSlice: BoundStoreStateCreator<
             result.cleanupErrors?.[0]?.error ??
             (result.ok ? null : result.error);
         });
+        trackEvent("clips-deleted");
       },
       setSelectedClipIds: (ids) => {
         set((state) => {

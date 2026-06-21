@@ -1,3 +1,4 @@
+import { trackEvent } from "~/renderer/modules/umami";
 import type {
   BoundStoreStateCreator,
   ProfilesSlice,
@@ -47,6 +48,9 @@ export const createProfilesSlice: BoundStoreStateCreator<ProfilesSlice> = (
         state.profiles.items = items;
         state.profiles.selectedProfileId = created.id;
       });
+      trackEvent("profile-created", {
+        game: created.game,
+      });
     },
     update: async (input: ProfileUpdateInput) => {
       const updated = await window.electron.profiles.update(input);
@@ -55,11 +59,13 @@ export const createProfilesSlice: BoundStoreStateCreator<ProfilesSlice> = (
         state.profiles.items = items;
         state.profiles.selectedProfileId = updated.id;
       });
+      trackEvent("profile-updated");
     },
     select: (id: string) => {
       set((state) => {
         state.profiles.selectedProfileId = id;
       });
+      trackEvent("profile-selected");
     },
     startListening: () =>
       window.electron.profiles.onChanged((items) => {

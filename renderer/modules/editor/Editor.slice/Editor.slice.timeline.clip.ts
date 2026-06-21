@@ -1,3 +1,5 @@
+import { trackEvent } from "~/renderer/modules/umami";
+
 import {
   calculateTimelineDuration,
   createTimelineClipFromAsset,
@@ -73,6 +75,9 @@ function createEditorTimelineClipActions({
         },
         { historyLabel: `Add ${asset.name}` },
       );
+      trackEvent("editor-clip-added", {
+        kind: asset.kind,
+      });
     },
     moveTimelineClip: (clipId, timelineSeconds, cursorSeconds) => {
       updateProject(
@@ -150,6 +155,7 @@ function createEditorTimelineClipActions({
         },
         { historyLabel: clipName ? `Delete ${clipName}` : "Delete" },
       );
+      trackEvent("editor-clip-deleted");
     },
   };
 }
