@@ -88,20 +88,17 @@ function formatConsolePrefix(
   }
 
   const stream = level === "error" ? process.stderr : process.stdout;
-  const coloredTimestamp = styleText("dim", timestamp, { stream });
+  const styleOptions = { stream, validateStream: false };
+  const coloredTimestamp = styleText("dim", timestamp, styleOptions);
   const coloredLevel = styleText(
     levelColorFormats[level],
     level.toUpperCase(),
-    {
-      stream,
-    },
+    styleOptions,
   );
   const coloredScope = styleText(
     ["bold", getScopeColorFormat(scope)],
     `[${scope}]`,
-    {
-      stream,
-    },
+    styleOptions,
   );
 
   return `${coloredTimestamp} ${coloredLevel} ${coloredScope} ${message}`;
