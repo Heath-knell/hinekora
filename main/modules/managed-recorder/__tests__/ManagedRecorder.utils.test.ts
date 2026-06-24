@@ -23,6 +23,7 @@ import {
   resolveManagedVideoEncoder,
   resolveManagedVideoEncoderSettings,
   resolveReplaySaveWaitMs,
+  selectAudioDevices,
   selectDisplayMonitor,
   selectWgcCaptureMethod,
   selectWindow,
@@ -382,6 +383,26 @@ describe("ManagedRecorder utils", () => {
         },
       ]),
     ).toBe(2);
+  });
+
+  it("selects enabled OBS audio device property items", () => {
+    expect(
+      selectAudioDevices([
+        {
+          name: "device_id",
+          items: [
+            { name: "Default", value: "default" },
+            { name: "Microphone", value: "{mic-guid}" },
+            { disabled: true, name: "Offline", value: "{offline-guid}" },
+            { name: "Empty", value: "" },
+          ],
+        },
+      ]),
+    ).toEqual([
+      { id: "default", label: "Default" },
+      { id: "{mic-guid}", label: "Microphone" },
+    ]);
+    expect(selectAudioDevices([])).toEqual([]);
   });
 
   it("matches OBS window items by the preview source label", () => {

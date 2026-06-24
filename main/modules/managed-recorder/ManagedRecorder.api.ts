@@ -3,7 +3,9 @@ import { ipcRenderer } from "electron";
 import type { ManagedRecorderStatus } from "~/types";
 import { ManagedRecorderChannel } from "./ManagedRecorder.channels";
 import type {
+  ManagedRecorderAudioDevices,
   ManagedRecorderCaptureMode,
+  ManagedRecorderListAudioDevicesOptions,
   ManagedReplaySaveResult,
 } from "./ManagedRecorder.dto";
 
@@ -12,6 +14,13 @@ const ManagedRecorderAPI = {
     ipcRenderer.invoke(ManagedRecorderChannel.GetCaptureMode),
   getStatus: (): Promise<ManagedRecorderStatus> =>
     ipcRenderer.invoke(ManagedRecorderChannel.GetStatus),
+  listAudioDevices: (
+    options: ManagedRecorderListAudioDevicesOptions = {},
+  ): Promise<ManagedRecorderAudioDevices> =>
+    ipcRenderer.invoke(
+      ManagedRecorderChannel.ListAudioDevices,
+      options.forceRefresh === true,
+    ),
   setCaptureMode: (
     mode: ManagedRecorderCaptureMode,
   ): Promise<ManagedRecorderCaptureMode> =>

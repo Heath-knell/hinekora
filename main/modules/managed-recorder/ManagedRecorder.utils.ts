@@ -10,6 +10,7 @@ import {
   type RecordingEncoderChoice,
   type RecordingQuality,
 } from "~/types";
+import type { ManagedRecorderAudioDevice } from "./ManagedRecorder.dto";
 
 const recordingExtensions = new Set([".flv", ".mkv", ".mov", ".mp4"]);
 const invalidObsDisplay = "DUMMY";
@@ -19,6 +20,7 @@ const replaySaveMaxWaitMs = 90_000;
 const replaySaveReferencePixels = 1920 * 1080;
 const replaySaveReferenceFps = 30;
 const replaySaveReferenceSeconds = 10;
+const audioDevicePropertyName = "device_id";
 const softwareH264Encoder = "obs_x264";
 const hardwareH264Encoders = [
   "obs_nvenc_h264_tex",
@@ -461,6 +463,27 @@ export function selectWgcCaptureMethod(
     items.find((item) => item.name.toLowerCase().includes("automatic"))
       ?.value ??
     null
+  );
+}
+
+export function selectAudioDevices(
+  properties: ManagedRecorderProperty[],
+): ManagedRecorderAudioDevice[] {
+  const deviceProperty = properties.find((property) => {
+    return (
+      property.name === audioDevicePropertyName && Array.isArray(property.items)
+    );
+  });
+
+  return (
+    deviceProperty?.items
+      ?.filter((item) => !item.disabled && String(item.value).length > 0)
+      .map((item) => {
+        const id = String(item.value);
+        const label = item.name.trim() || id;
+
+        return { id, label };
+      }) ?? []
   );
 }
 

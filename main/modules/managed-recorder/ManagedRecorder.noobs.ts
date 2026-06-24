@@ -44,6 +44,11 @@ interface NoobsApi {
     name: string,
     position: ManagedRecorderSceneItemPosition,
   ) => void;
+  SetMuteAudioInputs?: (mute: boolean) => void;
+  SetSourceVolume?: (name: string, volume: number) => void;
+  SetVolmeterEnabled?: (enabled: boolean) => void;
+  SetAudioSuppression?: (enabled: boolean) => void;
+  SetForceMono?: (enabled: boolean) => void;
 }
 
 type NoobsImporter = (specifier: string) => Promise<unknown>;

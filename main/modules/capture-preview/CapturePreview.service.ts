@@ -9,7 +9,6 @@ import {
 import { logWarn } from "~/main/utils/app-log";
 import {
   createDisplayDimensionsLookup,
-  type DisplayDimensions,
   getNativeDisplayDimensions,
 } from "~/main/utils/display-geometry";
 import {
@@ -88,7 +87,9 @@ class CapturePreviewService {
   ): Promise<CapturePreviewSource[]> {
     const startedAtMs = Date.now();
     const { activeGame } = SettingsStoreService.getInstance().get();
-    const displayDimensions = this.createDisplayDimensionsLookup();
+    const displays = screen.getAllDisplays();
+    const displayDimensions = createDisplayDimensionsLookup(displays);
+    const displayLabels = this.createDisplayLabelLookup(displays);
     const primaryDisplayDimensions = getNativeDisplayDimensions(
       screen.getPrimaryDisplay(),
     );
@@ -103,6 +104,9 @@ class CapturePreviewService {
     const sourceInputs = sources.slice(0, 64).map((source) => {
       const displayId = source.display_id || null;
       const poeGame = detectPathOfExileWindowTitle(source.name);
+      const displayLabel = displayId
+        ? (displayLabels.get(displayId) ?? null)
+        : null;
       const dimensions = displayId
         ? (displayDimensions.get(displayId) ?? null)
         : poeGame
@@ -113,6 +117,7 @@ class CapturePreviewService {
         id: source.id,
         name: source.name,
         displayId,
+        displayLabel,
         width: dimensions?.width ?? null,
         height: dimensions?.height ?? null,
         thumbnailDataUrl: source.thumbnail.isEmpty()
@@ -242,8 +247,16 @@ class CapturePreviewService {
     return this.sourceIdRequest;
   }
 
-  private createDisplayDimensionsLookup(): Map<string, DisplayDimensions> {
-    return createDisplayDimensionsLookup(screen.getAllDisplays());
+  private createDisplayLabelLookup(
+    displays: Electron.Display[],
+  ): Map<string, string> {
+    return new Map(
+      displays.flatMap((display) => {
+        const label = display.label.trim();
+
+        return label ? [[String(display.id), label]] : [];
+      }),
+    );
   }
 
   private setupHandlers(): void {

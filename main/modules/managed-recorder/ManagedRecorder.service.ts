@@ -24,6 +24,7 @@ import {
   logWarn,
 } from "~/main/utils/app-log";
 import {
+  assertOptionalBoolean,
   handleValidationError,
   safeErrorMessage,
 } from "~/main/utils/ipc-validation";
@@ -33,7 +34,10 @@ import type { CaptureTarget, GameId, ManagedRecorderStatus } from "~/types";
 import { ManagedRecorderChannel } from "./ManagedRecorder.channels";
 import { resolveNativeDisplayResolution } from "./ManagedRecorder.display";
 import type {
+  ManagedRecorderAudioDeviceKind,
+  ManagedRecorderAudioDevices,
   ManagedRecorderCaptureMode,
+  ManagedRecorderListAudioDevicesOptions,
   ManagedReplayKind,
   ManagedReplaySaveResult,
 } from "./ManagedRecorder.dto";
@@ -56,6 +60,7 @@ import {
   resolveManagedRecordingResolution,
   resolveManagedVideoEncoder,
   resolveManagedVideoEncoderSettings,
+  selectAudioDevices,
   selectDisplayMonitor,
   selectWgcCaptureMethod,
   selectWindow,
@@ -66,12 +71,34 @@ const currentDir = __dirname;
 const MANAGED_RUNTIME = "packaged_obs";
 const MANAGED_RECORDING_CONTAINER = "mp4";
 const MANAGED_DEFAULT_ENCODER = "hardware_h264";
+const MANAGED_AUDIO_SOURCE_TYPES: Record<
+  ManagedRecorderAudioDeviceKind,
+  string
+> = {
+  input: "wasapi_input_capture",
+  output: "wasapi_output_capture",
+};
+const MANAGED_AUDIO_SOURCE_NAMES: Record<
+  ManagedRecorderAudioDeviceKind,
+  string
+> = {
+  input: "Hinekora Audio Input",
+  output: "Hinekora Audio Output",
+};
+const MANAGED_AUDIO_SOURCE_PROBE_NAMES: Record<
+  ManagedRecorderAudioDeviceKind,
+  string
+> = {
+  input: "Hinekora Audio Input Probe",
+  output: "Hinekora Audio Output Probe",
+};
 const RECORDING_STOP_WAIT_MS = 5_000;
 const RECORDING_SAVE_WAIT_MS = 30_000;
 const RECORDING_DETECTION_WAIT_MS = 15_000;
 const RECORDING_FILE_POLL_MS = 1_000;
 const RECORDING_FILE_STABLE_MS = 1_000;
 const REPLAY_CONVERSION_STOP_DELAY_MS = 250;
+const AUDIO_DEVICE_PROBE_RETRY_MS = 250;
 const MANAGED_REPLAY_BUFFER_LIMIT_SECONDS = 60;
 const NATIVE_RECORDING_RESOLUTION = "native";
 const WINDOWS_PATH_DELIMITER = ";";
@@ -98,10 +125,15 @@ interface RecordingSession {
   startedAt: string;
 }
 
+interface EnsureNoobsRuntimeInitializedOptions {
+  publishStatus?: boolean;
+}
+
 class ManagedRecorderService {
   private static instance: ManagedRecorderService | null = null;
 
   private noobs: NoobsApi | null = null;
+  private noobsRuntimeInitialized = false;
   private status: ManagedRecorderStatus = {
     available: false,
     gameRunning: false,
@@ -129,10 +161,27 @@ class ManagedRecorderService {
   private captureSourceName: string | null = null;
   private captureSourceKey: string | null = null;
   private captureSourceResolution: ManagedRecorderResolution | null = null;
+  private audioSourceNames: Record<
+    ManagedRecorderAudioDeviceKind,
+    string | null
+  > = {
+    input: null,
+    output: null,
+  };
+  private audioSourceKeys: Record<
+    ManagedRecorderAudioDeviceKind,
+    string | null
+  > = {
+    input: null,
+    output: null,
+  };
   private activeRecordingBaselinePaths = new Set<string>();
   private recordingStopWaiter: (() => void) | null = null;
   private activeReplaySaveRequest: Promise<ManagedReplaySaveResult> | null =
     null;
+  private audioDeviceListRequest: Promise<ManagedRecorderAudioDevices> | null =
+    null;
+  private audioDevicesCache: ManagedRecorderAudioDevices | null = null;
   private gameRunningRefreshRequest: Promise<boolean> | null = null;
   private offlineStopRequest: Promise<void> | null = null;
 
@@ -157,6 +206,75 @@ class ManagedRecorderService {
 
   getCaptureMode(): ManagedRecorderCaptureMode {
     return this.captureMode;
+  }
+
+  async listAudioDevices(
+    options: ManagedRecorderListAudioDevicesOptions = {},
+  ): Promise<ManagedRecorderAudioDevices> {
+    if (this.audioDeviceListRequest) {
+      return this.audioDeviceListRequest;
+    }
+
+    if (options.forceRefresh !== true && this.audioDevicesCache) {
+      return this.audioDevicesCache;
+    }
+
+    this.audioDeviceListRequest = this.resolveAudioDevices().finally(() => {
+      this.audioDeviceListRequest = null;
+    });
+
+    return this.audioDeviceListRequest;
+  }
+
+  private async resolveAudioDevices(): Promise<ManagedRecorderAudioDevices> {
+    try {
+      await this.ensureNoobsRuntimeInitialized({ publishStatus: false });
+
+      const devices = await this.resolveAudioDevicesFromSources();
+      if (devices.output.length > 0) {
+        this.audioDevicesCache = devices;
+      }
+
+      return devices;
+    } catch (error) {
+      const message = safeErrorMessage(error);
+      logWarn(MANAGED_RECORDER_LOG_SCOPE, "Failed to list audio devices", {
+        error: message,
+      });
+
+      return this.audioDevicesCache ?? { input: [], output: [] };
+    }
+  }
+
+  private async resolveAudioDevicesFromSources(): Promise<ManagedRecorderAudioDevices> {
+    const devices = {
+      input: this.listAudioDevicesForKind("input"),
+      output: this.listAudioDevicesForKind("output"),
+    };
+    if (devices.output.length > 0) {
+      return devices;
+    }
+
+    await this.waitForAudioDeviceProbeRetry();
+
+    const retryDevices = {
+      input: this.listAudioDevicesForKind("input"),
+      output: this.listAudioDevicesForKind("output"),
+    };
+    if (retryDevices.output.length === 0) {
+      logWarn(
+        MANAGED_RECORDER_LOG_SCOPE,
+        "Audio output device probe returned no devices",
+      );
+    }
+
+    return retryDevices;
+  }
+
+  private waitForAudioDeviceProbeRetry(): Promise<void> {
+    return new Promise((resolveRetry) => {
+      setTimeout(resolveRetry, AUDIO_DEVICE_PROBE_RETRY_MS);
+    });
   }
 
   setCaptureMode(mode: ManagedRecorderCaptureMode): ManagedRecorderCaptureMode {
@@ -263,6 +381,7 @@ class ManagedRecorderService {
         this.noobs.StopRecording();
         await stopped;
         this.removeCaptureSource();
+        this.removeAudioSources();
       }
 
       this.activeRecordingMode = null;
@@ -393,6 +512,7 @@ class ManagedRecorderService {
         }
         savedPath = savedPath ?? this.noobs.GetLastRecording();
         this.removeCaptureSource();
+        this.removeAudioSources();
       }
 
       this.activeRecordingMode = null;
@@ -644,6 +764,33 @@ class ManagedRecorderService {
   }
 
   private async initialize(): Promise<void> {
+    const runtimePath = await this.ensureNoobsRuntimeInitialized();
+    const outputDirectory = this.resolveOutputDirectory();
+
+    logInfoSync(MANAGED_RECORDER_LOG_SCOPE, "Ensuring recorder output paths", {
+      ...createSafePathLogFields(outputDirectory, "outputDirectory"),
+    });
+    this.ensureOutputDirectories(outputDirectory);
+    logInfoSync(MANAGED_RECORDER_LOG_SCOPE, "Configuring capture source");
+    this.configureCaptureSource();
+    logInfoSync(MANAGED_RECORDER_LOG_SCOPE, "Capture source ready");
+    logInfoSync(MANAGED_RECORDER_LOG_SCOPE, "Configuring audio sources");
+    this.configureAudioSources();
+    logInfoSync(MANAGED_RECORDER_LOG_SCOPE, "Audio sources ready");
+
+    this.setStatus({
+      available: true,
+      initialized: true,
+      runtimePath,
+      outputDirectory,
+      error: null,
+    });
+  }
+
+  private async ensureNoobsRuntimeInitialized(
+    options: EnsureNoobsRuntimeInitializedOptions = {},
+  ): Promise<string> {
+    const { publishStatus = true } = options;
     this.refreshStatusFromSettings();
     const runtimePath = this.resolveNoobsRuntimePath();
     if (!runtimePath) {
@@ -654,19 +801,13 @@ class ManagedRecorderService {
     logInfoSync(MANAGED_RECORDER_LOG_SCOPE, "Resolved noobs runtime", {
       ...createSafePathLogFields(runtimePath, "runtime"),
       runtimeLocation: describeNoobsRuntimeLocation(runtimePath),
-      initialized: this.status.initialized,
+      initialized: this.noobsRuntimeInitialized,
     });
     logInfoSync(
       MANAGED_RECORDER_LOG_SCOPE,
       "Configuring noobs process environment",
     );
     this.configureNoobsProcessEnvironment(runtimePath);
-
-    const outputDirectory = this.resolveOutputDirectory();
-    logInfoSync(MANAGED_RECORDER_LOG_SCOPE, "Ensuring recorder output paths", {
-      ...createSafePathLogFields(outputDirectory, "outputDirectory"),
-    });
-    this.ensureOutputDirectories(outputDirectory);
 
     if (!this.noobs) {
       logInfoSync(MANAGED_RECORDER_LOG_SCOPE, "Loading noobs native module");
@@ -680,7 +821,7 @@ class ManagedRecorderService {
       throw new Error("noobs module is not installed");
     }
 
-    if (!this.status.initialized) {
+    if (!this.noobsRuntimeInitialized) {
       const logPath = join(app.getPath("userData"), "managed-recorder-logs");
       mkdirSync(logPath, { recursive: true });
       logInfoSync(MANAGED_RECORDER_LOG_SCOPE, "Initializing noobs runtime", {
@@ -697,19 +838,19 @@ class ManagedRecorderService {
         MANAGED_RECORDER_LOG_SCOPE,
         "Initial noobs.SetBuffering returned",
       );
+      this.noobsRuntimeInitialized = true;
     }
 
-    logInfoSync(MANAGED_RECORDER_LOG_SCOPE, "Configuring capture source");
-    this.configureCaptureSource();
-    logInfoSync(MANAGED_RECORDER_LOG_SCOPE, "Capture source ready");
+    if (publishStatus) {
+      this.setStatus({
+        available: true,
+        initialized: true,
+        runtimePath,
+        error: null,
+      });
+    }
 
-    this.setStatus({
-      available: true,
-      initialized: true,
-      runtimePath,
-      outputDirectory,
-      error: null,
-    });
+    return runtimePath;
   }
 
   private prepareRecordingSession(
@@ -824,6 +965,54 @@ class ManagedRecorderService {
       });
 
       return [];
+    }
+  }
+
+  private listAudioDevicesForKind(
+    kind: ManagedRecorderAudioDeviceKind,
+  ): ManagedRecorderAudioDevices[ManagedRecorderAudioDeviceKind] {
+    if (
+      !this.noobs?.CreateSource ||
+      !this.noobs.GetSourceProperties ||
+      !this.noobs.DeleteSource
+    ) {
+      return [];
+    }
+
+    const sourceType = MANAGED_AUDIO_SOURCE_TYPES[kind];
+    let sourceName: string | null = null;
+
+    try {
+      logInfoSync(MANAGED_RECORDER_LOG_SCOPE, "Creating audio device probe", {
+        kind,
+        sourceType,
+      });
+      sourceName = this.noobs.CreateSource(
+        MANAGED_AUDIO_SOURCE_PROBE_NAMES[kind],
+        sourceType,
+      );
+      const devices = selectAudioDevices(this.readSourceProperties(sourceName));
+      logInfo(MANAGED_RECORDER_LOG_SCOPE, "Listed audio devices", {
+        kind,
+        deviceCount: devices.length,
+      });
+
+      return devices;
+    } catch (error) {
+      logWarn(MANAGED_RECORDER_LOG_SCOPE, "Failed to list audio devices", {
+        kind,
+        error: safeErrorMessage(error),
+      });
+
+      return [];
+    } finally {
+      if (sourceName) {
+        try {
+          this.noobs?.DeleteSource?.(sourceName);
+        } catch {
+          // Best-effort cleanup. A failed probe deletion should not block settings.
+        }
+      }
     }
   }
 
@@ -956,6 +1145,95 @@ class ManagedRecorderService {
     this.captureSourceName = null;
     this.captureSourceKey = null;
     this.captureSourceResolution = null;
+  }
+
+  private configureAudioSources(): void {
+    const settings = SettingsStoreService.getInstance().get();
+
+    this.configureAudioSource("output", settings.recordingAudioOutputDeviceId);
+    this.configureAudioSource("input", settings.recordingAudioInputDeviceId);
+  }
+
+  private configureAudioSource(
+    kind: ManagedRecorderAudioDeviceKind,
+    deviceId: string | null,
+  ): void {
+    if (!deviceId) {
+      this.removeAudioSource(kind);
+      return;
+    }
+
+    if (
+      !this.noobs?.CreateSource ||
+      !this.noobs.GetSourceSettings ||
+      !this.noobs.SetSourceSettings ||
+      !this.noobs.AddSourceToScene
+    ) {
+      throw new Error("Packaged OBS runtime cannot configure audio sources");
+    }
+
+    const sourceType = MANAGED_AUDIO_SOURCE_TYPES[kind];
+    const sourceKey = `${sourceType}:${deviceId}`;
+    if (
+      this.audioSourceNames[kind] &&
+      this.audioSourceKeys[kind] === sourceKey
+    ) {
+      return;
+    }
+
+    this.removeAudioSource(kind);
+    logInfo(MANAGED_RECORDER_LOG_SCOPE, "Configuring audio source", {
+      kind,
+      sourceType,
+      defaultDevice: deviceId === "default",
+    });
+
+    const sourceName = this.noobs.CreateSource(
+      MANAGED_AUDIO_SOURCE_NAMES[kind],
+      sourceType,
+    );
+    const sourceSettings = this.noobs.GetSourceSettings(sourceName);
+    this.noobs.SetSourceSettings(sourceName, {
+      ...sourceSettings,
+      device_id: deviceId,
+    });
+    this.noobs.SetSourceVolume?.(sourceName, 1);
+    this.noobs.AddSourceToScene(sourceName);
+    this.audioSourceNames[kind] = sourceName;
+    this.audioSourceKeys[kind] = sourceKey;
+    logInfo(MANAGED_RECORDER_LOG_SCOPE, "Audio source configured", {
+      kind,
+      sourceType,
+      sourceName,
+      defaultDevice: deviceId === "default",
+    });
+  }
+
+  private removeAudioSources(): void {
+    this.removeAudioSource("input");
+    this.removeAudioSource("output");
+  }
+
+  private removeAudioSource(kind: ManagedRecorderAudioDeviceKind): void {
+    const sourceName = this.audioSourceNames[kind];
+    if (!sourceName) {
+      return;
+    }
+
+    try {
+      this.noobs?.RemoveSourceFromScene?.(sourceName);
+    } catch {
+      // Best-effort cleanup. A failed removal should not block recorder startup.
+    }
+
+    try {
+      this.noobs?.DeleteSource?.(sourceName);
+    } catch {
+      // Best-effort cleanup. The next source name will remain unique if deletion fails.
+    }
+
+    this.audioSourceNames[kind] = null;
+    this.audioSourceKeys[kind] = null;
   }
 
   private resolveCaptureTarget(): CaptureTarget {
@@ -1693,6 +1971,25 @@ class ManagedRecorderService {
       ManagedRecorderChannel.GetStatus,
       [WindowName.Main, WindowName.RecorderOverlay],
       () => this.getStatus(),
+    );
+    registerGuardedIpcHandler(
+      ManagedRecorderChannel.ListAudioDevices,
+      [WindowName.Main],
+      (_event, forceRefresh) => {
+        try {
+          assertOptionalBoolean(
+            forceRefresh,
+            "forceRefresh",
+            ManagedRecorderChannel.ListAudioDevices,
+          );
+
+          return this.listAudioDevices(
+            forceRefresh === true ? { forceRefresh: true } : {},
+          );
+        } catch (error) {
+          return handleValidationError(error);
+        }
+      },
     );
     registerGuardedIpcHandler(
       ManagedRecorderChannel.SetCaptureMode,

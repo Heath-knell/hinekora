@@ -13,6 +13,7 @@ describe("CapturePreview sources", () => {
           id: "screen:1:0",
           name: "Entire Screen",
           displayId: "1",
+          displayLabel: "Display Model Alpha",
           width: 2560,
           height: 1440,
           thumbnailDataUrl: null,
@@ -93,7 +94,7 @@ describe("CapturePreview sources", () => {
     ).toEqual([
       {
         id: "screen:1:0",
-        name: "Screen 1",
+        name: "Screen 1 (Display Model Alpha)",
         kind: "screen",
         displayId: "1",
         width: 2560,

@@ -189,6 +189,18 @@ export const AppSettingsSchema = z.object({
   recordingEncoder: RecordingEncoderSchema.default("hardware_h264"),
   recordingClipQuality: RecordingQualitySchema.default("high"),
   recordingRunQuality: RecordingQualitySchema.default("moderate"),
+  recordingAudioInputDeviceId: z
+    .string()
+    .min(1)
+    .max(512)
+    .nullable()
+    .default(null),
+  recordingAudioOutputDeviceId: z
+    .string()
+    .min(1)
+    .max(512)
+    .nullable()
+    .default(null),
   recordingHideOverlaysFromCapture: z.boolean().default(false),
   recordingMaxStorageGb: z.number().int().min(0).max(100_000).default(50),
   poe1ClientTxtPath: z.string().max(2_048).nullable().default(null),

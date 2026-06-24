@@ -6,6 +6,7 @@ interface CapturePreviewSourceInput {
   id: string;
   name: string;
   displayId: string | null;
+  displayLabel?: string | null;
   width: number | null;
   height: number | null;
   thumbnailDataUrl: string | null;
@@ -20,11 +21,15 @@ function normalizeCapturePreviewSources(
   return sources.flatMap((source): CapturePreviewSource[] => {
     if (source.id.startsWith("screen:")) {
       screenIndex += 1;
+      const name = createScreenSourceName(
+        screenIndex,
+        source.displayLabel ?? null,
+      );
 
       return [
         {
           id: source.id,
-          name: `Screen ${screenIndex}`,
+          name,
           kind: "screen",
           displayId: source.displayId,
           width: source.width,
@@ -58,6 +63,16 @@ function normalizeCapturePreviewSources(
       },
     ];
   });
+}
+
+function createScreenSourceName(
+  screenIndex: number,
+  displayLabel: string | null,
+): string {
+  const screenName = `Screen ${screenIndex}`;
+  const label = displayLabel?.trim();
+
+  return label ? `${screenName} (${label})` : screenName;
 }
 
 export type { CapturePreviewSourceInput };

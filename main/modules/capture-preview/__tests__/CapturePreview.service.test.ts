@@ -73,9 +73,11 @@ function createDisplay(
   width: number,
   height: number,
   scaleFactor = 1,
+  label = "",
 ): Electron.Display {
   return {
     id,
+    label,
     scaleFactor,
     size: { width, height },
   } as Electron.Display;
@@ -136,7 +138,13 @@ describe("CapturePreviewService", () => {
   });
 
   it("lists renderer-ready Path of Exile capture sources", async () => {
-    const primaryDisplay = createDisplay(1, 1920, 1080, 1.5);
+    const primaryDisplay = createDisplay(
+      1,
+      1920,
+      1080,
+      1.5,
+      "Display Model Alpha",
+    );
     electronMocks.getAllDisplays.mockReturnValue([primaryDisplay]);
     electronMocks.getPrimaryDisplay.mockReturnValue(primaryDisplay);
     electronMocks.getSources.mockResolvedValue([
@@ -177,7 +185,7 @@ describe("CapturePreviewService", () => {
     await expect(service.listSources()).resolves.toEqual([
       {
         id: "screen:1:0",
-        name: "Screen 1",
+        name: "Screen 1 (Display Model Alpha)",
         kind: "screen",
         displayId: "1",
         width: 2880,

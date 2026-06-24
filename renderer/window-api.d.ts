@@ -18,7 +18,9 @@ import type {
   EditorWorkspaceQuery,
 } from "~/main/modules/editor/Editor.dto";
 import type {
+  ManagedRecorderAudioDevices,
   ManagedRecorderCaptureMode,
+  ManagedRecorderListAudioDevicesOptions,
   ManagedReplaySaveResult,
 } from "~/main/modules/managed-recorder/ManagedRecorder.dto";
 import type {
@@ -155,6 +157,9 @@ declare global {
       managedRecorder: {
         getCaptureMode: () => Promise<ManagedRecorderCaptureMode>;
         getStatus: () => Promise<ManagedRecorderStatus>;
+        listAudioDevices: (
+          options?: ManagedRecorderListAudioDevicesOptions,
+        ) => Promise<ManagedRecorderAudioDevices>;
         setCaptureMode: (
           mode: ManagedRecorderCaptureMode,
         ) => Promise<ManagedRecorderCaptureMode>;
