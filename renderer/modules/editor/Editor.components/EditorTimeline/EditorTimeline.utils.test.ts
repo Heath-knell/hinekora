@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  formatEditorTimelineRailLeft,
+  formatEditorTimelineRailWidth,
+  resolveEditorTimelineFollowScroll,
   resolveEditorTimelineHoverSeconds,
   resolveEditorTimelineWheelZoom,
   resolveTrimEdgeHoverSeconds,
@@ -40,8 +43,8 @@ describe("EditorTimeline utils", () => {
 
     expect(
       resolveEditorTimelineHoverSeconds({
-        clientX: 600,
-        labelColumnWidth: 100,
+        clientX: 550,
+        railPaddingPixels: 100,
         target: markerZone,
         timelineGrid,
         visibleDurationSeconds: 10,
@@ -56,5 +59,52 @@ describe("EditorTimeline utils", () => {
     expect(resolveEditorTimelineWheelZoom({ deltaY: 100, zoom: 1.25 })).toBe(1);
     expect(resolveEditorTimelineWheelZoom({ deltaY: 100, zoom: 1 })).toBe(null);
     expect(resolveEditorTimelineWheelZoom({ deltaY: 0, zoom: 2 })).toBe(null);
+  });
+
+  it("formats rail positions with symmetric internal padding", () => {
+    expect(formatEditorTimelineRailLeft(25, 24)).toBe(
+      "calc(24px + (100% - 48px) * 0.25)",
+    );
+    expect(formatEditorTimelineRailWidth(40, 24)).toBe(
+      "calc((100% - 48px) * 0.4)",
+    );
+  });
+
+  it("formats rail positions as percentages without internal padding", () => {
+    expect(formatEditorTimelineRailLeft(25, 0)).toBe("25%");
+    expect(formatEditorTimelineRailWidth(40, 0)).toBe("40%");
+  });
+
+  it("resolves playback follow scrolling with viewport padding", () => {
+    const baseInput = {
+      paddingPixels: 96,
+      scrollClientWidth: 500,
+      scrollWidth: 1_000,
+      railPaddingPixels: 132,
+      timelineGridWidth: 1_000,
+      visibleDurationSeconds: 100,
+    };
+
+    expect(
+      resolveEditorTimelineFollowScroll({
+        ...baseInput,
+        playbackSeconds: 55,
+        scrollLeft: 0,
+      }),
+    ).toBe(133);
+    expect(
+      resolveEditorTimelineFollowScroll({
+        ...baseInput,
+        playbackSeconds: 20,
+        scrollLeft: 500,
+      }),
+    ).toBe(51);
+    expect(
+      resolveEditorTimelineFollowScroll({
+        ...baseInput,
+        playbackSeconds: 45,
+        scrollLeft: 200,
+      }),
+    ).toBe(null);
   });
 });

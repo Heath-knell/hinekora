@@ -169,6 +169,7 @@ describe("EditorPage integration", () => {
     document.body.append(container);
     root = createRoot(container);
     dragMocks.useEditorTimelineDrag.mockReturnValue({
+      activeTimelineMarkerKind: null,
       activeTimelineMarkerSeconds: null,
       clipDragPreview: null,
       handleTimelinePointerDown: dragMocks.handleTimelinePointerDown,

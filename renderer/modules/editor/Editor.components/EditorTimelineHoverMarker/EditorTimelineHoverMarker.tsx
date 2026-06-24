@@ -2,16 +2,17 @@ import {
   calculateTimelinePercent,
   formatEditorTimestamp,
 } from "../../Editor.utils/Editor.utils";
+import { formatEditorTimelineRailLeft } from "../EditorTimeline/EditorTimeline.utils";
 
 interface EditorTimelineHoverMarkerProps {
   hoverSeconds: number | null;
-  labelColumnWidth: number;
+  railPaddingPixels: number;
   visibleDurationSeconds: number;
 }
 
 function EditorTimelineHoverMarker({
   hoverSeconds,
-  labelColumnWidth,
+  railPaddingPixels,
   visibleDurationSeconds,
 }: EditorTimelineHoverMarkerProps) {
   if (hoverSeconds === null) {
@@ -27,9 +28,7 @@ function EditorTimelineHoverMarker({
     <div
       className="pointer-events-none absolute top-0 bottom-0 z-30 w-6 -translate-x-1/2 opacity-55"
       style={{
-        left: `calc(${labelColumnWidth}px + (100% - ${labelColumnWidth}px) * ${
-          hoverPercent / 100
-        })`,
+        left: formatEditorTimelineRailLeft(hoverPercent, railPaddingPixels),
       }}
     >
       <span className="absolute top-0 left-1/2 flex h-[22px] -translate-x-1/2 items-center rounded-sm bg-base-100 px-1.5 font-semibold text-[10px] text-base-content shadow">

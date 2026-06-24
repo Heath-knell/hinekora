@@ -44,7 +44,13 @@ async function renderClip() {
   const clip = createEditorTestTimelineClip(asset);
 
   await act(async () => {
-    root.render(<EditorTimelineClip clip={clip} visibleDurationSeconds={10} />);
+    root.render(
+      <EditorTimelineClip
+        clip={clip}
+        railPaddingPixels={0}
+        visibleDurationSeconds={10}
+      />,
+    );
   });
 
   return clip;
@@ -121,7 +127,11 @@ describe("EditorTimelineClip", () => {
 
     await act(async () => {
       root.render(
-        <EditorTimelineClip clip={clip} visibleDurationSeconds={10} />,
+        <EditorTimelineClip
+          clip={clip}
+          railPaddingPixels={0}
+          visibleDurationSeconds={10}
+        />,
       );
     });
 
@@ -143,7 +153,11 @@ describe("EditorTimelineClip", () => {
 
     await act(async () => {
       root.render(
-        <EditorTimelineClip clip={clip} visibleDurationSeconds={68.688} />,
+        <EditorTimelineClip
+          clip={clip}
+          railPaddingPixels={0}
+          visibleDurationSeconds={68.688}
+        />,
       );
     });
 
@@ -155,6 +169,31 @@ describe("EditorTimelineClip", () => {
       43.68,
       2,
     );
+  });
+
+  it("positions clips inside the padded timeline rail", async () => {
+    const asset = createEditorTestAsset();
+    const clip = createEditorTestTimelineClip(asset, {
+      durationSeconds: 4,
+      startSeconds: 2,
+    });
+
+    await act(async () => {
+      root.render(
+        <EditorTimelineClip
+          clip={clip}
+          railPaddingPixels={24}
+          visibleDurationSeconds={10}
+        />,
+      );
+    });
+
+    const clipElement = container.querySelector<HTMLElement>(
+      `[data-timeline-clip="${clip.id}"]`,
+    );
+
+    expect(clipElement?.style.left).toBe("calc(24px + 0.2 * (100% - 48px))");
+    expect(clipElement?.style.width).toBe("calc(0.4 * (100% - 48px))");
   });
 
   it("renders available thumbnails for the selected clip", async () => {
@@ -169,7 +208,11 @@ describe("EditorTimelineClip", () => {
 
     await act(async () => {
       root.render(
-        <EditorTimelineClip clip={clip} visibleDurationSeconds={10} />,
+        <EditorTimelineClip
+          clip={clip}
+          railPaddingPixels={0}
+          visibleDurationSeconds={10}
+        />,
       );
     });
 

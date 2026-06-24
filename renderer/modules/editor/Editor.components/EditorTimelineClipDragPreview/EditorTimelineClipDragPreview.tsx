@@ -7,11 +7,15 @@ import {
   useEditorClipThumbnails,
 } from "../../Editor.hooks/useEditorClipThumbnails/useEditorClipThumbnails";
 import { calculateTimelinePercent } from "../../Editor.utils/Editor.utils";
+import {
+  formatEditorTimelineRailLeft,
+  formatEditorTimelineRailWidth,
+} from "../EditorTimeline/EditorTimeline.utils";
 
 interface EditorTimelineClipDragPreviewProps {
   clip: EditorTimelineClip;
   heightPixels: number;
-  labelColumnWidth: number;
+  railPaddingPixels: number;
   startSeconds: number;
   topPixels: number;
   visibleDurationSeconds: number;
@@ -20,7 +24,7 @@ interface EditorTimelineClipDragPreviewProps {
 function EditorTimelineClipDragPreview({
   clip,
   heightPixels,
-  labelColumnWidth,
+  railPaddingPixels,
   startSeconds,
   topPixels,
   visibleDurationSeconds,
@@ -73,13 +77,12 @@ function EditorTimelineClipDragPreview({
       ref={previewRef}
       style={{
         height: `${heightPixels}px`,
-        left: `calc(${labelColumnWidth}px + (100% - ${labelColumnWidth}px) * ${
-          leftPercent / 100
-        })`,
+        left: formatEditorTimelineRailLeft(leftPercent, railPaddingPixels),
         top: `${topPixels}px`,
-        width: `calc((100% - ${labelColumnWidth}px) * ${
-          Math.max(widthPercent, 4) / 100
-        })`,
+        width: formatEditorTimelineRailWidth(
+          Math.max(widthPercent, 4),
+          railPaddingPixels,
+        ),
       }}
     >
       {thumbnails.length > 0 && (

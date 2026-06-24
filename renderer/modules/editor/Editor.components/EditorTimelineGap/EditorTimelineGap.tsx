@@ -7,16 +7,20 @@ import {
   calculateTimelinePercent,
   formatEditorTimestamp,
 } from "../../Editor.utils/Editor.utils";
+import {
+  formatEditorTimelineRailLeft,
+  formatEditorTimelineRailWidth,
+} from "../EditorTimeline/EditorTimeline.utils";
 
 interface EditorTimelineGapProps {
   gap: EditorTimelineGapModel;
-  labelColumnWidth: number;
+  railPaddingPixels: number;
   visibleDurationSeconds: number;
 }
 
 function EditorTimelineGap({
   gap,
-  labelColumnWidth,
+  railPaddingPixels,
   visibleDurationSeconds,
 }: EditorTimelineGapProps) {
   const { removeTimelineGap, setHoveredTimelineGap } = useEditorShallow(
@@ -60,10 +64,8 @@ function EditorTimelineGap({
       className="group absolute top-0 bottom-0 z-10 rounded-sm border border-base-content/25 bg-[repeating-linear-gradient(135deg,rgba(255,255,255,0.14)_0,rgba(255,255,255,0.14)_1px,transparent_1px,transparent_9px)] opacity-70 transition hover:border-base-content/45 hover:bg-base-content/10 hover:opacity-100"
       data-timeline-gap-zone="true"
       style={{
-        left: `calc(${labelColumnWidth}px + (100% - ${labelColumnWidth}px) * ${
-          startPercent / 100
-        })`,
-        width: `calc((100% - ${labelColumnWidth}px) * ${widthPercent / 100})`,
+        left: formatEditorTimelineRailLeft(startPercent, railPaddingPixels),
+        width: formatEditorTimelineRailWidth(widthPercent, railPaddingPixels),
       }}
       onPointerEnter={handlePointerEnter}
       onPointerLeave={handlePointerLeave}

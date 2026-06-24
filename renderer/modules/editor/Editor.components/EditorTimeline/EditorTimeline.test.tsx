@@ -68,7 +68,7 @@ vi.mock("../EditorTimelineVideoTrack/EditorTimelineVideoTrack", () => ({
       data-testid={`track-${track.id}`}
       data-visible-duration={visibleDurationSeconds}
     >
-      {track.label}:{track.clips.length}
+      {track.clips.length}
     </div>
   ),
 }));
@@ -106,6 +106,7 @@ describe("EditorTimeline", () => {
     document.body.append(container);
     root = createRoot(container);
     dragMocks.useEditorTimelineDrag.mockReturnValue({
+      activeTimelineMarkerKind: null,
       activeTimelineMarkerSeconds: null,
       clipDragPreview: null,
       handleTimelinePointerDown: dragMocks.handleTimelinePointerDown,
@@ -155,7 +156,7 @@ describe("EditorTimeline", () => {
     );
     expect(
       container.querySelector('[data-testid="track-video-track"]')?.textContent,
-    ).toBe("Video:1");
+    ).toBe("1");
     expect(
       container
         .querySelector('[data-testid="track-video-track"]')
@@ -245,7 +246,7 @@ describe("EditorTimeline", () => {
 
     await act(async () => {
       markerZone?.dispatchEvent(
-        new MouseEvent("pointermove", { bubbles: true, clientX: 632 }),
+        new MouseEvent("pointermove", { bubbles: true, clientX: 566 }),
       );
     });
 
@@ -284,6 +285,7 @@ describe("EditorTimeline", () => {
 
   it("uses the active drag marker ahead of passive hover", async () => {
     dragMocks.useEditorTimelineDrag.mockReturnValue({
+      activeTimelineMarkerKind: "trim",
       activeTimelineMarkerSeconds: 7.54,
       clipDragPreview: null,
       handleTimelinePointerDown: dragMocks.handleTimelinePointerDown,
@@ -297,5 +299,23 @@ describe("EditorTimeline", () => {
     expect(
       container.querySelector('[data-testid="hover-marker"]')?.textContent,
     ).toBe("7.54");
+  });
+
+  it("hides the hover marker while dragging the playhead", async () => {
+    dragMocks.useEditorTimelineDrag.mockReturnValue({
+      activeTimelineMarkerKind: "playhead",
+      activeTimelineMarkerSeconds: 7.54,
+      clipDragPreview: null,
+      handleTimelinePointerDown: dragMocks.handleTimelinePointerDown,
+      handleTimelinePointerEnd: dragMocks.handleTimelinePointerEnd,
+      handleTimelinePointerMove: dragMocks.handleTimelinePointerMove,
+      timelineGridRef: { current: null },
+    });
+
+    await renderTimeline();
+
+    expect(
+      container.querySelector('[data-testid="hover-marker"]')?.textContent,
+    ).toBe("none");
   });
 });

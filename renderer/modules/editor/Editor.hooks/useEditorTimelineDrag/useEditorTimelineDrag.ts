@@ -10,14 +10,16 @@ import {
 } from "./useEditorTimelineDrag.utils";
 
 interface UseEditorTimelineDragInput {
-  labelColumnWidth: number;
+  railPaddingPixels: number;
   visibleDurationSeconds: number;
 }
+
+type ActiveTimelineMarkerKind = "playhead" | "trim";
 
 const clipMoveActivationPixels = 4;
 
 function useEditorTimelineDrag({
-  labelColumnWidth,
+  railPaddingPixels,
   visibleDurationSeconds,
 }: UseEditorTimelineDragInput) {
   const timelineGridRef = useRef<HTMLDivElement>(null);
@@ -30,6 +32,8 @@ function useEditorTimelineDrag({
   const scheduledClipDragPreviewFrameRef = useRef<number | null>(null);
   const [clipDragPreview, setClipDragPreview] =
     useState<TimelineClipDragPreview | null>(null);
+  const [activeTimelineMarkerKind, setActiveTimelineMarkerKind] =
+    useState<ActiveTimelineMarkerKind | null>(null);
   const [activeTimelineMarkerSeconds, setActiveTimelineMarkerSeconds] =
     useState<number | null>(null);
   const {
@@ -126,8 +130,8 @@ function useEditorTimelineDrag({
 
     return {
       bounds,
-      timelineLeft: bounds.left + labelColumnWidth,
-      timelineWidth: bounds.width - labelColumnWidth,
+      timelineLeft: bounds.left + railPaddingPixels,
+      timelineWidth: bounds.width - railPaddingPixels * 2,
     };
   };
 
@@ -189,6 +193,7 @@ function useEditorTimelineDrag({
       event.preventDefault();
       beginHistoryTransaction("Trim");
       selectTimelineClip(clipId);
+      setActiveTimelineMarkerKind("trim");
       setActiveTimelineMarkerSeconds(timelineSeconds);
       event.currentTarget.setPointerCapture(event.pointerId);
       dragStateRef.current = {
@@ -207,6 +212,7 @@ function useEditorTimelineDrag({
     if (target.closest("[data-playhead-handle]")) {
       event.preventDefault();
       event.currentTarget.setPointerCapture(event.pointerId);
+      setActiveTimelineMarkerKind("playhead");
       setActiveTimelineMarkerSeconds(timelineSeconds);
       dragStateRef.current = {
         kind: "playhead",
@@ -341,11 +347,13 @@ function useEditorTimelineDrag({
     }
     commitHistoryTransaction();
     dragStateRef.current = null;
+    setActiveTimelineMarkerKind(null);
     setActiveTimelineMarkerSeconds(null);
     clearClipDragPreview();
   };
 
   return {
+    activeTimelineMarkerKind,
     activeTimelineMarkerSeconds,
     clipDragPreview,
     handleTimelinePointerDown,

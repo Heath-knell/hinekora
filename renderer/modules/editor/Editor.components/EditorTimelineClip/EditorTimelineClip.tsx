@@ -10,16 +10,22 @@ import {
   useEditorClipThumbnails,
 } from "../../Editor.hooks/useEditorClipThumbnails/useEditorClipThumbnails";
 import { calculateTimelinePercent } from "../../Editor.utils/Editor.utils";
+import {
+  formatEditorTimelineRailLeft,
+  formatEditorTimelineRailWidth,
+} from "../EditorTimeline/EditorTimeline.utils";
 
 interface EditorTimelineClipProps {
   clip: EditorTimelineClipModel;
   isDragPreviewSource?: boolean;
+  railPaddingPixels: number;
   visibleDurationSeconds: number;
 }
 
 function EditorTimelineClip({
   clip,
   isDragPreviewSource = false,
+  railPaddingPixels,
   visibleDurationSeconds,
 }: EditorTimelineClipProps) {
   const clipRef = useRef<HTMLDivElement>(null);
@@ -85,8 +91,11 @@ function EditorTimelineClip({
       data-timeline-clip={clip.id}
       ref={clipRef}
       style={{
-        left: `${left}%`,
-        width: `${Math.max(width, 4)}%`,
+        left: formatEditorTimelineRailLeft(left, railPaddingPixels),
+        width: formatEditorTimelineRailWidth(
+          Math.max(width, 4),
+          railPaddingPixels,
+        ),
       }}
     >
       {thumbnails.length > 0 && (

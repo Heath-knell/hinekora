@@ -1,6 +1,5 @@
 import { useDragOperation, useDroppable } from "@dnd-kit/react";
 import clsx from "clsx";
-import { Fragment } from "react";
 
 import type { EditorTimelineTrack } from "~/main/modules/editor";
 
@@ -13,12 +12,14 @@ import { EditorTimelineClip } from "../EditorTimelineClip/EditorTimelineClip";
 
 interface EditorTimelineVideoTrackProps {
   dragPreviewClipId?: string | null;
+  railPaddingPixels: number;
   track: EditorTimelineTrack;
   visibleDurationSeconds: number;
 }
 
 function EditorTimelineVideoTrack({
   dragPreviewClipId = null,
+  railPaddingPixels,
   track,
   visibleDurationSeconds,
 }: EditorTimelineVideoTrackProps) {
@@ -35,40 +36,36 @@ function EditorTimelineVideoTrack({
   const shouldHighlightDropTarget = isDraggingMediaAsset || isDropTarget;
 
   return (
-    <Fragment>
-      <div className="sticky left-0 z-30 flex items-center border-base-content/10 border-r border-b bg-base-300 px-3 text-base-content/65 text-xs">
-        {track.label}
-      </div>
-      <div
-        className={clsx(
-          "relative border-base-content/10 border-b transition-colors",
-          shouldHighlightDropTarget &&
-            "editor-drop-target-flash bg-primary/10 ring-1 ring-primary/40",
-        )}
-        ref={ref}
-      >
-        {track.clips.length === 0 && (
-          <div
-            className={clsx(
-              "pointer-events-none absolute inset-2 grid place-items-center rounded-md border border-dashed text-xs",
-              shouldHighlightDropTarget
-                ? "border-primary/45 text-primary"
-                : "border-base-content/10 text-base-content/40",
-            )}
-          >
-            Drop a clip here
-          </div>
-        )}
-        {track.clips.map((clip) => (
-          <EditorTimelineClip
-            clip={clip}
-            isDragPreviewSource={dragPreviewClipId === clip.id}
-            key={clip.id}
-            visibleDurationSeconds={visibleDurationSeconds}
-          />
-        ))}
-      </div>
-    </Fragment>
+    <div
+      className={clsx(
+        "relative border-base-content/10 border-b transition-colors",
+        shouldHighlightDropTarget &&
+          "editor-drop-target-flash bg-primary/10 ring-1 ring-primary/40",
+      )}
+      ref={ref}
+    >
+      {track.clips.length === 0 && (
+        <div
+          className={clsx(
+            "pointer-events-none absolute inset-2 grid place-items-center rounded-md border border-dashed text-xs",
+            shouldHighlightDropTarget
+              ? "border-primary/45 text-primary"
+              : "border-base-content/10 text-base-content/40",
+          )}
+        >
+          Drop a clip here
+        </div>
+      )}
+      {track.clips.map((clip) => (
+        <EditorTimelineClip
+          clip={clip}
+          isDragPreviewSource={dragPreviewClipId === clip.id}
+          key={clip.id}
+          railPaddingPixels={railPaddingPixels}
+          visibleDurationSeconds={visibleDurationSeconds}
+        />
+      ))}
+    </div>
   );
 }
 

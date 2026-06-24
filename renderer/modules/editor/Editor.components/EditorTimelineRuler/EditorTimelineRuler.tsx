@@ -1,8 +1,13 @@
 import { formatEditorTime } from "../../Editor.utils/Editor.utils";
+import {
+  formatEditorTimelineRailLeft,
+  formatEditorTimelineRailWidth,
+} from "../EditorTimeline/EditorTimeline.utils";
 
 interface EditorTimelineRulerProps {
   markers: number[];
   minorMarkers: number[];
+  railPaddingPixels: number;
   selectedClipRulerLeft: number;
   selectedClipRulerWidth: number;
   visibleDurationSeconds: number;
@@ -11,6 +16,7 @@ interface EditorTimelineRulerProps {
 function EditorTimelineRuler({
   markers,
   minorMarkers,
+  railPaddingPixels,
   selectedClipRulerLeft,
   selectedClipRulerWidth,
   visibleDurationSeconds,
@@ -24,8 +30,14 @@ function EditorTimelineRuler({
         <span
           className="pointer-events-none absolute inset-y-0 z-10 border-primary/30 border-x bg-primary/20"
           style={{
-            left: `${selectedClipRulerLeft}%`,
-            width: `${selectedClipRulerWidth}%`,
+            left: formatEditorTimelineRailLeft(
+              selectedClipRulerLeft,
+              railPaddingPixels,
+            ),
+            width: formatEditorTimelineRailWidth(
+              selectedClipRulerWidth,
+              railPaddingPixels,
+            ),
           }}
         />
       )}
@@ -36,7 +48,10 @@ function EditorTimelineRuler({
           data-timeline-minor-marker="true"
           key={`minor-${marker}`}
           style={{
-            left: `${(marker / visibleDurationSeconds) * 100}%`,
+            left: formatEditorTimelineRailLeft(
+              (marker / visibleDurationSeconds) * 100,
+              railPaddingPixels,
+            ),
           }}
         />
       ))}
@@ -45,7 +60,10 @@ function EditorTimelineRuler({
           className="absolute top-0 z-20 flex h-full items-center text-[10px] text-base-content/45"
           key={marker}
           style={{
-            left: `${(marker / visibleDurationSeconds) * 100}%`,
+            left: formatEditorTimelineRailLeft(
+              (marker / visibleDurationSeconds) * 100,
+              railPaddingPixels,
+            ),
           }}
         >
           {formatEditorTime(marker)}

@@ -91,6 +91,7 @@ function configureEditorState(projectOverride = project) {
 
 function TimelineDragHarness() {
   const {
+    activeTimelineMarkerKind,
     activeTimelineMarkerSeconds,
     clipDragPreview,
     handleTimelinePointerDown,
@@ -98,7 +99,7 @@ function TimelineDragHarness() {
     handleTimelinePointerMove,
     timelineGridRef,
   } = useEditorTimelineDrag({
-    labelColumnWidth: 100,
+    railPaddingPixels: 100,
     visibleDurationSeconds: 10,
   });
 
@@ -155,6 +156,11 @@ function TimelineDragHarness() {
       {activeTimelineMarkerSeconds !== null && (
         <output data-testid="active-marker">
           {activeTimelineMarkerSeconds.toFixed(2)}
+        </output>
+      )}
+      {activeTimelineMarkerKind !== null && (
+        <output data-testid="active-marker-kind">
+          {activeTimelineMarkerKind}
         </output>
       )}
     </div>
@@ -262,7 +268,7 @@ describe("useEditorTimelineDrag", () => {
   it("seeks from marker zones and ignores gap delete buttons", async () => {
     await renderHarness();
 
-    dispatchPointer(getElement("marker-zone"), "pointerdown", { clientX: 600 });
+    dispatchPointer(getElement("marker-zone"), "pointerdown", { clientX: 550 });
     dispatchPointer(getElement("gap-delete"), "pointerdown", { clientX: 700 });
 
     expect(storeMocks.setPlaybackSeconds).toHaveBeenCalledTimes(1);
@@ -272,9 +278,10 @@ describe("useEditorTimelineDrag", () => {
   it("moves the playhead without starting playback", async () => {
     await renderHarness();
 
-    dispatchPointer(getElement("playhead"), "pointerdown", { clientX: 300 });
-    dispatchPointer(getElement("timeline"), "pointermove", { clientX: 500 });
-    dispatchPointer(getElement("timeline"), "pointerup", { clientX: 500 });
+    dispatchPointer(getElement("playhead"), "pointerdown", { clientX: 280 });
+    expect(getElement("active-marker-kind").textContent).toBe("playhead");
+    dispatchPointer(getElement("timeline"), "pointermove", { clientX: 460 });
+    dispatchPointer(getElement("timeline"), "pointerup", { clientX: 460 });
 
     expect(storeMocks.setPlaybackSeconds).toHaveBeenNthCalledWith(1, 2);
     expect(storeMocks.setPlaybackSeconds).toHaveBeenNthCalledWith(2, 4);
@@ -284,9 +291,10 @@ describe("useEditorTimelineDrag", () => {
   it("trims a clip edge and commits the history transaction", async () => {
     await renderHarness();
 
-    dispatchPointer(getElement("trim-start"), "pointerdown", { clientX: 300 });
+    dispatchPointer(getElement("trim-start"), "pointerdown", { clientX: 280 });
     expect(getElement("active-marker").textContent).toBe("2.00");
-    dispatchPointer(getElement("timeline"), "pointermove", { clientX: 400 });
+    expect(getElement("active-marker-kind").textContent).toBe("trim");
+    dispatchPointer(getElement("timeline"), "pointermove", { clientX: 370 });
     expect(getElement("active-marker").textContent).toBe("3.00");
     dispatchPointer(getElement("timeline"), "pointerup", { clientX: 400 });
 
@@ -306,6 +314,9 @@ describe("useEditorTimelineDrag", () => {
     );
     expect(storeMocks.commitHistoryTransaction).toHaveBeenCalledTimes(1);
     expect(container.querySelector("[data-testid='active-marker']")).toBe(null);
+    expect(container.querySelector("[data-testid='active-marker-kind']")).toBe(
+      null,
+    );
   });
 
   it("uses the visible timeline range when starting a trim drag", async () => {
@@ -330,8 +341,8 @@ describe("useEditorTimelineDrag", () => {
     });
     await renderHarness();
 
-    dispatchPointer(getElement("trim-end"), "pointerdown", { clientX: 1_100 });
-    dispatchPointer(getElement("timeline"), "pointermove", { clientX: 1_100 });
+    dispatchPointer(getElement("trim-end"), "pointerdown", { clientX: 1_000 });
+    dispatchPointer(getElement("timeline"), "pointermove", { clientX: 1_000 });
 
     expect(storeMocks.selectTimelineClip).toHaveBeenCalledWith("timeline-1");
     expect(storeMocks.trimTimelineClipEdge).toHaveBeenNthCalledWith(
@@ -352,17 +363,17 @@ describe("useEditorTimelineDrag", () => {
     await renderHarness();
 
     dispatchPointer(getElement("clip-body"), "pointerdown", {
-      clientX: 150,
+      clientX: 145,
       clientY: 90,
     });
     dispatchPointer(getElement("timeline"), "pointermove", {
-      clientX: 152,
+      clientX: 147,
       clientY: 90,
     });
     expect(storeMocks.moveTimelineClip).not.toHaveBeenCalled();
 
     dispatchPointer(getElement("timeline"), "pointermove", {
-      clientX: 750,
+      clientX: 685,
       clientY: 90,
     });
 
@@ -372,7 +383,7 @@ describe("useEditorTimelineDrag", () => {
     expect(getElement("drag-preview").textContent).toBe("6.00");
 
     dispatchPointer(getElement("timeline"), "pointerup", {
-      clientX: 750,
+      clientX: 685,
       clientY: 90,
     });
 
