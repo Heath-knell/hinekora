@@ -6,8 +6,8 @@ export const gameOptions: Array<{ id: GameId; label: string }> = [
 ];
 
 export const leagueOptions: Record<GameId, string[]> = {
-  poe1: ["Standard", "Mercenaries", "Hardcore"],
-  poe2: ["Standard", "Dawn of the Hunt", "Hardcore"],
+  poe1: ["Standard", "Mirage"],
+  poe2: ["Standard", "Runes of Aldur"],
 };
 
 export type LeagueSettingKey = "poe1SelectedLeague" | "poe2SelectedLeague";

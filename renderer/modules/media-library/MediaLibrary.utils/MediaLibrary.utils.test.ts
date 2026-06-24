@@ -11,12 +11,15 @@ import {
 describe("MediaLibrary utils", () => {
   it("builds league options from configured and saved leagues", () => {
     expect(
-      buildMediaLibraryLeagueOptions("poe2", ["Mirage", "Standard"], "Mirage"),
+      buildMediaLibraryLeagueOptions(
+        "poe2",
+        ["Legacy League", "Standard"],
+        "Legacy League",
+      ),
     ).toEqual([
       { value: ALL_LEAGUES_VALUE, label: "All leagues" },
-      { value: "Dawn of the Hunt", label: "Dawn of the Hunt" },
-      { value: "Hardcore", label: "Hardcore" },
-      { value: "Mirage", label: "Mirage" },
+      { value: "Legacy League", label: "Legacy League" },
+      { value: "Runes of Aldur", label: "Runes of Aldur" },
       { value: "Standard", label: "Standard" },
     ]);
   });
