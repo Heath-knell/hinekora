@@ -393,6 +393,7 @@ describe("ManagedRecorder utils", () => {
           items: [
             { name: "Default", value: "default" },
             { name: "Microphone", value: "{mic-guid}" },
+            { name: "   ", value: "{unnamed-guid}" },
             { disabled: true, name: "Offline", value: "{offline-guid}" },
             { name: "Empty", value: "" },
           ],
@@ -401,6 +402,7 @@ describe("ManagedRecorder utils", () => {
     ).toEqual([
       { id: "default", label: "Default" },
       { id: "{mic-guid}", label: "Microphone" },
+      { id: "{unnamed-guid}", label: "{unnamed-guid}" },
     ]);
     expect(selectAudioDevices([])).toEqual([]);
   });

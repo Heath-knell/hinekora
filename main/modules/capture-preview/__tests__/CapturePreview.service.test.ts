@@ -224,6 +224,27 @@ describe("CapturePreviewService", () => {
     ]);
   });
 
+  it("omits blank Electron display labels from screen source names", async () => {
+    electronMocks.getAllDisplays.mockReturnValue([
+      createDisplay(1, 1920, 1080, 1, "   "),
+    ]);
+    electronMocks.getSources.mockResolvedValue([
+      createSource({
+        id: "screen:1:0",
+        name: "Entire Screen",
+        displayId: "1",
+      }),
+    ]);
+    const service = new CapturePreviewService();
+
+    await expect(service.listSources()).resolves.toEqual([
+      expect.objectContaining({
+        id: "screen:1:0",
+        name: "Screen 1",
+      }),
+    ]);
+  });
+
   it("lists exact Path of Exile title matches when a game process is running", async () => {
     settingsStoreMocks.activeGame = "poe1";
     electronMocks.getAllDisplays.mockReturnValue([]);

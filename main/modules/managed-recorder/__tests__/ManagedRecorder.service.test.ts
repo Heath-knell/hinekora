@@ -434,6 +434,20 @@ describe("ManagedRecorderService", () => {
       "Hinekora Audio Input Source",
     );
 
+    noobs.CreateSource.mockClear();
+    noobs.SetSourceSettings.mockClear();
+    noobs.SetSourceVolume.mockClear();
+    noobs.AddSourceToScene.mockClear();
+    noobs.RemoveSourceFromScene.mockClear();
+    noobs.DeleteSource.mockClear();
+
+    internals.configureAudioSources();
+
+    expect(noobs.CreateSource).not.toHaveBeenCalled();
+    expect(noobs.SetSourceSettings).not.toHaveBeenCalled();
+    expect(noobs.SetSourceVolume).not.toHaveBeenCalled();
+    expect(noobs.AddSourceToScene).not.toHaveBeenCalled();
+
     vi.spyOn(SettingsStoreService, "getInstance").mockReturnValue({
       get: () => createDefaultSettings(),
     } as unknown as SettingsStoreService);
@@ -451,6 +465,28 @@ describe("ManagedRecorderService", () => {
     );
     expect(noobs.DeleteSource).toHaveBeenCalledWith(
       "Hinekora Audio Input Source",
+    );
+  });
+
+  it("throws when selected audio devices cannot be configured by OBS runtime", () => {
+    vi.spyOn(SettingsStoreService, "getInstance").mockReturnValue({
+      get: () => ({
+        ...createDefaultSettings(),
+        recordingAudioOutputDeviceId: "{output-device}",
+      }),
+    } as unknown as SettingsStoreService);
+    const service = createService();
+    const noobs = createNoobsApi();
+    delete (noobs as Partial<ReturnType<typeof createNoobsApi>>)
+      .GetSourceSettings;
+    const internals = service as unknown as {
+      configureAudioSources(): void;
+      noobs: Partial<ReturnType<typeof createNoobsApi>>;
+    };
+    internals.noobs = noobs;
+
+    expect(() => internals.configureAudioSources()).toThrow(
+      "Packaged OBS runtime cannot configure audio sources",
     );
   });
 
@@ -511,6 +547,140 @@ describe("ManagedRecorderService", () => {
 
     await service.listAudioDevices({ forceRefresh: true });
     expect(noobs.CreateSource).toHaveBeenCalledTimes(4);
+  });
+
+  it("shares an in-flight audio device list request", async () => {
+    const service = createService();
+    const noobs = createNoobsApi();
+    let resolveRuntime!: (runtimePath: string) => void;
+    noobs.CreateSource.mockImplementation((name: string) => name);
+    noobs.GetSourceProperties.mockImplementation((sourceName: string) => [
+      {
+        name: "device_id",
+        items: sourceName.includes("Output")
+          ? [{ name: "Headphones", value: "{output-device}" }]
+          : [],
+      },
+    ]);
+    const internals = service as unknown as {
+      ensureNoobsRuntimeInitialized(): Promise<string>;
+      noobs: ReturnType<typeof createNoobsApi>;
+    };
+    internals.noobs = noobs;
+    internals.ensureNoobsRuntimeInitialized = vi.fn().mockImplementation(
+      () =>
+        new Promise<string>((resolveInitialize) => {
+          resolveRuntime = resolveInitialize;
+        }),
+    );
+
+    const firstRequest = service.listAudioDevices();
+    const secondRequest = service.listAudioDevices({ forceRefresh: true });
+    resolveRuntime(join(directory, "runtime"));
+
+    await expect(Promise.all([firstRequest, secondRequest])).resolves.toEqual([
+      {
+        input: [],
+        output: [{ id: "{output-device}", label: "Headphones" }],
+      },
+      {
+        input: [],
+        output: [{ id: "{output-device}", label: "Headphones" }],
+      },
+    ]);
+    expect(internals.ensureNoobsRuntimeInitialized).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to empty and cached audio devices when probing fails", async () => {
+    const service = createService();
+    const noobs = createNoobsApi();
+    noobs.CreateSource.mockImplementation((name: string) => name);
+    noobs.GetSourceProperties.mockImplementation((sourceName: string) => [
+      {
+        name: "device_id",
+        items: sourceName.includes("Output")
+          ? [{ name: "Headphones", value: "{output-device}" }]
+          : [],
+      },
+    ]);
+    const internals = service as unknown as {
+      ensureNoobsRuntimeInitialized(): Promise<string>;
+      noobs: ReturnType<typeof createNoobsApi>;
+    };
+    internals.noobs = noobs;
+    internals.ensureNoobsRuntimeInitialized = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("runtime missing"))
+      .mockResolvedValueOnce(join(directory, "runtime"))
+      .mockRejectedValueOnce(new Error("runtime unavailable"));
+
+    await expect(
+      service.listAudioDevices({ forceRefresh: true }),
+    ).resolves.toEqual({
+      input: [],
+      output: [],
+    });
+    await expect(
+      service.listAudioDevices({ forceRefresh: true }),
+    ).resolves.toEqual({
+      input: [],
+      output: [{ id: "{output-device}", label: "Headphones" }],
+    });
+    await expect(
+      service.listAudioDevices({ forceRefresh: true }),
+    ).resolves.toEqual({
+      input: [],
+      output: [{ id: "{output-device}", label: "Headphones" }],
+    });
+  });
+
+  it("returns empty audio devices when OBS audio source APIs are unavailable", async () => {
+    vi.useFakeTimers();
+    const service = createService();
+    const internals = service as unknown as {
+      ensureNoobsRuntimeInitialized(): Promise<string>;
+      noobs: Partial<ReturnType<typeof createNoobsApi>>;
+    };
+    internals.noobs = {};
+    internals.ensureNoobsRuntimeInitialized = vi
+      .fn()
+      .mockResolvedValue(join(directory, "runtime"));
+
+    const request = service.listAudioDevices({ forceRefresh: true });
+    await vi.runAllTimersAsync();
+
+    await expect(request).resolves.toEqual({
+      input: [],
+      output: [],
+    });
+  });
+
+  it("does not delete audio probes when source creation fails", async () => {
+    const service = createService();
+    const noobs = createNoobsApi();
+    noobs.CreateSource.mockImplementation(() => {
+      throw new Error("create failed");
+    });
+    const internals = service as unknown as {
+      ensureNoobsRuntimeInitialized(): Promise<string>;
+      noobs: ReturnType<typeof createNoobsApi>;
+      waitForAudioDeviceProbeRetry(): Promise<void>;
+    };
+    internals.noobs = noobs;
+    internals.ensureNoobsRuntimeInitialized = vi
+      .fn()
+      .mockResolvedValue(join(directory, "runtime"));
+    internals.waitForAudioDeviceProbeRetry = vi
+      .fn()
+      .mockResolvedValue(undefined);
+
+    await expect(
+      service.listAudioDevices({ forceRefresh: true }),
+    ).resolves.toEqual({
+      input: [],
+      output: [],
+    });
+    expect(noobs.DeleteSource).not.toHaveBeenCalled();
   });
 
   it("retries and avoids caching empty audio output probe results", async () => {
@@ -2228,6 +2398,12 @@ describe("ManagedRecorderService", () => {
       input: [],
       output: [],
     });
+    await expect(
+      handlers.get(ManagedRecorderChannel.ListAudioDevices)?.({}, true),
+    ).resolves.toEqual({
+      input: [],
+      output: [],
+    });
     expect(
       handlers.get(ManagedRecorderChannel.ListAudioDevices)?.({}, "bad"),
     ).toEqual({
@@ -2252,7 +2428,10 @@ describe("ManagedRecorderService", () => {
     expect(startRunRecording).toHaveBeenCalled();
     expect(stopRunRecording).toHaveBeenCalled();
     expect(saveReplay).toHaveBeenCalledWith(10, "manual");
-    expect(listAudioDevices).toHaveBeenCalledWith({});
+    expect(listAudioDevices).toHaveBeenNthCalledWith(1, {});
+    expect(listAudioDevices).toHaveBeenNthCalledWith(2, {
+      forceRefresh: true,
+    });
     expect(
       await handlers.get(ManagedRecorderChannel.SetCaptureMode)?.({}, "bad"),
     ).toEqual({
