@@ -6,6 +6,10 @@ import { OverlayWindowsService } from "~/main/modules/overlay-windows";
 import { SettingsStoreService } from "~/main/modules/settings-store";
 import { UpdaterService } from "~/main/modules/updater";
 import {
+  assertString,
+  handleValidationError,
+} from "~/main/utils/ipc-validation";
+import {
   registerGuardedIpcHandler,
   registerIpcWindowRole,
   unregisterIpcWindowRole,
@@ -17,6 +21,7 @@ import { isAllowedExternalUrl } from "./MainWindow.utils";
 
 const currentDir = __dirname;
 const START_MINIMIZED_ARG = "--hidden";
+const MAIN_WINDOW_EDITOR_CLIP_ID_MAX_LENGTH = 128;
 
 class MainWindowService {
   private static instance: MainWindowService | null = null;
@@ -180,6 +185,23 @@ class MainWindowService {
     );
 
     registerGuardedIpcHandler(
+      MainWindowChannel.OpenEditorClip,
+      [WindowName.Main, WindowName.ClipPreviewOverlay],
+      (_event, clipId: unknown) => {
+        try {
+          assertString(clipId, "clip id", MainWindowChannel.OpenEditorClip, {
+            min: 1,
+            max: MAIN_WINDOW_EDITOR_CLIP_ID_MAX_LENGTH,
+          });
+        } catch (error) {
+          return handleValidationError(error);
+        }
+
+        return this.openEditorClip(clipId);
+      },
+    );
+
+    registerGuardedIpcHandler(
       MainWindowChannel.OpenDevTools,
       [WindowName.Main],
       () => {
@@ -200,6 +222,26 @@ class MainWindowService {
   private hideMainWindowToTray(): void {
     this.ensureTray();
     this.mainWindow?.hide();
+  }
+
+  private async openEditorClip(clipId: string): Promise<void> {
+    const mainWindow = await this.createMainWindow();
+    await this.navigateMainWindowToEditorClip(mainWindow, clipId);
+    this.showMainWindow();
+  }
+
+  private async navigateMainWindowToEditorClip(
+    mainWindow: BrowserWindow,
+    clipId: string,
+  ): Promise<void> {
+    if (mainWindow.isDestroyed()) {
+      return;
+    }
+
+    const hash = `#/editor?kind=clip&id=${encodeURIComponent(clipId)}`;
+    await mainWindow.webContents.executeJavaScript(
+      `globalThis.location.hash = ${JSON.stringify(hash)}`,
+    );
   }
 
   private showMainWindow(): void {

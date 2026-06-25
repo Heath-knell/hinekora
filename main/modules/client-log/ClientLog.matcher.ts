@@ -1,9 +1,6 @@
 import { createHash } from "node:crypto";
 
-const DEFAULT_DEATH_PATTERNS = [
-  /\bhas been slain\b/i,
-  /\bwas slain\b/i,
-];
+const DEFAULT_DEATH_PATTERNS = [/\bhas been slain\b/i, /\bwas slain\b/i];
 const IGNORED_CHAT_PREFIXES = new Set(["#", "%", "$"]);
 const FOCUS_GAINED_MESSAGE = "[WINDOW] Gained focus";
 const FOCUS_LOST_MESSAGE = "[WINDOW] Lost focus";

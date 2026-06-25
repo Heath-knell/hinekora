@@ -154,6 +154,7 @@ declare global {
         unmaximize: () => Promise<boolean>;
         isMaximized: () => Promise<boolean>;
         close: () => Promise<void>;
+        openEditorClip: (clipId: string) => Promise<void>;
         openDevTools: () => Promise<void>;
       };
       managedRecorder: {

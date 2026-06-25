@@ -4,6 +4,7 @@ enum MainWindowChannel {
   Minimize = "main-window:minimize",
   Unmaximize = "main-window:unmaximize",
   IsMaximized = "main-window:is-maximized",
+  OpenEditorClip = "main-window:open-editor-clip",
   OpenDevTools = "main-window:open-devtools",
 }
 

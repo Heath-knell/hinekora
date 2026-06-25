@@ -1,5 +1,7 @@
 import { ipcRenderer } from "electron";
 
+import { unwrapIpcResult } from "~/main/utils/ipc-api";
+
 import type { ReplayClip } from "~/types";
 import { ReplayClipsChannel } from "./ReplayClips.channels";
 import type {
@@ -11,37 +13,11 @@ import type {
   ReplayClipListFilter,
 } from "./ReplayClips.dto";
 
-interface IpcValidationFailure {
-  ok: false;
-  error: string;
-}
-
-function unwrapReplayClipList(
-  result: ReplayClip[] | IpcValidationFailure,
-): ReplayClip[] {
-  if (Array.isArray(result)) {
-    return result;
-  }
-
-  throw new Error(result.error);
-}
-
-function unwrapIpcResult<T>(result: T | IpcValidationFailure): T {
-  if (typeof result === "object" && result !== null) {
-    const maybeFailure = result as Partial<IpcValidationFailure>;
-    if (maybeFailure.ok === false) {
-      throw new Error(maybeFailure.error ?? "Operation failed");
-    }
-  }
-
-  return result as T;
-}
-
 const ReplayClipsAPI = {
   get: async (id: string): Promise<ReplayClipDetail | null> =>
     unwrapIpcResult(await ipcRenderer.invoke(ReplayClipsChannel.Get, id)),
   list: async (filter?: ReplayClipListFilter): Promise<ReplayClip[]> =>
-    unwrapReplayClipList(
+    unwrapIpcResult<ReplayClip[]>(
       await ipcRenderer.invoke(ReplayClipsChannel.List, filter),
     ),
   listLibrary: async (

@@ -1,5 +1,7 @@
 import { ipcRenderer } from "electron";
 
+import { unwrapIpcResult } from "~/main/utils/ipc-api";
+
 import { RecordingStorageChannel } from "./RecordingStorage.channels";
 import type {
   RecordingStorageBatchFileActionResult,
@@ -10,22 +12,6 @@ import type {
   RunRecordingLibraryPage,
   RunRecordingLibraryQuery,
 } from "./RecordingStorage.dto";
-
-interface IpcValidationFailure {
-  ok: false;
-  error: string;
-}
-
-function unwrapIpcResult<T>(result: T | IpcValidationFailure): T {
-  if (typeof result === "object" && result !== null) {
-    const maybeFailure = result as Partial<IpcValidationFailure>;
-    if (maybeFailure.ok === false) {
-      throw new Error(maybeFailure.error ?? "Operation failed");
-    }
-  }
-
-  return result as T;
-}
 
 const RecordingStorageAPI = {
   getRecording: (id: string): Promise<RunRecordingDetail | null> =>

@@ -119,6 +119,7 @@ class FakeWindow {
 
   webContents = {
     closeDevTools: vi.fn(),
+    executeJavaScript: vi.fn().mockResolvedValue(undefined),
     isDevToolsOpened: vi.fn(() => false),
     on: vi.fn(
       (
@@ -692,5 +693,52 @@ describe("MainWindowService", () => {
     expect(electronMocks.quit).toHaveBeenCalled();
 
     handlers.get(MainWindowChannel.OpenDevTools)?.({});
+  });
+
+  it("opens the editor for a replay clip from the clip preview overlay", async () => {
+    const { handlers } = mockIpcMainHandlers();
+    const fakeWindow = new FakeWindow();
+    fakeWindow.minimized = true;
+    electronMocks.browserWindowFactory.mockReturnValue(fakeWindow);
+    new MainWindowService();
+
+    await expect(
+      handlers.get(MainWindowChannel.OpenEditorClip)?.({}, "clip 1"),
+    ).resolves.toBeUndefined();
+
+    expect(fakeWindow.webContents.executeJavaScript).toHaveBeenCalledWith(
+      'globalThis.location.hash = "#/editor?kind=clip&id=clip%201"',
+    );
+    expect(fakeWindow.restore).toHaveBeenCalled();
+    expect(fakeWindow.show).toHaveBeenCalled();
+    expect(fakeWindow.focus).toHaveBeenCalled();
+  });
+
+  it("rejects invalid editor clip IPC input", async () => {
+    const { handlers } = mockIpcMainHandlers();
+    electronMocks.browserWindowFactory.mockReturnValue(new FakeWindow());
+    new MainWindowService();
+
+    expect(handlers.get(MainWindowChannel.OpenEditorClip)?.({}, "")).toEqual({
+      ok: false,
+      error: "clip id is too short",
+    });
+    expect(electronMocks.BrowserWindow).not.toHaveBeenCalled();
+  });
+
+  it("skips editor navigation when the main window is destroyed", async () => {
+    const service = new MainWindowService();
+    const fakeWindow = new FakeWindow();
+    const internals = service as unknown as {
+      navigateMainWindowToEditorClip(
+        mainWindow: FakeWindow,
+        clipId: string,
+      ): Promise<void>;
+    };
+    fakeWindow.destroyed = true;
+
+    await internals.navigateMainWindowToEditorClip(fakeWindow, "clip-1");
+
+    expect(fakeWindow.webContents.executeJavaScript).not.toHaveBeenCalled();
   });
 });

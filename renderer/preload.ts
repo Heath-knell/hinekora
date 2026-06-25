@@ -81,6 +81,9 @@ function createScopedApi(hash: string): ElectronAPI | ScopedElectronAPI {
 
   if (hash.includes("clip-preview-overlay")) {
     return {
+      mainWindow: {
+        openEditorClip: MainWindowAPI.openEditorClip,
+      },
       overlayWindows: {
         hideClipPreview: OverlayWindowsAPI.hideClipPreview,
       },
