@@ -101,6 +101,23 @@ class ClientLogService extends EventEmitter {
     return this.status;
   }
 
+  reconcilePoeFocusStateFromRecentLog(): boolean | null {
+    if (!this.status.watching || !this.status.path) {
+      return null;
+    }
+
+    const recentFocusState = this.readLatestFocusStateFromRecentFileTail(
+      this.status.path,
+      this.getCurrentLogFileSize(),
+    );
+    if (recentFocusState === null) {
+      return null;
+    }
+
+    this.setPoeFocusActive(recentFocusState);
+    return recentFocusState;
+  }
+
   setPath(input: ClientLogPathInput): ClientLogStatus {
     const settings = SettingsStoreService.getInstance();
     settings.update({
@@ -367,17 +384,15 @@ class ClientLogService extends EventEmitter {
 
   private readLatestFocusStateFromRecentFileTail(
     filePath: string,
+    fileSize = this.lastKnownSize,
   ): boolean | null {
-    if (this.fd === null || this.lastKnownSize <= 0) {
+    if (this.fd === null || fileSize <= 0) {
       return null;
     }
 
-    const bytesToRead = Math.min(
-      this.lastKnownSize,
-      CLIENT_LOG_FOCUS_STATE_TAIL_BYTES,
-    );
+    const bytesToRead = Math.min(fileSize, CLIENT_LOG_FOCUS_STATE_TAIL_BYTES);
     const buffer = Buffer.alloc(bytesToRead);
-    const position = this.lastKnownSize - bytesToRead;
+    const position = fileSize - bytesToRead;
 
     try {
       const bytesRead = fs.readSync(this.fd, buffer, 0, bytesToRead, position);
@@ -388,6 +403,18 @@ class ClientLogService extends EventEmitter {
         ...createSafePathLogFields(filePath, "clientLog"),
       });
       return null;
+    }
+  }
+
+  private getCurrentLogFileSize(): number {
+    if (this.fd === null) {
+      return 0;
+    }
+
+    try {
+      return fs.fstatSync(this.fd).size;
+    } catch {
+      return this.lastKnownSize;
     }
   }
 

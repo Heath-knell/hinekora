@@ -257,6 +257,45 @@ describe("ClientLogService", () => {
     service.stopWatchFile();
   });
 
+  it("reconciles PoE focus from the latest client log tail", async () => {
+    const initialText = "existing\n";
+    const path = join(directory, "Client.txt");
+    writeFileSync(path, initialText);
+    electronMocks.getAllWindows.mockReturnValue([]);
+    const service = new ClientLogService();
+    const internals = service as unknown as {
+      lastKnownSize: number;
+    };
+
+    expect(service.reconcilePoeFocusStateFromRecentLog()).toBeNull();
+
+    service.watchFile(path, "poe2");
+    await flushPromises();
+    setPoeFocusActive.mockClear();
+
+    expect(service.reconcilePoeFocusStateFromRecentLog()).toBeNull();
+    expect(setPoeFocusActive).not.toHaveBeenCalled();
+
+    fs.appendFileSync(
+      path,
+      "2026/05/26 02:21:56 124375843 54ee9e2f [INFO Client 49752] [WINDOW] Lost focus\n",
+    );
+
+    expect(service.reconcilePoeFocusStateFromRecentLog()).toBe(false);
+    expect(setPoeFocusActive).toHaveBeenCalledWith(false);
+    expect(internals.lastKnownSize).toBe(Buffer.byteLength(initialText));
+
+    setPoeFocusActive.mockClear();
+    fs.appendFileSync(
+      path,
+      "2026/05/26 02:22:01 124375843 54ee9e2f [INFO Client 49752] [WINDOW] Gained focus\n",
+    );
+
+    expect(service.reconcilePoeFocusStateFromRecentLog()).toBe(true);
+    expect(setPoeFocusActive).toHaveBeenCalledWith(true);
+    service.stopWatchFile();
+  });
+
   it("assumes PoE focus active when the startup focus tail is lost but the active game is running", async () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
     const path = join(directory, "Client.txt");
@@ -732,6 +771,7 @@ describe("ClientLogService", () => {
     const service = new ClientLogService();
     const internals = service as unknown as {
       fd: number | null;
+      getCurrentLogFileSize(): number;
       lastKnownSize: number;
       readLatestFocusStateFromRecentFileTail(filePath: string): boolean | null;
     };
@@ -739,9 +779,10 @@ describe("ClientLogService", () => {
     internals.fd = null;
     internals.lastKnownSize = 10;
     expect(internals.readLatestFocusStateFromRecentFileTail(path)).toBeNull();
+    expect(internals.getCurrentLogFileSize()).toBe(0);
 
     internals.fd = 1;
-    vi.spyOn(fs, "readSync").mockImplementation(() => {
+    const readSync = vi.spyOn(fs, "readSync").mockImplementation(() => {
       throw new Error("read failed");
     });
 
@@ -755,6 +796,13 @@ describe("ClientLogService", () => {
         clientLogFile: "Client.txt",
       }),
     );
+
+    readSync.mockRestore();
+    internals.lastKnownSize = 42;
+    vi.spyOn(fs, "fstatSync").mockImplementation(() => {
+      throw new Error("stat failed");
+    });
+    expect(internals.getCurrentLogFileSize()).toBe(42);
   });
 
   it("skips destroyed windows when publishing watcher status", () => {

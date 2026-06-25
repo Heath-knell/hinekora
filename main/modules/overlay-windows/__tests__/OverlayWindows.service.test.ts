@@ -414,6 +414,55 @@ describe("OverlayWindowsService", () => {
     expect(auraManagerOverlays.show).toHaveBeenCalledWith("profile-1");
   });
 
+  it("does not assume game focus from the running process after system suspend", () => {
+    const service = new OverlayWindowsService();
+    const internals = getInternals(service);
+    const recordingControlsOverlay = internals.recordingControlsOverlay as {
+      suspendForSystem(): void;
+    };
+    const deathClipsOverlay = internals.deathClipsOverlay as {
+      destroy(): void;
+    };
+    const gridLinesOverlay = internals.gridLinesOverlay as {
+      destroy(): void;
+    };
+    const auraManagerOverlays = internals.auraManagerOverlays as {
+      setGameRunningActive(active: boolean): void;
+      suspendForSystem(): void;
+    };
+    vi.spyOn(recordingControlsOverlay, "suspendForSystem").mockImplementation(
+      () => undefined,
+    );
+    vi.spyOn(deathClipsOverlay, "destroy").mockImplementation(() => undefined);
+    vi.spyOn(gridLinesOverlay, "destroy").mockImplementation(() => undefined);
+    vi.spyOn(auraManagerOverlays, "setGameRunningActive").mockImplementation(
+      () => undefined,
+    );
+    vi.spyOn(auraManagerOverlays, "suspendForSystem").mockImplementation(
+      () => undefined,
+    );
+    const setPoeFocusActive = vi.spyOn(
+      internals.coordinator,
+      "setPoeFocusActive",
+    );
+
+    service.suspendForSystem();
+    expect(setPoeFocusActive).toHaveBeenCalledWith(false);
+    setPoeFocusActive.mockClear();
+
+    service.setGameRunningActive(false);
+    service.setGameRunningActive(true);
+
+    expect(setPoeFocusActive).not.toHaveBeenCalledWith(true);
+
+    service.setPoeFocusActive(true);
+    setPoeFocusActive.mockClear();
+    service.setGameRunningActive(false);
+    service.setGameRunningActive(true);
+
+    expect(setPoeFocusActive).toHaveBeenCalledWith(true);
+  });
+
   it("requests persistent aura overlays before the game is running", () => {
     vi.spyOn(ProfilesService, "getInstance").mockReturnValue({
       list: () => [createProfile()],

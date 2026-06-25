@@ -317,11 +317,17 @@ describe("AppService", () => {
       restoreRequestedOverlays: vi.fn().mockResolvedValue(undefined),
       suspendForSystem: vi.fn(),
     };
+    const clientLog = {
+      reconcilePoeFocusStateFromRecentLog: vi.fn(),
+    };
     electronMocks.powerMonitorOn.mockImplementation((event, listener) => {
       powerListeners.set(event, listener);
     });
     vi.spyOn(OverlayWindowsService, "getInstance").mockReturnValue(
       overlayWindows as unknown as OverlayWindowsService,
+    );
+    vi.spyOn(ClientLogService, "getInstance").mockReturnValue(
+      clientLog as unknown as ClientLogService,
     );
     const service = new AppService();
 
@@ -330,7 +336,7 @@ describe("AppService", () => {
     powerListeners.get("suspend")?.();
     powerListeners.get("resume")?.();
     powerListeners.get("unlock-screen")?.();
-    await Promise.resolve();
+    powerListeners.get("resume")?.();
 
     expect(electronMocks.powerMonitorOn).toHaveBeenCalledTimes(3);
     expect(electronMocks.powerMonitorOn).toHaveBeenCalledWith(
@@ -346,7 +352,12 @@ describe("AppService", () => {
       expect.any(Function),
     );
     expect(overlayWindows.suspendForSystem).toHaveBeenCalledTimes(1);
-    expect(overlayWindows.restoreRequestedOverlays).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => {
+      expect(overlayWindows.restoreRequestedOverlays).toHaveBeenCalledTimes(3);
+    });
+    expect(clientLog.reconcilePoeFocusStateFromRecentLog).toHaveBeenCalledTimes(
+      3,
+    );
   });
 
   it("logs system suspend overlay cleanup failures", () => {
@@ -392,18 +403,57 @@ describe("AppService", () => {
         throw new Error("cannot restore C:\\Users\\seb\\overlay");
       },
     } as unknown as OverlayWindowsService);
+    vi.spyOn(ClientLogService, "getInstance").mockReturnValue({
+      reconcilePoeFocusStateFromRecentLog: vi.fn(),
+    } as unknown as ClientLogService);
     const service = new AppService();
 
     service.registerSystemPowerCleanup();
     resumeListener?.();
-    await Promise.resolve();
 
-    expect(error).toHaveBeenCalledWith(
-      expect.stringContaining(
-        "ERROR [app] System resumed overlay restore failed",
-      ),
-      { error: "cannot restore [path]" },
+    await vi.waitFor(() => {
+      expect(error).toHaveBeenCalledWith(
+        expect.stringContaining(
+          "ERROR [app] System resumed overlay restore failed",
+        ),
+        { error: "cannot restore [path]" },
+      );
+    });
+  });
+
+  it("logs focus reconciliation failures and still restores overlays", async () => {
+    let resumeListener: (() => void) | undefined;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const overlayWindows = {
+      restoreRequestedOverlays: vi.fn().mockResolvedValue(undefined),
+    };
+    electronMocks.powerMonitorOn.mockImplementation((event, listener) => {
+      if (event === "resume") {
+        resumeListener = listener;
+      }
+    });
+    vi.spyOn(OverlayWindowsService, "getInstance").mockReturnValue(
+      overlayWindows as unknown as OverlayWindowsService,
     );
+    vi.spyOn(ClientLogService, "getInstance").mockReturnValue({
+      reconcilePoeFocusStateFromRecentLog: vi.fn(() => {
+        throw new Error("cannot inspect C:\\Users\\seb\\focus");
+      }),
+    } as unknown as ClientLogService);
+    const service = new AppService();
+
+    service.registerSystemPowerCleanup();
+    resumeListener?.();
+
+    await vi.waitFor(() => {
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining(
+          "WARN [app] System resumed focus reconciliation failed",
+        ),
+        { error: "cannot inspect [path]" },
+      );
+    });
+    expect(overlayWindows.restoreRequestedOverlays).toHaveBeenCalledTimes(1);
   });
 
   it("logs shutdown cleanup failures and marks cleanup complete", async () => {

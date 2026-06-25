@@ -13,7 +13,7 @@ import { ManagedRecorderService } from "~/main/modules/managed-recorder";
 import { OverlayWindowsService } from "~/main/modules/overlay-windows";
 import { PoeProcessService } from "~/main/modules/poe-process";
 import { UpdaterService } from "~/main/modules/updater";
-import { logError, logInfo } from "~/main/utils/app-log";
+import { logError, logInfo, logWarn } from "~/main/utils/app-log";
 import {
   handleValidationError,
   safeErrorMessage,
@@ -205,11 +205,23 @@ class AppService {
   private async handleSystemOverlayRestore(reason: string): Promise<void> {
     logInfo(APP_SCOPE, `${reason}; restoring overlay windows`);
 
+    this.reconcileSystemOverlayFocus(reason);
+
     try {
       await OverlayWindowsService.getInstance().restoreRequestedOverlays();
       logInfo(APP_SCOPE, `${reason} overlay restore complete`);
     } catch (error) {
       logError(APP_SCOPE, `${reason} overlay restore failed`, {
+        error: safeErrorMessage(error),
+      });
+    }
+  }
+
+  private reconcileSystemOverlayFocus(reason: string): void {
+    try {
+      ClientLogService.getInstance().reconcilePoeFocusStateFromRecentLog();
+    } catch (error) {
+      logWarn(APP_SCOPE, `${reason} focus reconciliation failed`, {
         error: safeErrorMessage(error),
       });
     }

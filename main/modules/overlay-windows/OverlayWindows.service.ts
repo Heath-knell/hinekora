@@ -67,6 +67,7 @@ class OverlayWindowsService {
     this.getOverlayCaptureProtectionEnabled,
   );
   private gameRunningActive = false;
+  private shouldAssumePoeFocusFromRunning = true;
   private persistentAuraOverlayRequested = false;
   private activeGameFocusHandoffTimer: NodeJS.Timeout | null = null;
 
@@ -117,6 +118,7 @@ class OverlayWindowsService {
 
   setPoeFocusActive(active: boolean): void {
     if (active) {
+      this.shouldAssumePoeFocusFromRunning = true;
       this.endActiveGameFocusHandoff("game-focused");
     }
     this.coordinator.setPoeFocusActive(active);
@@ -131,7 +133,7 @@ class OverlayWindowsService {
       this.endActiveGameFocusHandoff("game-stopped");
     }
 
-    if (active && !wasActive) {
+    if (active && !wasActive && this.shouldAssumePoeFocusFromRunning) {
       logInfo(OVERLAY_WINDOWS_SCOPE, "Active game focus assumed from running", {
         active,
       });
@@ -207,6 +209,8 @@ class OverlayWindowsService {
   }
 
   suspendForSystem(): void {
+    this.shouldAssumePoeFocusFromRunning = false;
+    this.setPoeFocusActive(false);
     this.endActiveGameFocusHandoff("system-suspend");
     this.recordingControlsOverlay.suspendForSystem();
     this.deathClipsOverlay.destroy();
