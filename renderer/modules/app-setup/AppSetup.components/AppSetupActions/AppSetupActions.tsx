@@ -1,6 +1,6 @@
 import { SETUP_STEPS } from "~/main/modules/app-setup/AppSetup.types";
 import { trackEvent } from "~/renderer/modules/umami";
-import { useAppSetup } from "~/renderer/store";
+import { useAppSetupShallow } from "~/renderer/store";
 
 function AppSetupActions() {
   const {
@@ -10,7 +10,14 @@ function AppSetupActions() {
     advanceStep,
     goBack,
     completeSetup,
-  } = useAppSetup();
+  } = useAppSetupShallow((appSetup) => ({
+    setupState: appSetup.setupState,
+    validation: appSetup.validation,
+    isLoading: appSetup.isLoading,
+    advanceStep: appSetup.advanceStep,
+    goBack: appSetup.goBack,
+    completeSetup: appSetup.completeSetup,
+  }));
 
   const currentStep = setupState?.currentStep ?? SETUP_STEPS.NOT_STARTED;
   const isFirstStep = currentStep === SETUP_STEPS.SELECT_GAME;

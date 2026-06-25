@@ -1,7 +1,8 @@
 import { useNavigate } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { TbDatabaseExclamation } from "react-icons/tb";
 
-import { useRecordingStorageSelector } from "~/renderer/store";
+import { useStorageShallow } from "~/renderer/store";
 
 const APPBAR_ICON_SIZE = 16;
 
@@ -23,20 +24,28 @@ function formatBytes(bytes: number): string {
 }
 
 const DiskSpaceWarning = () => {
-  const usage = useRecordingStorageSelector(
-    (recordingStorage) => recordingStorage.usage,
+  const { checkDiskSpace, diskFreeBytes, isDiskLow } = useStorageShallow(
+    (storage) => ({
+      checkDiskSpace: storage.checkDiskSpace,
+      diskFreeBytes: storage.diskFreeBytes,
+      isDiskLow: storage.isDiskLow,
+    }),
   );
   const navigate = useNavigate();
+
+  useEffect(() => {
+    void checkDiskSpace();
+  }, [checkDiskSpace]);
 
   const handleOpenStorageSettings = () => {
     void navigate({ to: "/settings" });
   };
 
-  if (!usage?.lowDiskSpace) {
+  if (!isDiskLow) {
     return null;
   }
 
-  const tooltip = `Low disk space - ${formatBytes(usage.diskFreeBytes)} free`;
+  const tooltip = `Low disk space - ${formatBytes(diskFreeBytes ?? 0)} free`;
 
   return (
     <div className="tooltip tooltip-bottom tooltip-warning" data-tip={tooltip}>

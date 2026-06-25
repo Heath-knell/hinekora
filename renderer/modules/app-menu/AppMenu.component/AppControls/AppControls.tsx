@@ -20,7 +20,10 @@ import { RxCaretDown } from "react-icons/rx";
 
 import { createRecorderOverlayDisabledReason } from "~/renderer/modules/managed-recorder/ManagedRecorder.components/CaptureModePageHeader/CaptureModePageHeader.utils";
 import UpdateIndicator from "~/renderer/modules/updater/UpdateIndicator/UpdateIndicator";
-import { useAppMenu, useManagedRecorderSelector } from "~/renderer/store";
+import {
+  useAppMenuShallow,
+  useManagedRecorderSelector,
+} from "~/renderer/store";
 
 import DiskSpaceWarning from "../DiskSpaceWarning/DiskSpaceWarning";
 import WhatsNewModal from "../WhatsNewModal/WhatsNewModal";
@@ -46,7 +49,16 @@ const AppControls = () => {
     isRecorderOverlayVisible,
     toggleRecorderOverlay,
     openWhatsNew,
-  } = useAppMenu();
+  } = useAppMenuShallow((appMenu) => ({
+    minimize: appMenu.minimize,
+    maximize: appMenu.maximize,
+    unmaximize: appMenu.unmaximize,
+    close: appMenu.close,
+    isMaximized: appMenu.isMaximized,
+    isRecorderOverlayVisible: appMenu.isRecorderOverlayVisible,
+    toggleRecorderOverlay: appMenu.toggleRecorderOverlay,
+    openWhatsNew: appMenu.openWhatsNew,
+  }));
   const recorderOverlayDisabledReason =
     createRecorderOverlayDisabledReason(recorderStatus);
   const isRecorderOverlayDisabled = recorderOverlayDisabledReason !== null;

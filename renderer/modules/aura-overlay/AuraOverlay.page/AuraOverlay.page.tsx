@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AuraEditingNotice } from "~/renderer/modules/aura-overlay/AuraOverlay.components/AuraEditingNotice/AuraEditingNotice";
 import { AuraLockHandoffNotice } from "~/renderer/modules/aura-overlay/AuraOverlay.components/AuraLockHandoffNotice/AuraLockHandoffNotice";
@@ -31,12 +31,14 @@ function AuraOverlayPage() {
       updateProfile: profiles.update,
     }),
   );
-  const { selectedSourceId, sources } = useCapturePreviewShallow(
-    (capturePreview) => ({
+  const { isLoadingSources, refreshSources, selectedSourceId, sources } =
+    useCapturePreviewShallow((capturePreview) => ({
+      isLoadingSources: capturePreview.isLoading,
+      refreshSources: capturePreview.refresh,
       selectedSourceId: capturePreview.selectedSourceId,
       sources: capturePreview.sources,
-    }),
-  );
+    }));
+  const hasRequestedSourcesRef = useRef(false);
   const [routeParams, setRouteParams] = useState(readAuraRouteParams);
   const routeProfileId = routeParams.get("profileId");
   const routeStartAddingAura = routeParams.get("startAddingAura") === "1";
@@ -47,6 +49,19 @@ function AuraOverlayPage() {
       : null) ?? getSelectedCropLayoutProfile(profileItems, selectedProfileId);
   const { auraOverlayLocked, lockAuraOverlay, showLockHandoffHint } =
     useAuraOverlayLockState();
+
+  useEffect(() => {
+    if (
+      hasRequestedSourcesRef.current ||
+      isLoadingSources ||
+      sources.length > 0
+    ) {
+      return;
+    }
+
+    hasRequestedSourcesRef.current = true;
+    void refreshSources();
+  }, [isLoadingSources, refreshSources, sources.length]);
 
   const captureSourceId = useMemo(
     () =>

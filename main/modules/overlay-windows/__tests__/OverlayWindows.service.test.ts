@@ -828,6 +828,7 @@ describe("GridLinesOverlayService", () => {
       "crop-selector-overlay",
       true,
     );
+    expect(cropWindow.focus).toHaveBeenCalledTimes(1);
     vi.useFakeTimers();
     service.completeCropRegionSelection({
       x: 12.2,
@@ -897,6 +898,37 @@ describe("GridLinesOverlayService", () => {
 
     service.cancelCropRegionSelection();
     await expect(selection).resolves.toBeNull();
+  });
+
+  it("cancels crop selector selection when the selector window loses focus", async () => {
+    const cropWindow = createFakeWindow();
+    electronMocks.browserWindowFactory.mockReturnValue(cropWindow);
+    const service = new OverlayWindowsService();
+    const setOverlayFocusActive = vi.spyOn(
+      getInternals(service).coordinator,
+      "setOverlayFocusActive",
+    );
+
+    const selection = service.selectCropRegion();
+    await flushTimers();
+    const blurListener = cropWindow.on.mock.calls.find(
+      ([eventName]) => eventName === "blur",
+    )?.[1];
+
+    expect(blurListener).toEqual(expect.any(Function));
+    blurListener?.();
+
+    await expect(selection).resolves.toBeNull();
+    expect(cropWindow.close).toHaveBeenCalled();
+    blurListener?.();
+    expect(cropWindow.close).toHaveBeenCalledTimes(1);
+    expect(electronMocks.globalShortcutUnregister).toHaveBeenCalledWith(
+      "Escape",
+    );
+    expect(setOverlayFocusActive).toHaveBeenCalledWith(
+      "crop-selector-overlay",
+      false,
+    );
   });
 
   it("keeps aura overlays visible while the crop selector is active", async () => {

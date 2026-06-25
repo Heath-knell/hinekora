@@ -13,6 +13,7 @@ export interface StorageSlice {
     gameLeagueUsage: StorageGameLeagueUsage[];
     isLoading: boolean;
     error: string | null;
+    diskFreeBytes: number | null;
     isDiskLow: boolean;
     deletingGameLeagueId: string | null;
     fetchStorageInfo: () => Promise<void>;
@@ -42,6 +43,7 @@ export const createStorageSlice: BoundStoreStateCreator<StorageSlice> = (
       ]);
       set((state) => {
         state.storage.info = info;
+        state.storage.diskFreeBytes = diskCheck.diskFreeBytes;
         state.storage.isDiskLow = diskCheck.isLow;
         state.storage.isLoading = false;
       });
@@ -84,6 +86,7 @@ export const createStorageSlice: BoundStoreStateCreator<StorageSlice> = (
       gameLeagueUsage: [],
       isLoading: false,
       error: null,
+      diskFreeBytes: null,
       isDiskLow: false,
       deletingGameLeagueId: null,
       fetchStorageInfo,
@@ -142,6 +145,7 @@ export const createStorageSlice: BoundStoreStateCreator<StorageSlice> = (
           const diskCheck: DiskSpaceCheck =
             await window.electron.storage.checkDiskSpace();
           set((state) => {
+            state.storage.diskFreeBytes = diskCheck.diskFreeBytes;
             state.storage.isDiskLow = diskCheck.isLow;
           });
         } catch {}

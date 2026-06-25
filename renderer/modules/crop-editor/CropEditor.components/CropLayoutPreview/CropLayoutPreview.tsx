@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import type { PointerEvent } from "react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { resolveActiveAuraCropRegionId } from "~/renderer/modules/crop-editor/CropEditor.utils/CropEditor.utils";
 import {
@@ -48,12 +48,27 @@ function CropLayoutPreview() {
       updateProfile: profiles.update,
     }),
   );
-  const { selectedSourceId, sources } = useCapturePreviewShallow(
-    (capturePreview) => ({
-      selectedSourceId: capturePreview.selectedSourceId,
-      sources: capturePreview.sources,
-    }),
-  );
+  const {
+    getThumbnail,
+    selectedSourceId,
+    sourceImageState,
+    sourceImageUrl,
+    sources,
+  } = useCapturePreviewShallow((capturePreview) => ({
+    getThumbnail: capturePreview.getThumbnail,
+    selectedSourceId: capturePreview.selectedSourceId,
+    sourceImageState:
+      capturePreview.selectedSourceId !== null
+        ? capturePreview.thumbnailsBySourceId[capturePreview.selectedSourceId]
+        : null,
+    sourceImageUrl:
+      capturePreview.selectedSourceId !== null
+        ? (capturePreview.thumbnailsBySourceId[
+            capturePreview.selectedSourceId
+          ] ?? null)
+        : null,
+    sources: capturePreview.sources,
+  }));
   const { selectedAuraCropRegionId, showAllAurasInPreview } =
     useCropEditorShallow((cropEditor) => ({
       selectedAuraCropRegionId: cropEditor.selectedAuraCropRegionId,
@@ -95,9 +110,13 @@ function CropLayoutPreview() {
     showAllAurasInPreview,
     sources,
   ]);
-  const sourceImageUrl =
-    sources.find((source) => source.id === selectedSourceId)
-      ?.thumbnailDataUrl ?? null;
+  useEffect(() => {
+    if (!selectedSourceId || sourceImageState !== undefined) {
+      return;
+    }
+
+    void getThumbnail(selectedSourceId).catch(() => undefined);
+  }, [getThumbnail, selectedSourceId, sourceImageState]);
 
   const handleResizePointerDown = (event: PointerEvent<HTMLElement>) => {
     if (!profile || !preview || event.button !== 0) {

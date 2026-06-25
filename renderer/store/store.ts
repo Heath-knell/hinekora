@@ -84,10 +84,7 @@ export const useBoundStore = create<BoundStore>()(
             poeProcessSlice.poeProcess.hydrate(),
             settingsSlice.settings.hydrate(),
             clientLogSlice.clientLog.hydrate(),
-            replayClipsSlice.replayClips.hydrate(),
-            recordingStorageSlice.recordingStorage.hydrate(),
           ]);
-          await capturePreviewSlice.capturePreview.hydrate();
         },
         startListeners: () => {
           const unsubscribers = [

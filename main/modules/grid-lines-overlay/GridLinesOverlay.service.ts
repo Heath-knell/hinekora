@@ -48,6 +48,7 @@ class GridLinesOverlayService {
         true,
       );
       this.coordinator.showGameOverlayWindow(this.cropSelectorWindow);
+      this.cropSelectorWindow?.focus();
     });
   }
 
@@ -148,6 +149,13 @@ class GridLinesOverlayService {
       contentProtection: this.getContentProtectionEnabled(),
     });
     cropSelectorWindow.setFullScreenable(false);
+    cropSelectorWindow.on("blur", () => {
+      if (!this.pendingCropSelection) {
+        return;
+      }
+
+      this.cancelCropRegionSelection();
+    });
     cropSelectorWindow.on("closed", () => {
       unregisterIpcWindowRole(cropSelectorWebContents);
       logInfo(GRID_LINES_OVERLAY_SCOPE, "Crop selector overlay closed");

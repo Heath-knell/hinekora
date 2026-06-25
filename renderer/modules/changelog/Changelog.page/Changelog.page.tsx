@@ -3,12 +3,19 @@ import { useEffect } from "react";
 import { PageContainer } from "~/renderer/components/PageContainer/PageContainer";
 import { PageContent } from "~/renderer/components/PageContent/PageContent";
 import { PageHeader } from "~/renderer/components/PageHeader/PageHeader";
-import { useChangelog } from "~/renderer/store";
+import { useChangelogShallow } from "~/renderer/store";
 
 import { ReleaseTimelineItem } from "../Changelog.components";
 
 function ChangelogPage() {
-  const { releases, isLoading, error, fetchChangelog } = useChangelog();
+  const { releases, isLoading, error, fetchChangelog } = useChangelogShallow(
+    (changelog) => ({
+      releases: changelog.releases,
+      isLoading: changelog.isLoading,
+      error: changelog.error,
+      fetchChangelog: changelog.fetchChangelog,
+    }),
+  );
 
   useEffect(() => {
     void fetchChangelog();

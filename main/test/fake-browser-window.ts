@@ -17,6 +17,7 @@ function createFakeBrowserWindow(options: FakeBrowserWindowOptions = {}) {
     close: vi.fn(() => {
       visible = false;
     }),
+    focus: vi.fn(),
     getBounds: vi.fn(() => bounds),
     getNativeWindowHandle: vi.fn(() => {
       const buffer = Buffer.alloc(8);

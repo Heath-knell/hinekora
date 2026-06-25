@@ -2,7 +2,7 @@ import clsx from "clsx";
 import type { MouseEvent } from "react";
 import { useCallback } from "react";
 
-import { useAppMenu } from "~/renderer/store";
+import { useAppMenuShallow } from "~/renderer/store";
 
 const selectedReleaseTabClass =
   "bg-[#f5e6c8]/15 text-[#f5e6c8] shadow-[inset_0_0_0_1px_rgba(245,230,200,0.65),0_0_18px_rgba(245,230,200,0.18)]";
@@ -11,7 +11,11 @@ const idleReleaseTabClass =
 
 export const WhatsNewReleaseTabs = () => {
   const { whatsNewReleases, whatsNewSelectedVersion, selectWhatsNewRelease } =
-    useAppMenu();
+    useAppMenuShallow((appMenu) => ({
+      whatsNewReleases: appMenu.whatsNewReleases,
+      whatsNewSelectedVersion: appMenu.whatsNewSelectedVersion,
+      selectWhatsNewRelease: appMenu.selectWhatsNewRelease,
+    }));
 
   const handleTabClick = useCallback(
     (event: MouseEvent<HTMLButtonElement>) => {

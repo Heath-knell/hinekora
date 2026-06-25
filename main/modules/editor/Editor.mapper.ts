@@ -31,7 +31,8 @@ function createEditorAssetFromReplayClip(
     assetKey: createEditorAssetKey("clip", detail.clip.id),
     category,
     createdAt: detail.clip.createdAt,
-    durationSeconds: detail.clip.targetDurationSeconds,
+    durationSeconds:
+      detail.durationSeconds ?? detail.clip.targetDurationSeconds,
     exists: detail.mediaUrl !== null,
     id: detail.clip.id,
     kind: "clip",

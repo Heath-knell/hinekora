@@ -1,11 +1,8 @@
 import { desktopCapturer, screen } from "electron";
 
 import { WindowName } from "~/main/modules/main-window/MainWindow.types";
-import { SettingsStoreService } from "~/main/modules/settings-store";
-import {
-  detectPoeProcessState,
-  isPoeProcessStateForGame,
-} from "~/main/pollers";
+import { PoeProcessService } from "~/main/modules/poe-process";
+import { isPoeProcessStateForGame } from "~/main/pollers";
 import { logWarn } from "~/main/utils/app-log";
 import {
   createDisplayDimensionsLookup,
@@ -30,6 +27,8 @@ import {
 } from "./CapturePreview.sources";
 
 const SOURCE_ID_CACHE_MS = 1_500;
+const SOURCE_THUMBNAIL_CACHE_MS = 10_000;
+const SOURCE_THUMBNAIL_CACHE_MAX_ENTRIES = 16;
 const GAME_RUNNING_CACHE_MS = 1_500;
 const SLOW_SOURCE_LIST_MS = 250;
 
@@ -44,6 +43,11 @@ class CapturePreviewService {
   private sourceIdCache: { checkedAtMs: number; ids: Set<string> } | null =
     null;
   private sourceIdRequest: Promise<Set<string>> | null = null;
+  private sourceThumbnailCache = new Map<
+    string,
+    { checkedAtMs: number; dataUrl: string | null }
+  >();
+  private sourceThumbnailRequests = new Map<string, Promise<string | null>>();
   private gameRunningCache: {
     checkedAtMs: number;
     runningGames: Set<GameId>;
@@ -69,6 +73,10 @@ class CapturePreviewService {
       return this.sourceListCache;
     }
 
+    if (options.forceRefresh) {
+      this.sourceThumbnailCache.clear();
+    }
+
     if (this.sourceListRequest) {
       return this.sourceListRequest;
     }
@@ -86,19 +94,21 @@ class CapturePreviewService {
     forceRefresh: boolean,
   ): Promise<CapturePreviewSource[]> {
     const startedAtMs = Date.now();
-    const { activeGame } = SettingsStoreService.getInstance().get();
     const displays = screen.getAllDisplays();
     const displayDimensions = createDisplayDimensionsLookup(displays);
     const displayLabels = this.createDisplayLabelLookup(displays);
     const primaryDisplayDimensions = getNativeDisplayDimensions(
       screen.getPrimaryDisplay(),
     );
+    const poeProcessService = PoeProcessService.getInstance();
     const [sources, poeProcessState] = await Promise.all([
       desktopCapturer.getSources({
         types: ["screen", "window"],
-        thumbnailSize: { width: 360, height: 204 },
+        thumbnailSize: { width: 0, height: 0 },
       }),
-      detectPoeProcessState(activeGame),
+      forceRefresh
+        ? poeProcessService.refreshState()
+        : Promise.resolve(poeProcessService.getState()),
     ]);
 
     const sourceInputs = sources.slice(0, 64).map((source) => {
@@ -120,9 +130,7 @@ class CapturePreviewService {
         displayLabel,
         width: dimensions?.width ?? null,
         height: dimensions?.height ?? null,
-        thumbnailDataUrl: source.thumbnail.isEmpty()
-          ? null
-          : source.thumbnail.toDataURL(),
+        thumbnailDataUrl: null,
       };
     });
     const filteredSourceInputs = sourceInputs.filter((source) => {
@@ -138,9 +146,14 @@ class CapturePreviewService {
     const normalizedSources = normalizeCapturePreviewSources(
       filteredSourceInputs,
     ).map((source) => CapturePreviewSourceSchema.parse(source));
+    const completedAtMs = Date.now();
 
+    this.pruneSourceThumbnailCache({
+      now: completedAtMs,
+      sourceIds: new Set(normalizedSources.map((source) => source.id)),
+    });
     this.sourceListCache = normalizedSources;
-    const elapsedMs = Math.max(0, Date.now() - startedAtMs);
+    const elapsedMs = Math.max(0, completedAtMs - startedAtMs);
     if (elapsedMs >= SLOW_SOURCE_LIST_MS) {
       logWarn("capture-preview", "Capture source listing was slow", {
         elapsedMs,
@@ -151,6 +164,58 @@ class CapturePreviewService {
     }
 
     return normalizedSources;
+  }
+
+  async getSourceThumbnail(sourceId: string): Promise<string | null> {
+    const now = Date.now();
+    this.pruneSourceThumbnailCache({ now });
+    const cached = this.sourceThumbnailCache.get(sourceId);
+    if (cached && now - cached.checkedAtMs < SOURCE_THUMBNAIL_CACHE_MS) {
+      this.sourceThumbnailCache.delete(sourceId);
+      this.sourceThumbnailCache.set(sourceId, cached);
+      return cached.dataUrl;
+    }
+
+    const existingRequest = this.sourceThumbnailRequests.get(sourceId);
+    if (existingRequest) {
+      return existingRequest;
+    }
+
+    const request = desktopCapturer
+      .getSources({
+        types: ["screen", "window"],
+        thumbnailSize: { width: 360, height: 204 },
+      })
+      .then((sources) => {
+        const source = sources.find((item) => item.id === sourceId) ?? null;
+        const dataUrl =
+          source && !source.thumbnail.isEmpty()
+            ? source.thumbnail.toDataURL()
+            : null;
+
+        this.setSourceThumbnailCache(sourceId, dataUrl);
+
+        return dataUrl;
+      })
+      .finally(() => {
+        this.sourceThumbnailRequests.delete(sourceId);
+      });
+
+    this.sourceThumbnailRequests.set(sourceId, request);
+
+    return request;
+  }
+
+  private setSourceThumbnailCache(
+    sourceId: string,
+    dataUrl: string | null,
+  ): void {
+    this.sourceThumbnailCache.delete(sourceId);
+    this.sourceThumbnailCache.set(sourceId, {
+      checkedAtMs: Date.now(),
+      dataUrl,
+    });
+    this.pruneSourceThumbnailCache();
   }
 
   async sourceExists(sourceId: string): Promise<boolean> {
@@ -184,8 +249,12 @@ class CapturePreviewService {
       return this.gameRunningRequest;
     }
 
-    const { activeGame } = SettingsStoreService.getInstance().get();
-    this.gameRunningRequest = detectPoeProcessState(activeGame)
+    const poeProcessService = PoeProcessService.getInstance();
+    this.gameRunningRequest = (
+      options.forceRefresh
+        ? poeProcessService.refreshState()
+        : Promise.resolve(poeProcessService.getState())
+    )
       .then(async (poeProcessState) => {
         const runningGames = new Set<GameId>();
         if (!poeProcessState.isRunning) {
@@ -259,7 +328,51 @@ class CapturePreviewService {
     );
   }
 
+  private pruneSourceThumbnailCache(
+    options: { now?: number; sourceIds?: Set<string> } = {},
+  ): void {
+    const now = options.now ?? Date.now();
+
+    for (const [sourceId, cached] of this.sourceThumbnailCache) {
+      const isStale = now - cached.checkedAtMs >= SOURCE_THUMBNAIL_CACHE_MS;
+      const isUnavailable =
+        options.sourceIds !== undefined && !options.sourceIds.has(sourceId);
+
+      if (isStale || isUnavailable) {
+        this.sourceThumbnailCache.delete(sourceId);
+      }
+    }
+
+    while (
+      this.sourceThumbnailCache.size > SOURCE_THUMBNAIL_CACHE_MAX_ENTRIES
+    ) {
+      const oldestSourceId = this.sourceThumbnailCache.keys().next().value;
+      this.sourceThumbnailCache.delete(oldestSourceId as string);
+    }
+  }
+
   private setupHandlers(): void {
+    registerGuardedIpcHandler(
+      CapturePreviewChannel.GetSourceThumbnail,
+      [WindowName.Main],
+      (_event, sourceId) => {
+        try {
+          assertString(
+            sourceId,
+            "sourceId",
+            CapturePreviewChannel.GetSourceThumbnail,
+            {
+              min: 1,
+              max: 512,
+            },
+          );
+
+          return this.getSourceThumbnail(sourceId);
+        } catch (error) {
+          return handleValidationError(error);
+        }
+      },
+    );
     registerGuardedIpcHandler(
       CapturePreviewChannel.ListSources,
       [WindowName.Main, WindowName.AuraOverlay],

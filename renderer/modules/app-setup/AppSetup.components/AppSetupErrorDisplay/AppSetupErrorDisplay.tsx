@@ -1,9 +1,11 @@
 import { FiAlertCircle } from "react-icons/fi";
 
-import { useAppSetup } from "~/renderer/store";
+import { useAppSetupShallow } from "~/renderer/store";
 
 function AppSetupErrorDisplay() {
-  const { error } = useAppSetup();
+  const { error } = useAppSetupShallow((appSetup) => ({
+    error: appSetup.error,
+  }));
 
   if (!error) {
     return null;

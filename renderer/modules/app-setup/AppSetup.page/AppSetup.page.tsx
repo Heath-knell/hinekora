@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 
 import { SETUP_STEPS } from "~/main/modules/app-setup/AppSetup.types";
-import { useAppSetup } from "~/renderer/store";
+import { useAppSetupShallow } from "~/renderer/store";
 
 import {
   AppSetupActions,
@@ -14,7 +14,12 @@ import {
 
 function AppSetupPage() {
   const { setupState, trackSetupStarted, validateCurrentStep, advanceStep } =
-    useAppSetup();
+    useAppSetupShallow((appSetup) => ({
+      setupState: appSetup.setupState,
+      trackSetupStarted: appSetup.trackSetupStarted,
+      validateCurrentStep: appSetup.validateCurrentStep,
+      advanceStep: appSetup.advanceStep,
+    }));
   const hasAutoAdvanced = useRef(false);
   const currentStep = setupState?.currentStep ?? SETUP_STEPS.NOT_STARTED;
 

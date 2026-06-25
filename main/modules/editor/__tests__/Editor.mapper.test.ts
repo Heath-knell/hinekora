@@ -14,6 +14,7 @@ import {
 describe("Editor mapper", () => {
   it("maps replay clips and recordings into editor assets", () => {
     const clipDetail: ReplayClipDetail = {
+      durationSeconds: 7.25,
       mediaUrl: "hinekora-media://replay-clip/clip-1",
       clip: {
         id: "clip-1",
@@ -53,7 +54,7 @@ describe("Editor mapper", () => {
     expect(createEditorAssetFromReplayClip(clipDetail)).toMatchObject({
       assetKey: "clip:clip-1",
       category: "manual-replay",
-      durationSeconds: 12,
+      durationSeconds: 7.25,
       exists: true,
       kind: "clip",
       name: "manual.mp4",
@@ -72,6 +73,7 @@ describe("Editor mapper", () => {
 
   it("maps replay status fallbacks and clip labels", () => {
     const failedClip: ReplayClipDetail = {
+      durationSeconds: null,
       mediaUrl: null,
       clip: {
         id: "clip-2",
@@ -124,6 +126,7 @@ describe("Editor mapper", () => {
 
   it("keeps path labels when a path has no basename", () => {
     const clipDetail: ReplayClipDetail = {
+      durationSeconds: null,
       mediaUrl: "hinekora-media://replay-clip/root-path",
       clip: {
         id: "root-path",

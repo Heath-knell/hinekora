@@ -3,10 +3,6 @@ import { useShallow } from "zustand/react/shallow";
 import { useBoundStore } from "./store";
 import type { BoundStore } from "./store.types";
 
-function useSlice<K extends keyof BoundStore>(key: K): BoundStore[K] {
-  return useBoundStore(useShallow((state) => state[key]));
-}
-
 export function useRootActions() {
   return useBoundStore(
     useShallow((state) => ({
@@ -16,9 +12,13 @@ export function useRootActions() {
   );
 }
 
-export const useAppMenu = () => useSlice("appMenu");
+export const useAppMenuShallow = <T>(
+  selector: (appMenu: BoundStore["appMenu"]) => T,
+) => useBoundStore(useShallow((state) => selector(state.appMenu)));
 
-export const useAppSetup = () => useSlice("appSetup");
+export const useAppSetupShallow = <T>(
+  selector: (appSetup: BoundStore["appSetup"]) => T,
+) => useBoundStore(useShallow((state) => selector(state.appSetup)));
 
 export const useOnboardingState = () =>
   useBoundStore(
@@ -109,9 +109,13 @@ export const useStorageShallow = <T>(
   selector: (storage: BoundStore["storage"]) => T,
 ) => useBoundStore(useShallow((state) => selector(state.storage)));
 
-export const useUpdater = () => useSlice("updater");
+export const useUpdaterShallow = <T>(
+  selector: (updater: BoundStore["updater"]) => T,
+) => useBoundStore(useShallow((state) => selector(state.updater)));
 
-export const useChangelog = () => useSlice("changelog");
+export const useChangelogShallow = <T>(
+  selector: (changelog: BoundStore["changelog"]) => T,
+) => useBoundStore(useShallow((state) => selector(state.changelog)));
 
 export const useStateTransferShallow = <T>(
   selector: (stateTransfer: BoundStore["stateTransfer"]) => T,

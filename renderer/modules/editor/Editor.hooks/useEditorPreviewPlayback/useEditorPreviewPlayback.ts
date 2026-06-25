@@ -7,11 +7,13 @@ import { isPlaybackInsideClip } from "./useEditorPreviewPlayback.utils";
 
 const playbackSyncToleranceSeconds = 0.08;
 const clipBoundaryToleranceSeconds = 0.02;
+const playbackStoreSyncIntervalMs = 50;
 
 function useEditorPreviewPlayback() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const playbackAnimationFrameRef = useRef<number | null>(null);
   const playbackSecondsRef = useRef(0);
+  const lastPlaybackStoreSyncMsRef = useRef(0);
   const { frameStyle, stageRef } = useEditorPreviewFrame();
   const {
     isPreviewPlaying,
@@ -61,6 +63,24 @@ function useEditorPreviewPlayback() {
     playbackSecondsRef.current = playbackSeconds;
   }, [playbackSeconds]);
 
+  const publishPlaybackSeconds = useCallback(
+    (nextPlaybackSeconds: number, options: { force?: boolean } = {}) => {
+      playbackSecondsRef.current = nextPlaybackSeconds;
+
+      const now = performance.now();
+      if (
+        !options.force &&
+        now - lastPlaybackStoreSyncMsRef.current < playbackStoreSyncIntervalMs
+      ) {
+        return;
+      }
+
+      lastPlaybackStoreSyncMsRef.current = now;
+      setPlaybackSeconds(nextPlaybackSeconds);
+    },
+    [setPlaybackSeconds],
+  );
+
   useEffect(() => {
     if (!mediaUrl && isPreviewPlaying && !hasTimelineClips) {
       setPreviewPlaying(false);
@@ -96,55 +116,59 @@ function useEditorPreviewPlayback() {
     });
   }, [isPreviewPlaying, mediaUrl, setPreviewPlaying]);
 
-  const syncPlaybackPosition = useCallback(() => {
-    const video = videoRef.current;
-    if (!video) {
-      return;
-    }
-
-    if (!previewClip) {
-      setPlaybackSeconds(video.currentTime);
-      return;
-    }
-
-    const nextPlaybackSeconds =
-      previewClip.startSeconds + video.currentTime - previewClip.inSeconds;
-    const clipEndSeconds =
-      previewClip.startSeconds + previewClip.durationSeconds;
-
-    if (
-      video.currentTime >=
-        previewClip.outSeconds - clipBoundaryToleranceSeconds ||
-      nextPlaybackSeconds >= clipEndSeconds - clipBoundaryToleranceSeconds
-    ) {
-      const contiguousClip = timelineClips.find(
-        (clip) =>
-          clip.id !== previewClip.id &&
-          Math.abs(clip.startSeconds - clipEndSeconds) <=
-            clipBoundaryToleranceSeconds,
-      );
-
-      if (
-        !contiguousClip &&
-        clipEndSeconds >= timelineDurationSeconds - clipBoundaryToleranceSeconds
-      ) {
-        setPlaybackSeconds(0);
-        setPreviewPlaying(false);
+  const syncPlaybackPosition = useCallback(
+    (options: { force?: boolean } = {}) => {
+      const video = videoRef.current;
+      if (!video) {
         return;
       }
 
-      setPlaybackSeconds(clipEndSeconds);
-      return;
-    }
+      if (!previewClip) {
+        publishPlaybackSeconds(video.currentTime, options);
+        return;
+      }
 
-    setPlaybackSeconds(nextPlaybackSeconds);
-  }, [
-    previewClip,
-    setPlaybackSeconds,
-    setPreviewPlaying,
-    timelineClips,
-    timelineDurationSeconds,
-  ]);
+      const nextPlaybackSeconds =
+        previewClip.startSeconds + video.currentTime - previewClip.inSeconds;
+      const clipEndSeconds =
+        previewClip.startSeconds + previewClip.durationSeconds;
+
+      if (
+        video.currentTime >=
+          previewClip.outSeconds - clipBoundaryToleranceSeconds ||
+        nextPlaybackSeconds >= clipEndSeconds - clipBoundaryToleranceSeconds
+      ) {
+        const contiguousClip = timelineClips.find(
+          (clip) =>
+            clip.id !== previewClip.id &&
+            Math.abs(clip.startSeconds - clipEndSeconds) <=
+              clipBoundaryToleranceSeconds,
+        );
+
+        if (
+          !contiguousClip &&
+          clipEndSeconds >=
+            timelineDurationSeconds - clipBoundaryToleranceSeconds
+        ) {
+          publishPlaybackSeconds(0, { force: true });
+          setPreviewPlaying(false);
+          return;
+        }
+
+        publishPlaybackSeconds(clipEndSeconds, { force: true });
+        return;
+      }
+
+      publishPlaybackSeconds(nextPlaybackSeconds, options);
+    },
+    [
+      previewClip,
+      publishPlaybackSeconds,
+      setPreviewPlaying,
+      timelineClips,
+      timelineDurationSeconds,
+    ],
+  );
 
   useEffect(() => {
     if (!isPreviewPlaying || !mediaUrl) {
@@ -183,16 +207,18 @@ function useEditorPreviewPlayback() {
         durationSeconds,
         startSeconds + elapsedSeconds,
       );
-      setPlaybackSeconds(nextPlaybackSeconds);
 
       if (
         nextPlaybackSeconds >=
         durationSeconds - clipBoundaryToleranceSeconds
       ) {
+        publishPlaybackSeconds(nextPlaybackSeconds, { force: true });
         setPreviewPlaying(false);
         playbackAnimationFrameRef.current = null;
         return;
       }
+
+      publishPlaybackSeconds(nextPlaybackSeconds);
 
       playbackAnimationFrameRef.current =
         window.requestAnimationFrame(syncGapPlaybackFrame);
@@ -211,7 +237,7 @@ function useEditorPreviewPlayback() {
     hasTimelineClips,
     isPreviewPlaying,
     mediaUrl,
-    setPlaybackSeconds,
+    publishPlaybackSeconds,
     setPreviewPlaying,
     timelineDurationSeconds,
   ]);
@@ -232,11 +258,22 @@ function useEditorPreviewPlayback() {
       return;
     }
 
-    syncPlaybackPosition();
+    syncPlaybackPosition({ force: true });
   };
 
   const handleEnded = () => {
-    setPlaybackSeconds(0);
+    const video = videoRef.current;
+    if (
+      previewClip &&
+      video &&
+      video.currentTime < previewClip.outSeconds - clipBoundaryToleranceSeconds
+    ) {
+      syncPlaybackPosition({ force: true });
+      setPreviewPlaying(false);
+      return;
+    }
+
+    publishPlaybackSeconds(0, { force: true });
     setPreviewPlaying(false);
   };
 

@@ -102,6 +102,7 @@ declare global {
         skipSetup: () => Promise<void>;
       };
       capturePreview: {
+        getSourceThumbnail: (sourceId: string) => Promise<string | null>;
         listSources: (
           forceRefresh?: boolean,
         ) => Promise<CapturePreviewSource[]>;

@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, renameSync, statSync } from "node:fs";
 import { basename, dirname, join, normalize, resolve } from "node:path";
 
-import { app, BrowserWindow, screen } from "electron";
+import { app, screen } from "electron";
 
 import { WindowName } from "~/main/modules/main-window/MainWindow.types";
 import { ProfilesService } from "~/main/modules/profiles";
@@ -47,6 +47,10 @@ import {
   type NoobsApi,
   type NoobsSignal,
 } from "./ManagedRecorder.noobs";
+import {
+  publishManagedRecorderCaptureMode,
+  publishManagedRecorderStatus,
+} from "./ManagedRecorder.status-publisher";
 import {
   resolveReplaySaveWaitMs as calculateReplaySaveWaitMs,
   collectRecordingFilePaths,
@@ -2064,25 +2068,11 @@ class ManagedRecorderService {
   }
 
   private publishStatus(): void {
-    for (const window of BrowserWindow.getAllWindows()) {
-      if (!window.isDestroyed()) {
-        window.webContents.send(
-          ManagedRecorderChannel.StatusChanged,
-          this.status,
-        );
-      }
-    }
+    publishManagedRecorderStatus(this.status);
   }
 
   private publishCaptureMode(): void {
-    for (const window of BrowserWindow.getAllWindows()) {
-      if (!window.isDestroyed()) {
-        window.webContents.send(
-          ManagedRecorderChannel.CaptureModeChanged,
-          this.captureMode,
-        );
-      }
-    }
+    publishManagedRecorderCaptureMode(this.captureMode);
   }
 }
 

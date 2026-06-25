@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   AppSettingsSchema,
   CapturePreviewSourceSchema,
+  createCoordinateReferenceDimensions,
   createDefaultSettings,
   normalizeRecordingEncoderChoice,
   ProfileSchema,
@@ -149,6 +150,18 @@ describe("shared schemas", () => {
           referenceHeight: 1080,
         },
       ],
+    });
+  });
+
+  it("creates rounded coordinate reference dimensions", () => {
+    expect(
+      createCoordinateReferenceDimensions({
+        width: 2559.6,
+        height: 1439.4,
+      }),
+    ).toEqual({
+      referenceWidth: 2560,
+      referenceHeight: 1439,
     });
   });
 

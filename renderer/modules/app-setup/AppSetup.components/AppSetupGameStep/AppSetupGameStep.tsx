@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import type { MouseEvent } from "react";
 
-import { useAppSetup } from "~/renderer/store";
+import { useAppSetupShallow } from "~/renderer/store";
 
 import type { GameId } from "~/types";
 
@@ -19,7 +19,10 @@ const games: Array<{ value: GameId; label: string; description: string }> = [
 ];
 
 function AppSetupGameStep() {
-  const { setupState, toggleGame } = useAppSetup();
+  const { setupState, toggleGame } = useAppSetupShallow((appSetup) => ({
+    setupState: appSetup.setupState,
+    toggleGame: appSetup.toggleGame,
+  }));
   const selectedGames = setupState?.selectedGames ?? [];
 
   const handleToggle = (game: GameId) => {

@@ -10,7 +10,7 @@ const analyticsMocks = vi.hoisted(() => ({
 }));
 
 const storeMocks = vi.hoisted(() => ({
-  useAppSetup: vi.fn(),
+  useAppSetupShallow: vi.fn(),
 }));
 
 vi.mock("~/renderer/modules/umami", () => ({
@@ -18,7 +18,7 @@ vi.mock("~/renderer/modules/umami", () => ({
 }));
 
 vi.mock("~/renderer/store", () => ({
-  useAppSetup: storeMocks.useAppSetup,
+  useAppSetupShallow: storeMocks.useAppSetupShallow,
 }));
 
 import AppSetupActions from "./AppSetupActions";
@@ -39,16 +39,18 @@ async function renderActions() {
 describe("AppSetupActions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    storeMocks.useAppSetup.mockReturnValue({
-      setupState: {
-        currentStep: SETUP_STEPS.SELECT_GAME,
-      },
-      validation: { isValid: true, errors: [] },
-      isLoading: true,
-      advanceStep: vi.fn(),
-      goBack: vi.fn(),
-      completeSetup: vi.fn(),
-    });
+    storeMocks.useAppSetupShallow.mockImplementation((selector) =>
+      selector({
+        setupState: {
+          currentStep: SETUP_STEPS.SELECT_GAME,
+        },
+        validation: { isValid: true, errors: [] },
+        isLoading: true,
+        advanceStep: vi.fn(),
+        goBack: vi.fn(),
+        completeSetup: vi.fn(),
+      }),
+    );
   });
 
   afterEach(() => {
@@ -66,16 +68,18 @@ describe("AppSetupActions", () => {
 
   it("tracks next clicks with the current setup step", async () => {
     const advanceStep = vi.fn();
-    storeMocks.useAppSetup.mockReturnValue({
-      setupState: {
-        currentStep: SETUP_STEPS.SELECT_GAME,
-      },
-      validation: { isValid: true, errors: [] },
-      isLoading: false,
-      advanceStep,
-      goBack: vi.fn(),
-      completeSetup: vi.fn(),
-    });
+    storeMocks.useAppSetupShallow.mockImplementation((selector) =>
+      selector({
+        setupState: {
+          currentStep: SETUP_STEPS.SELECT_GAME,
+        },
+        validation: { isValid: true, errors: [] },
+        isLoading: false,
+        advanceStep,
+        goBack: vi.fn(),
+        completeSetup: vi.fn(),
+      }),
+    );
 
     await renderActions();
 
@@ -95,16 +99,18 @@ describe("AppSetupActions", () => {
 
   it("tracks back clicks with the current setup step", async () => {
     const goBack = vi.fn();
-    storeMocks.useAppSetup.mockReturnValue({
-      setupState: {
-        currentStep: SETUP_STEPS.SELECT_CLIENT_PATH,
-      },
-      validation: { isValid: true, errors: [] },
-      isLoading: false,
-      advanceStep: vi.fn(),
-      goBack,
-      completeSetup: vi.fn(),
-    });
+    storeMocks.useAppSetupShallow.mockImplementation((selector) =>
+      selector({
+        setupState: {
+          currentStep: SETUP_STEPS.SELECT_CLIENT_PATH,
+        },
+        validation: { isValid: true, errors: [] },
+        isLoading: false,
+        advanceStep: vi.fn(),
+        goBack,
+        completeSetup: vi.fn(),
+      }),
+    );
 
     await renderActions();
 
@@ -126,16 +132,18 @@ describe("AppSetupActions", () => {
 
   it("tracks finish clicks with the current setup step", async () => {
     const completeSetup = vi.fn();
-    storeMocks.useAppSetup.mockReturnValue({
-      setupState: {
-        currentStep: SETUP_STEPS.TELEMETRY_CONSENT,
-      },
-      validation: { isValid: true, errors: [] },
-      isLoading: false,
-      advanceStep: vi.fn(),
-      goBack: vi.fn(),
-      completeSetup,
-    });
+    storeMocks.useAppSetupShallow.mockImplementation((selector) =>
+      selector({
+        setupState: {
+          currentStep: SETUP_STEPS.TELEMETRY_CONSENT,
+        },
+        validation: { isValid: true, errors: [] },
+        isLoading: false,
+        advanceStep: vi.fn(),
+        goBack: vi.fn(),
+        completeSetup,
+      }),
+    );
 
     await renderActions();
 

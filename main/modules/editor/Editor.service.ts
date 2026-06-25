@@ -548,7 +548,7 @@ class EditorService {
         staleAssetCount: staleAssetKeys.length,
       });
     }
-    let recoveredClipDurationCount = 0;
+    let adjustedClipDurationCount = 0;
     const tracks = project.tracks.map((track) => ({
       ...track,
       clips: track.clips.map((clip) => {
@@ -564,28 +564,38 @@ class EditorService {
             currentAsset,
             refreshedAsset,
           });
-        if (recoveredDurationSeconds !== null) {
-          recoveredClipDurationCount += 1;
-        }
-
-        return {
-          ...clip,
-          ...(recoveredDurationSeconds !== null
+        const clipWithRecoveredDuration =
+          recoveredDurationSeconds !== null
             ? {
+                ...clip,
                 durationSeconds: recoveredDurationSeconds,
                 outSeconds: recoveredDurationSeconds,
                 sourceOutSeconds: recoveredDurationSeconds,
               }
-            : {}),
+            : clip;
+        const refreshedDurationPatch = resolveRefreshedClipDurationPatch({
+          clip: clipWithRecoveredDuration,
+          refreshedAsset,
+        });
+        if (
+          recoveredDurationSeconds !== null ||
+          refreshedDurationPatch !== null
+        ) {
+          adjustedClipDurationCount += 1;
+        }
+
+        return {
+          ...clipWithRecoveredDuration,
+          ...(refreshedDurationPatch ?? {}),
           mediaUrl: refreshedAsset.mediaUrl,
           name: refreshedAsset.name,
         };
       }),
     }));
-    if (recoveredClipDurationCount > 0) {
-      logInfo(editorLogScope, "Editor project recovered media durations", {
+    if (adjustedClipDurationCount > 0) {
+      logInfo(editorLogScope, "Editor project adjusted media durations", {
         projectIdHash: createTextHash(project.id),
-        recoveredClipDurationCount,
+        adjustedClipDurationCount,
       });
     }
 
@@ -927,6 +937,68 @@ function resolveRecoveredPlaceholderClipDuration({
   }
 
   return normalizeAssetDuration(refreshedAsset.durationSeconds);
+}
+
+function resolveRefreshedClipDurationPatch({
+  clip,
+  refreshedAsset,
+}: {
+  clip: EditorTimelineClip;
+  refreshedAsset: EditorMediaAsset;
+}): Partial<EditorTimelineClip> | null {
+  if (!hasPositiveMediaDuration(refreshedAsset.durationSeconds)) {
+    return null;
+  }
+
+  const sourceDurationSeconds = normalizeAssetDuration(
+    refreshedAsset.durationSeconds,
+  );
+  const minimumDurationSeconds = Math.min(0.001, sourceDurationSeconds);
+  const inSeconds = clampEditorSeconds(
+    clip.inSeconds,
+    0,
+    Math.max(sourceDurationSeconds - minimumDurationSeconds, 0),
+  );
+  const outSeconds = clampEditorSeconds(
+    clip.outSeconds,
+    inSeconds + minimumDurationSeconds,
+    sourceDurationSeconds,
+  );
+  const durationSeconds = clampEditorSeconds(
+    clip.durationSeconds,
+    minimumDurationSeconds,
+    outSeconds - inSeconds,
+  );
+
+  if (
+    clip.durationSeconds === durationSeconds &&
+    clip.inSeconds === inSeconds &&
+    clip.outSeconds === outSeconds &&
+    clip.sourceInSeconds === 0 &&
+    clip.sourceOutSeconds === sourceDurationSeconds
+  ) {
+    return null;
+  }
+
+  return {
+    durationSeconds,
+    inSeconds,
+    outSeconds,
+    sourceInSeconds: 0,
+    sourceOutSeconds: sourceDurationSeconds,
+  };
+}
+
+function clampEditorSeconds(value: number, min: number, max: number): number {
+  if (max < min) {
+    return Math.round(min * 1_000) / 1_000;
+  }
+
+  if (!Number.isFinite(value)) {
+    return Math.round(min * 1_000) / 1_000;
+  }
+
+  return Math.round(Math.min(Math.max(value, min), max) * 1_000) / 1_000;
 }
 
 function createEditorAssetDiagnostics(assets: EditorMediaAsset[]) {

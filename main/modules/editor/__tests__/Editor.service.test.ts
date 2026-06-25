@@ -94,6 +94,7 @@ function createReplayClipDetail(
   const id = overrides.id ?? "clip-1";
 
   return {
+    durationSeconds: overrides.targetDurationSeconds ?? 10,
     mediaUrl: `hinekora-media://replay-clip/${id}`,
     clip: {
       id,
@@ -563,7 +564,217 @@ describe("EditorService IPC", () => {
       expect.objectContaining({
         durationSeconds: 5,
         outSeconds: 5,
+        sourceOutSeconds: 78.117,
+      }),
+    );
+  });
+
+  it("clamps stale replay clip durations to refreshed media duration", () => {
+    const staleAsset = createEditorMediaAsset({
+      assetKey: "clip:clip-1",
+      durationSeconds: 10,
+      id: "clip-1",
+      mediaUrl: "hinekora-media://replay-clip/clip-1",
+      name: "clip-1.mp4",
+    });
+    const staleClip = createEditorTimelineClip(staleAsset, {
+      durationSeconds: 5.36,
+      outSeconds: 5.36,
+      sourceOutSeconds: 10,
+    });
+    const staleProject = createEditorProject({
+      assets: [staleAsset],
+      durationSeconds: 5.36,
+      id: "stale-replay-duration-project",
+      tracks: [
+        {
+          clips: [staleClip],
+          id: "video-track",
+          kind: "video",
+          label: "Video",
+        },
+      ],
+    });
+    mockEditorLibraries({
+      clips: {
+        "clip-1": {
+          ...createReplayClipDetail({
+            id: "clip-1",
+            targetDurationSeconds: 10,
+          }),
+          durationSeconds: 3.11,
+        },
+      },
+    });
+    const service = new EditorService();
+
+    const savedProject = service.saveProject({ project: staleProject });
+
+    expect(savedProject.assets[0]).toEqual(
+      expect.objectContaining({ durationSeconds: 3.11 }),
+    );
+    expect(savedProject.durationSeconds).toBe(3.11);
+    expect(savedProject.tracks[0]?.clips[0]).toEqual(
+      expect.objectContaining({
+        durationSeconds: 3.11,
+        inSeconds: 0,
+        outSeconds: 3.11,
+        sourceOutSeconds: 3.11,
+      }),
+    );
+  });
+
+  it("keeps clip durations when refreshed media duration is unavailable", () => {
+    const staleAsset = createEditorMediaAsset({
+      assetKey: "clip:clip-no-duration",
+      durationSeconds: 10,
+      id: "clip-no-duration",
+      mediaUrl: "hinekora-media://replay-clip/clip-no-duration",
+      name: "clip-no-duration.mp4",
+    });
+    const staleClip = createEditorTimelineClip(staleAsset, {
+      durationSeconds: 4,
+      outSeconds: 4,
+      sourceOutSeconds: 10,
+    });
+    const staleProject = createEditorProject({
+      assets: [staleAsset],
+      durationSeconds: 4,
+      id: "refreshed-missing-duration-project",
+      tracks: [
+        {
+          clips: [staleClip],
+          id: "video-track",
+          kind: "video",
+          label: "Video",
+        },
+      ],
+    });
+    const refreshedAsset = {
+      ...staleAsset,
+      durationSeconds: null,
+      mediaUrl: "hinekora-media://replay-clip/clip-no-duration-new",
+      name: "clip-no-duration-new.mp4",
+    };
+    const service = new EditorService();
+    const internals = service as unknown as {
+      refreshEditorProjectMedia: (
+        project: EditorProject,
+        refreshedAssets: (typeof refreshedAsset)[],
+      ) => EditorProject;
+    };
+
+    const refreshedProject = internals.refreshEditorProjectMedia(staleProject, [
+      refreshedAsset,
+    ]);
+
+    expect(refreshedProject.tracks[0]?.clips[0]).toEqual(
+      expect.objectContaining({
+        durationSeconds: 4,
+        inSeconds: 0,
+        mediaUrl: refreshedAsset.mediaUrl,
+        name: refreshedAsset.name,
+        outSeconds: 4,
         sourceOutSeconds: 10,
+      }),
+    );
+  });
+
+  it("clamps invalid refreshed clip bounds to the refreshed media range", () => {
+    const staleAsset = createEditorMediaAsset({
+      assetKey: "clip:clip-tiny-duration",
+      durationSeconds: 10,
+      id: "clip-tiny-duration",
+      mediaUrl: "hinekora-media://replay-clip/clip-tiny-duration",
+      name: "clip-tiny-duration.mp4",
+    });
+    const staleClip = createEditorTimelineClip(staleAsset, {
+      durationSeconds: Number.NaN,
+      inSeconds: Number.NaN,
+      outSeconds: 20,
+      sourceOutSeconds: 10,
+    });
+    const staleProject = createEditorProject({
+      assets: [staleAsset],
+      durationSeconds: 10,
+      id: "tiny-duration-project",
+      tracks: [
+        {
+          clips: [staleClip],
+          id: "video-track",
+          kind: "video",
+          label: "Video",
+        },
+      ],
+    });
+    const refreshedAsset = {
+      ...staleAsset,
+      durationSeconds: 0.0004,
+    };
+    const service = new EditorService();
+    const internals = service as unknown as {
+      refreshEditorProjectMedia: (
+        project: EditorProject,
+        refreshedAssets: (typeof refreshedAsset)[],
+      ) => EditorProject;
+    };
+
+    const refreshedProject = internals.refreshEditorProjectMedia(staleProject, [
+      refreshedAsset,
+    ]);
+
+    expect(refreshedProject.tracks[0]?.clips[0]).toEqual(
+      expect.objectContaining({
+        durationSeconds: 0.001,
+        inSeconds: 0,
+        outSeconds: 0.001,
+        sourceInSeconds: 0,
+        sourceOutSeconds: 0.001,
+      }),
+    );
+
+    const roundingAsset = createEditorMediaAsset({
+      assetKey: "clip:clip-rounding-boundary",
+      durationSeconds: 10,
+      id: "clip-rounding-boundary",
+      mediaUrl: "hinekora-media://replay-clip/clip-rounding-boundary",
+      name: "clip-rounding-boundary.mp4",
+    });
+    const roundingClip = createEditorTimelineClip(roundingAsset, {
+      durationSeconds: 5,
+      inSeconds: 1.233,
+      outSeconds: 1.234,
+      sourceOutSeconds: 10,
+    });
+    const roundingProject = createEditorProject({
+      assets: [roundingAsset],
+      durationSeconds: 5,
+      id: "rounding-duration-project",
+      tracks: [
+        {
+          clips: [roundingClip],
+          id: "video-track",
+          kind: "video",
+          label: "Video",
+        },
+      ],
+    });
+    const refreshedRoundingAsset = {
+      ...roundingAsset,
+      durationSeconds: 1.234,
+    };
+
+    const refreshedRoundingProject = internals.refreshEditorProjectMedia(
+      roundingProject,
+      [refreshedRoundingAsset],
+    );
+
+    expect(refreshedRoundingProject.tracks[0]?.clips[0]).toEqual(
+      expect.objectContaining({
+        durationSeconds: 0.001,
+        inSeconds: 1.233,
+        outSeconds: 1.234,
+        sourceOutSeconds: 1.234,
       }),
     );
   });

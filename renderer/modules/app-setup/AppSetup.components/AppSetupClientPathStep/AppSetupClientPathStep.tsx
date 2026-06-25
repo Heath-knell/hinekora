@@ -1,9 +1,12 @@
-import { useAppSetup } from "~/renderer/store";
+import { useAppSetupShallow } from "~/renderer/store";
 
 import AppSetupClientPathSelector from "../AppSetupClientPathSelector/AppSetupClientPathSelector";
 
 function AppSetupClientPathStep() {
-  const { setupState, selectClientPath } = useAppSetup();
+  const { setupState, selectClientPath } = useAppSetupShallow((appSetup) => ({
+    setupState: appSetup.setupState,
+    selectClientPath: appSetup.selectClientPath,
+  }));
   const selectedGames = setupState?.selectedGames ?? [];
   const hasPoe1 = selectedGames.includes("poe1");
   const hasPoe2 = selectedGames.includes("poe2");

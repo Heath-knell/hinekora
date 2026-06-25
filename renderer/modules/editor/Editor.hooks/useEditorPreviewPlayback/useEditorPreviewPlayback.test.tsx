@@ -151,6 +151,48 @@ describe("useEditorPreviewPlayback", () => {
     expect(storeMocks.setPreviewPlaying).toHaveBeenCalledWith(false);
   });
 
+  it("does not reset to the sequence start when media ends before the modeled clip boundary", async () => {
+    configureEditorState({
+      playbackSeconds: 3,
+      project: createEditorTestProject(asset, {
+        durationSeconds: 5.36,
+        tracks: [
+          {
+            clips: [
+              createEditorTestTimelineClip(asset, {
+                durationSeconds: 5.36,
+                id: "timeline-early-ended",
+                inSeconds: 0,
+                outSeconds: 5.36,
+                startSeconds: 0,
+              }),
+            ],
+            id: "video-track",
+            kind: "video",
+            label: "Video",
+          },
+        ],
+      }),
+      selectedClipId: "timeline-early-ended",
+    });
+    await renderHarness();
+    const video = container.querySelector<HTMLVideoElement>(
+      '[data-testid="preview-video"]',
+    );
+    if (!video) {
+      throw new Error("Expected preview video to render");
+    }
+
+    video.currentTime = 3.11;
+    await act(async () => {
+      video.dispatchEvent(new Event("ended", { bubbles: true }));
+    });
+
+    expect(storeMocks.setPlaybackSeconds).toHaveBeenCalledWith(3.11);
+    expect(storeMocks.setPlaybackSeconds).not.toHaveBeenCalledWith(0);
+    expect(storeMocks.setPreviewPlaying).toHaveBeenCalledWith(false);
+  });
+
   it("resets to the sequence start when the final clip finishes", async () => {
     const firstClip = createEditorTestTimelineClip(asset, {
       durationSeconds: 2,

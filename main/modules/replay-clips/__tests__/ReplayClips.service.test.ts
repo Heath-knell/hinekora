@@ -160,10 +160,12 @@ describe("ReplayClipsService file actions", () => {
 
     expect(service.getClip("clip-1")).toEqual({
       clip: expect.objectContaining({ id: "clip-1", sizeBytes: 9 }),
+      durationSeconds: null,
       mediaUrl: "hinekora-media://replay-clip/clip-1",
     });
     expect(service.getClip("missing-media")).toEqual({
       clip: expect.objectContaining({ id: "missing-media", sizeBytes: 0 }),
+      durationSeconds: null,
       mediaUrl: null,
     });
     expect(service.getClip("missing")).toBeNull();
@@ -195,10 +197,12 @@ describe("ReplayClipsService file actions", () => {
       expect.arrayContaining([
         {
           clip: expect.objectContaining({ id: "clip-1", sizeBytes: 9 }),
+          durationSeconds: null,
           mediaUrl: "hinekora-media://replay-clip/clip-1",
         },
         {
           clip: expect.objectContaining({ id: "missing-media", sizeBytes: 0 }),
+          durationSeconds: null,
           mediaUrl: null,
         },
       ]),
@@ -1120,6 +1124,7 @@ describe("ReplayClipsService file actions", () => {
     });
     vi.spyOn(ipcService, "getClip").mockReturnValue({
       clip,
+      durationSeconds: null,
       mediaUrl: "hinekora-media://replay-clip/clip-1",
     });
     vi.spyOn(ipcService, "saveManualClip").mockResolvedValue(clip);
@@ -1148,6 +1153,7 @@ describe("ReplayClipsService file actions", () => {
 
     expect(await handlers.get(ReplayClipsChannel.Get)?.({}, "clip-1")).toEqual({
       clip,
+      durationSeconds: null,
       mediaUrl: "hinekora-media://replay-clip/clip-1",
     });
     expect(await handlers.get(ReplayClipsChannel.List)?.({})).toEqual([clip]);

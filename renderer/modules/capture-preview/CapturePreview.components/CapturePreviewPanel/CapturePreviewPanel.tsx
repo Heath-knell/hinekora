@@ -18,16 +18,30 @@ import {
 function CapturePreviewPanel() {
   const {
     captureError,
+    getThumbnail,
     isLoading,
     refresh,
     select,
+    selectedThumbnailDataUrl,
+    selectedThumbnailState,
     selectedSourceId,
     sources,
   } = useCapturePreviewShallow((capturePreview) => ({
     captureError: capturePreview.error,
+    getThumbnail: capturePreview.getThumbnail,
     isLoading: capturePreview.isLoading,
     refresh: capturePreview.refresh,
     select: capturePreview.select,
+    selectedThumbnailDataUrl:
+      capturePreview.selectedSourceId !== null
+        ? (capturePreview.thumbnailsBySourceId[
+            capturePreview.selectedSourceId
+          ] ?? null)
+        : null,
+    selectedThumbnailState:
+      capturePreview.selectedSourceId !== null
+        ? capturePreview.thumbnailsBySourceId[capturePreview.selectedSourceId]
+        : null,
     selectedSourceId: capturePreview.selectedSourceId,
     sources: capturePreview.sources,
   }));
@@ -39,6 +53,7 @@ function CapturePreviewPanel() {
     }),
   );
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const hasRequestedInitialRefreshRef = useRef(false);
   const [previewSourceId, setPreviewSourceId] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
 
@@ -63,6 +78,19 @@ function CapturePreviewPanel() {
     createConstraints: createDesktopPreviewConstraints,
   });
   const isPreviewing = stream !== null || isStarting;
+
+  useEffect(() => {
+    if (
+      hasRequestedInitialRefreshRef.current ||
+      isLoading ||
+      sources.length > 0
+    ) {
+      return;
+    }
+
+    hasRequestedInitialRefreshRef.current = true;
+    void refresh();
+  }, [isLoading, refresh, sources.length]);
 
   const clearPreviewVideo = useCallback(() => {
     if (videoRef.current) {
@@ -162,6 +190,18 @@ function CapturePreviewPanel() {
     persistCaptureTarget(selectedSource);
   }, [persistCaptureTarget, selectedSource]);
 
+  useEffect(() => {
+    if (
+      !selectedSource ||
+      isPreviewing ||
+      selectedThumbnailState !== undefined
+    ) {
+      return;
+    }
+
+    void getThumbnail(selectedSource.id).catch(() => undefined);
+  }, [getThumbnail, isPreviewing, selectedSource, selectedThumbnailState]);
+
   return (
     <section className="col-span-7 grid min-h-[388px] gap-3 rounded-lg border border-base-content/10 bg-neutral p-3 shadow-lg">
       <div className="flex items-start justify-between gap-3">
@@ -176,11 +216,11 @@ function CapturePreviewPanel() {
           playsInline
           ref={videoRef}
         />
-        {!isPreviewing && selectedSource?.thumbnailDataUrl && (
+        {!isPreviewing && selectedThumbnailDataUrl && (
           <img
             alt=""
             className="absolute inset-0 h-full w-full object-contain opacity-45 saturate-[0.85]"
-            src={selectedSource.thumbnailDataUrl}
+            src={selectedThumbnailDataUrl}
           />
         )}
         {!isPreviewing && (

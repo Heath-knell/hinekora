@@ -37,7 +37,7 @@ describe("ReplayClips slice", () => {
   const deleteClip = vi.fn();
   const deleteMany = vi.fn();
   const onStatusChanged = vi.fn();
-  let statusChangedListener: ((clip: ReplayClip | null) => void) | null = null;
+  let statusChangedListener: ((clip: ReplayClip) => void) | null = null;
   const unsubscribe = vi.fn();
 
   beforeEach(() => {
@@ -56,7 +56,7 @@ describe("ReplayClips slice", () => {
       failed: [],
     });
     onStatusChanged.mockImplementation(
-      (listener: (clip: ReplayClip | null) => void) => {
+      (listener: (clip: ReplayClip) => void) => {
         statusChangedListener = listener;
         return unsubscribe;
       },
@@ -253,13 +253,12 @@ describe("ReplayClips slice", () => {
     statusChangedListener?.(clip);
     await Promise.resolve();
     await Promise.resolve();
-    statusChangedListener?.(null);
-    await Promise.resolve();
-    await Promise.resolve();
     stopListening();
 
     expect(store.getState().replayClips.selectedClipIds).toEqual({});
-    expect(store.getState().replayClips.activeClip).toBeNull();
+    expect(store.getState().replayClips.activeClip).toBe(clip);
+    expect(store.getState().replayClips.items).toEqual([clip]);
+    expect(list).not.toHaveBeenCalled();
     expect(unsubscribe).toHaveBeenCalled();
   });
 });

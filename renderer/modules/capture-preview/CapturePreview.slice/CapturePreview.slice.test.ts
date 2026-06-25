@@ -16,6 +16,13 @@ const source: CapturePreviewSource = {
   width: 1920,
 };
 
+const nextSource: CapturePreviewSource = {
+  ...source,
+  displayId: "2",
+  id: "screen:2",
+  name: "Screen 2",
+};
+
 const profile: Profile = {
   captureTarget: {
     height: 1080,
@@ -68,16 +75,19 @@ function createTestStoreWithoutSelectedProfile() {
 }
 
 describe("CapturePreview slice", () => {
+  const getSourceThumbnail = vi.fn();
   const listSources = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
+    getSourceThumbnail.mockResolvedValue("data:image/png;base64,screen");
     listSources.mockResolvedValue([source]);
 
     Object.defineProperty(window, "electron", {
       configurable: true,
       value: {
         capturePreview: {
+          getSourceThumbnail,
           listSources,
         },
       },
@@ -128,5 +138,53 @@ describe("CapturePreview slice", () => {
     await store.getState().capturePreview.refresh();
 
     expect(store.getState().capturePreview.error).toBe("No permission");
+  });
+
+  it("loads and caches source thumbnails separately from source metadata", async () => {
+    const store = createTestStore();
+
+    await expect(
+      store.getState().capturePreview.getThumbnail("screen:1"),
+    ).resolves.toBe("data:image/png;base64,screen");
+    await expect(
+      store.getState().capturePreview.getThumbnail("screen:1"),
+    ).resolves.toBe("data:image/png;base64,screen");
+
+    expect(getSourceThumbnail).toHaveBeenCalledTimes(1);
+    expect(getSourceThumbnail).toHaveBeenCalledWith("screen:1");
+    expect(store.getState().capturePreview.thumbnailsBySourceId).toEqual({
+      "screen:1": "data:image/png;base64,screen",
+    });
+  });
+
+  it("prunes cached thumbnails when refreshed sources no longer include them", async () => {
+    const store = createTestStore();
+
+    await store.getState().capturePreview.getThumbnail("screen:1");
+    listSources.mockResolvedValueOnce([nextSource]);
+    await store.getState().capturePreview.refresh();
+
+    expect(store.getState().capturePreview.thumbnailsBySourceId).toEqual({});
+  });
+
+  it("caps retained cached thumbnails", async () => {
+    getSourceThumbnail.mockImplementation(
+      async (sourceId: string) => `data:image/png;base64,${sourceId}`,
+    );
+    const store = createTestStore();
+
+    for (let index = 0; index < 18; index += 1) {
+      await store.getState().capturePreview.getThumbnail(`screen:${index}`);
+    }
+
+    expect(
+      Object.keys(store.getState().capturePreview.thumbnailsBySourceId),
+    ).toHaveLength(16);
+    expect(
+      store.getState().capturePreview.thumbnailsBySourceId["screen:0"],
+    ).toBeUndefined();
+    expect(
+      store.getState().capturePreview.thumbnailsBySourceId["screen:17"],
+    ).toBe("data:image/png;base64,screen:17");
   });
 });

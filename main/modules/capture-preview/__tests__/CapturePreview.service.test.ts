@@ -15,6 +15,11 @@ const processMocks = vi.hoisted(() => ({
   detectPoeProcessState: vi.fn(),
 }));
 
+const poeProcessMocks = vi.hoisted(() => ({
+  getState: vi.fn(),
+  refreshState: vi.fn(),
+}));
+
 const settingsStoreMocks = vi.hoisted(() => ({
   activeGame: "poe2" as "poe1" | "poe2",
   get: vi.fn(),
@@ -57,6 +62,15 @@ vi.mock("~/main/modules/settings-store", () => ({
   SettingsStoreService: {
     getInstance: () => ({
       get: settingsStoreMocks.get,
+    }),
+  },
+}));
+
+vi.mock("~/main/modules/poe-process", () => ({
+  PoeProcessService: {
+    getInstance: () => ({
+      getState: poeProcessMocks.getState,
+      refreshState: poeProcessMocks.refreshState,
     }),
   },
 }));
@@ -112,6 +126,16 @@ beforeEach(() => {
           : "PathOfExile2Steam.exe",
     }),
   );
+  poeProcessMocks.getState.mockImplementation(() => ({
+    isRunning: true,
+    processName:
+      settingsStoreMocks.activeGame === "poe1"
+        ? "PathOfExile_x64Steam.exe"
+        : "PathOfExile2Steam.exe",
+  }));
+  poeProcessMocks.refreshState.mockImplementation(async () =>
+    poeProcessMocks.getState(),
+  );
 });
 
 afterEach(() => {
@@ -119,6 +143,8 @@ afterEach(() => {
   electronMocks.getPrimaryDisplay.mockReset();
   electronMocks.getSources.mockReset();
   processMocks.detectPoeProcessState.mockReset();
+  poeProcessMocks.getState.mockReset();
+  poeProcessMocks.refreshState.mockReset();
   settingsStoreMocks.get.mockReset();
   vi.restoreAllMocks();
 });
@@ -190,7 +216,7 @@ describe("CapturePreviewService", () => {
         displayId: "1",
         width: 2880,
         height: 1620,
-        thumbnailDataUrl: "data:image/png;base64,screen",
+        thumbnailDataUrl: null,
       },
       {
         id: "window:poe:3",
@@ -261,7 +287,7 @@ describe("CapturePreviewService", () => {
         name: "Path of Exile 1",
       }),
     ]);
-    expect(processMocks.detectPoeProcessState).toHaveBeenCalledWith("poe1");
+    expect(poeProcessMocks.getState).toHaveBeenCalled();
   });
 
   it("rejects broad Path of Exile title matches", async () => {
@@ -280,7 +306,7 @@ describe("CapturePreviewService", () => {
   });
 
   it("filters exact Path of Exile title matches when no game process is running", async () => {
-    processMocks.detectPoeProcessState.mockResolvedValue({
+    poeProcessMocks.getState.mockReturnValue({
       isRunning: false,
       processName: "",
     });
@@ -325,6 +351,138 @@ describe("CapturePreviewService", () => {
       expect.objectContaining({ id: "screen:2:0" }),
     ]);
     expect(electronMocks.getSources).toHaveBeenCalledTimes(2);
+  });
+
+  it("expires stale source thumbnails and caps retained thumbnail cache entries", async () => {
+    let now = 1_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    electronMocks.getAllDisplays.mockReturnValue([]);
+    const service = new CapturePreviewService();
+    const internals = service as unknown as {
+      sourceThumbnailCache: Map<string, unknown>;
+    };
+
+    for (let index = 0; index < 18; index += 1) {
+      const sourceId = `screen:${index}:0`;
+      electronMocks.getSources.mockResolvedValueOnce([
+        createSource({
+          id: sourceId,
+          name: "Entire Screen",
+          thumbnailDataUrl: `data:image/png;base64,screen-${index}`,
+        }),
+      ]);
+
+      await expect(service.getSourceThumbnail(sourceId)).resolves.toBe(
+        `data:image/png;base64,screen-${index}`,
+      );
+    }
+
+    expect(internals.sourceThumbnailCache.size).toBe(16);
+    expect(internals.sourceThumbnailCache.has("screen:0:0")).toBe(false);
+    expect(internals.sourceThumbnailCache.has("screen:17:0")).toBe(true);
+
+    await expect(service.getSourceThumbnail("screen:17:0")).resolves.toBe(
+      "data:image/png;base64,screen-17",
+    );
+    expect(electronMocks.getSources).toHaveBeenCalledTimes(18);
+
+    now += 11_000;
+    electronMocks.getSources.mockResolvedValueOnce([
+      createSource({
+        id: "screen:17:0",
+        name: "Entire Screen",
+        thumbnailDataUrl: "data:image/png;base64,screen-17-new",
+      }),
+    ]);
+
+    await expect(service.getSourceThumbnail("screen:17:0")).resolves.toBe(
+      "data:image/png;base64,screen-17-new",
+    );
+    expect(internals.sourceThumbnailCache.size).toBe(1);
+    expect(electronMocks.getSources).toHaveBeenCalledTimes(19);
+  });
+
+  it("shares in-flight source thumbnail requests", async () => {
+    let resolveSources!: (sources: Electron.DesktopCapturerSource[]) => void;
+    electronMocks.getAllDisplays.mockReturnValue([]);
+    electronMocks.getSources.mockImplementation(
+      () =>
+        new Promise<Electron.DesktopCapturerSource[]>((resolve) => {
+          resolveSources = resolve;
+        }),
+    );
+    const service = new CapturePreviewService();
+
+    const first = service.getSourceThumbnail("screen:1:0");
+    const second = service.getSourceThumbnail("screen:1:0");
+
+    expect(electronMocks.getSources).toHaveBeenCalledTimes(1);
+    resolveSources([
+      createSource({
+        id: "screen:1:0",
+        name: "Entire Screen",
+        thumbnailDataUrl: "data:image/png;base64,screen",
+      }),
+    ]);
+    await expect(first).resolves.toBe("data:image/png;base64,screen");
+    await expect(second).resolves.toBe("data:image/png;base64,screen");
+  });
+
+  it("returns null for missing and empty source thumbnails", async () => {
+    electronMocks.getAllDisplays.mockReturnValue([]);
+    electronMocks.getSources
+      .mockResolvedValueOnce([
+        createSource({
+          id: "screen:1:0",
+          name: "Entire Screen",
+          thumbnailDataUrl: "data:image/png;base64,screen",
+        }),
+      ])
+      .mockResolvedValueOnce([
+        createSource({
+          id: "screen:empty:0",
+          name: "Entire Screen",
+          thumbnailDataUrl: null,
+        }),
+      ]);
+    const service = new CapturePreviewService();
+
+    await expect(service.getSourceThumbnail("screen:missing:0")).resolves.toBe(
+      null,
+    );
+    await expect(service.getSourceThumbnail("screen:empty:0")).resolves.toBe(
+      null,
+    );
+  });
+
+  it("prunes source thumbnails when refreshed sources no longer exist", async () => {
+    electronMocks.getAllDisplays.mockReturnValue([]);
+    electronMocks.getSources
+      .mockResolvedValueOnce([
+        createSource({
+          id: "screen:1:0",
+          name: "Entire Screen",
+          thumbnailDataUrl: "data:image/png;base64,screen-1",
+        }),
+      ])
+      .mockResolvedValueOnce([
+        createSource({ id: "screen:2:0", name: "Entire Screen" }),
+      ]);
+    const service = new CapturePreviewService();
+    const internals = service as unknown as {
+      sourceThumbnailCache: Map<string, unknown>;
+    };
+
+    await expect(service.getSourceThumbnail("screen:1:0")).resolves.toBe(
+      "data:image/png;base64,screen-1",
+    );
+    expect(internals.sourceThumbnailCache.has("screen:1:0")).toBe(true);
+
+    await expect(service.listSources()).resolves.toEqual([
+      expect.objectContaining({ id: "screen:2:0" }),
+    ]);
+
+    expect(internals.sourceThumbnailCache.has("screen:1:0")).toBe(false);
   });
 
   it("shares an in-flight source listing request across normal and forced refreshes", async () => {
@@ -407,7 +565,7 @@ describe("CapturePreviewService", () => {
 
     await expect(service.isGameRunning("poe1")).resolves.toBe(true);
     await expect(service.isGameRunning("poe2")).resolves.toBe(false);
-    expect(processMocks.detectPoeProcessState).toHaveBeenCalledWith("poe1");
+    expect(poeProcessMocks.getState).toHaveBeenCalled();
     expect(electronMocks.getSources).toHaveBeenCalledWith({
       types: ["window"],
       thumbnailSize: { width: 0, height: 0 },
@@ -415,7 +573,7 @@ describe("CapturePreviewService", () => {
   });
 
   it("reports games offline without listing windows when no game process is running", async () => {
-    processMocks.detectPoeProcessState.mockResolvedValue({
+    poeProcessMocks.refreshState.mockResolvedValue({
       isRunning: false,
       processName: "",
     });
@@ -450,7 +608,7 @@ describe("CapturePreviewService", () => {
     ]);
     await expect(first).resolves.toBe(true);
     await expect(second).resolves.toBe(false);
-    expect(processMocks.detectPoeProcessState).toHaveBeenCalledWith("poe1");
+    expect(poeProcessMocks.getState).toHaveBeenCalledTimes(1);
   });
 
   it("shares an in-flight source id request", async () => {
@@ -478,7 +636,11 @@ describe("CapturePreviewService", () => {
     settingsStoreMocks.activeGame = "poe1";
     electronMocks.getAllDisplays.mockReturnValue([]);
     electronMocks.getSources.mockResolvedValue([
-      createSource({ id: "window:poe:1", name: "Path of Exile" }),
+      createSource({
+        id: "window:poe:1",
+        name: "Path of Exile",
+        thumbnailDataUrl: "data:image/png;base64,poe",
+      }),
     ]);
     const service = new CapturePreviewService();
 
@@ -501,6 +663,12 @@ describe("CapturePreviewService", () => {
     await expect(
       handlers.get(CapturePreviewChannel.SourceExists)?.({}, "window:poe:1"),
     ).resolves.toBe(true);
+    await expect(
+      handlers.get(CapturePreviewChannel.GetSourceThumbnail)?.(
+        {},
+        "window:poe:1",
+      ),
+    ).resolves.toBe("data:image/png;base64,poe");
     expect(
       handlers.get(CapturePreviewChannel.ListSources)?.({}, "yes"),
     ).toEqual({
@@ -511,7 +679,13 @@ describe("CapturePreviewService", () => {
       error: "sourceId is too short",
       ok: false,
     });
+    expect(
+      handlers.get(CapturePreviewChannel.GetSourceThumbnail)?.({}, ""),
+    ).toEqual({
+      error: "sourceId is too short",
+      ok: false,
+    });
     expect(service).toBeInstanceOf(CapturePreviewService);
-    expect(handle).toHaveBeenCalledTimes(2);
+    expect(handle).toHaveBeenCalledTimes(3);
   });
 });

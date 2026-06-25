@@ -80,10 +80,12 @@ export interface ProfilesSlice {
 export interface CapturePreviewSlice {
   capturePreview: {
     sources: CapturePreviewSource[];
+    thumbnailsBySourceId: Record<string, string | null | undefined>;
     selectedSourceId: string | null;
     isLoading: boolean;
     error: string | null;
     hydrate: () => Promise<void>;
+    getThumbnail: (sourceId: string) => Promise<string | null>;
     refresh: (options?: { force?: boolean }) => Promise<void>;
     select: (id: string) => void;
   };

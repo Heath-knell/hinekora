@@ -17,6 +17,7 @@ export interface ReplayClipFileActionResult {
 
 export interface ReplayClipDetail {
   clip: ReplayClip;
+  durationSeconds: number | null;
   mediaUrl: string | null;
 }
 

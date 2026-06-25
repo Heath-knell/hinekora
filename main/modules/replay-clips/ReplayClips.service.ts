@@ -29,6 +29,7 @@ import {
   safeErrorMessage,
 } from "~/main/utils/ipc-validation";
 import { registerGuardedIpcHandler } from "~/main/utils/ipc-window-roles";
+import { readMp4DurationSeconds } from "~/main/utils/media-metadata";
 
 import {
   GameIdSchema,
@@ -106,12 +107,13 @@ class ReplayClipsService {
     if (!clip) {
       return null;
     }
+    const sizedClip = this.withClipSize(clip);
+    const storedClipPath = this.getStoredClipPathForClip(sizedClip);
 
     return {
-      clip: this.withClipSize(clip),
-      mediaUrl: this.getStoredClipPathForClip(clip)
-        ? createReplayClipMediaUrl(id)
-        : null,
+      clip: sizedClip,
+      durationSeconds: this.readReplayClipDuration(storedClipPath),
+      mediaUrl: storedClipPath ? createReplayClipMediaUrl(id) : null,
     };
   }
 
@@ -129,10 +131,12 @@ class ReplayClipsService {
 
     return page.items.map((clip) => {
       const sizedClip = this.withClipSize(clip, true);
+      const storedClipPath = this.getStoredClipPathForClip(sizedClip);
 
       return {
         clip: sizedClip,
-        mediaUrl: this.getStoredClipPathForClip(sizedClip)
+        durationSeconds: this.readReplayClipDuration(storedClipPath),
+        mediaUrl: storedClipPath
           ? createReplayClipMediaUrl(sizedClip.id)
           : null,
       };
@@ -694,6 +698,10 @@ class ReplayClipsService {
         requireNonEmptyFile: true,
       },
     );
+  }
+
+  private readReplayClipDuration(path: string | null): number | null {
+    return path ? readMp4DurationSeconds(path) : null;
   }
 
   private async deleteStoredClipFiles(clip: ReplayClip): Promise<void> {

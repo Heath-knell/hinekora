@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { useAppSetup } from "~/renderer/store";
+import { useAppSetupShallow } from "~/renderer/store";
 
 import AppSetupProgressBar from "../AppSetupProgressBar/AppSetupProgressBar";
 
@@ -9,7 +9,9 @@ interface AppSetupContainerProps {
 }
 
 function AppSetupContainer({ children }: AppSetupContainerProps) {
-  const { setupState } = useAppSetup();
+  const { setupState } = useAppSetupShallow((appSetup) => ({
+    setupState: appSetup.setupState,
+  }));
   const currentStep = setupState?.currentStep ?? 1;
 
   return (

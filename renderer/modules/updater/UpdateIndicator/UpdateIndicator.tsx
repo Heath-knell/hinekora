@@ -1,6 +1,6 @@
 import { FiDownload, FiExternalLink, FiRefreshCw } from "react-icons/fi";
 
-import { useUpdater } from "~/renderer/store";
+import { useUpdaterShallow } from "~/renderer/store";
 
 const buttonClass = "no-drag btn btn-ghost btn-sm";
 const APPBAR_ICON_SIZE = 16;
@@ -14,7 +14,15 @@ function UpdateIndicator() {
     downloadProgress,
     error,
     downloadAndInstall,
-  } = useUpdater();
+  } = useUpdaterShallow((updater) => ({
+    updateAvailable: updater.updateAvailable,
+    updateInfo: updater.updateInfo,
+    isDismissed: updater.isDismissed,
+    status: updater.status,
+    downloadProgress: updater.downloadProgress,
+    error: updater.error,
+    downloadAndInstall: updater.downloadAndInstall,
+  }));
 
   const handleDownloadAndInstall = () => {
     void downloadAndInstall();

@@ -1,14 +1,21 @@
 import { FiCopy, FiMinus, FiSquare, FiX } from "react-icons/fi";
 
 import AppTitle from "~/renderer/modules/app-menu/AppMenu.component/AppTitle/AppTitle";
-import { useAppMenu } from "~/renderer/store";
+import { useAppMenuShallow } from "~/renderer/store";
 
 const WINDOW_ICON_SIZE = 12;
 const CLOSE_ICON_SIZE = 16;
 const APPBAR_BUTTON_CLASS = "no-drag btn btn-ghost btn-sm";
 
 function AppSetupAppBar() {
-  const { close, isMaximized, maximize, minimize, unmaximize } = useAppMenu();
+  const { close, isMaximized, maximize, minimize, unmaximize } =
+    useAppMenuShallow((appMenu) => ({
+      close: appMenu.close,
+      isMaximized: appMenu.isMaximized,
+      maximize: appMenu.maximize,
+      minimize: appMenu.minimize,
+      unmaximize: appMenu.unmaximize,
+    }));
 
   const handleMinimize = () => {
     minimize();

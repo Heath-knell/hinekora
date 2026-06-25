@@ -8,7 +8,7 @@ import { Badge } from "~/renderer/components/Badge/Badge";
 import { MarkdownRenderer } from "~/renderer/components/MarkdownRenderer/MarkdownRenderer";
 import { Modal, type ModalHandle } from "~/renderer/components/Modal/Modal";
 import { CORE_MAINTAINERS } from "~/renderer/modules/changelog/Changelog.utils/Changelog.utils";
-import { useAppMenu } from "~/renderer/store";
+import { useAppMenuShallow } from "~/renderer/store";
 
 import { WhatsNewReleaseTabs } from "./WhatsNewReleaseTabs/WhatsNewReleaseTabs";
 
@@ -113,7 +113,13 @@ const WhatsNewModal = () => {
     whatsNewIsLoading,
     whatsNewError,
     closeWhatsNew,
-  } = useAppMenu();
+  } = useAppMenuShallow((appMenu) => ({
+    isWhatsNewOpen: appMenu.isWhatsNewOpen,
+    whatsNewRelease: appMenu.whatsNewRelease,
+    whatsNewIsLoading: appMenu.whatsNewIsLoading,
+    whatsNewError: appMenu.whatsNewError,
+    closeWhatsNew: appMenu.closeWhatsNew,
+  }));
 
   const modalRef = useRef<ModalHandle>(null);
 

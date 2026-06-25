@@ -12,7 +12,7 @@ const storeMocks = vi.hoisted(() => ({
   status: null as ManagedRecorderStatus | null,
   toggleRecorderOverlay: vi.fn(),
   unmaximize: vi.fn(),
-  useAppMenu: vi.fn(),
+  useAppMenuShallow: vi.fn(),
   useManagedRecorderSelector: vi.fn(),
 }));
 
@@ -34,7 +34,7 @@ vi.mock("../WhatsNewModal/WhatsNewModal", () => ({
   default: () => null,
 }));
 vi.mock("~/renderer/store", () => ({
-  useAppMenu: storeMocks.useAppMenu,
+  useAppMenuShallow: storeMocks.useAppMenuShallow,
   useManagedRecorderSelector: storeMocks.useManagedRecorderSelector,
 }));
 
@@ -92,16 +92,18 @@ describe("AppControls", () => {
     document.body.append(container);
     root = createRoot(container);
     storeMocks.status = createStatus();
-    storeMocks.useAppMenu.mockReturnValue({
-      close: storeMocks.close,
-      isMaximized: false,
-      isRecorderOverlayVisible: false,
-      maximize: storeMocks.maximize,
-      minimize: storeMocks.minimize,
-      openWhatsNew: storeMocks.openWhatsNew,
-      toggleRecorderOverlay: storeMocks.toggleRecorderOverlay,
-      unmaximize: storeMocks.unmaximize,
-    });
+    storeMocks.useAppMenuShallow.mockImplementation((selector) =>
+      selector({
+        close: storeMocks.close,
+        isMaximized: false,
+        isRecorderOverlayVisible: false,
+        maximize: storeMocks.maximize,
+        minimize: storeMocks.minimize,
+        openWhatsNew: storeMocks.openWhatsNew,
+        toggleRecorderOverlay: storeMocks.toggleRecorderOverlay,
+        unmaximize: storeMocks.unmaximize,
+      }),
+    );
     storeMocks.useManagedRecorderSelector.mockImplementation((selector) =>
       selector({ status: storeMocks.status }),
     );

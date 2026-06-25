@@ -1,3 +1,4 @@
+import type { ReplayClipLibraryQuery } from "~/main/modules/replay-clips/ReplayClips.dto";
 import { trackEvent } from "~/renderer/modules/umami";
 import type {
   BoundStoreStateCreator,
@@ -12,9 +13,143 @@ interface ReplayClipRefreshOptions {
   deletedIds?: string[];
 }
 
+const MAX_RECENT_REPLAY_CLIPS = 200;
+const REPLAY_CLIP_LIBRARY_REFRESH_DELAY_MS = 200;
+
+function getReplayClipSortValue(
+  clip: ReplayClip,
+  sortBy: ReplayClipLibraryQuery["sortBy"] = "createdAt",
+): number | string {
+  switch (sortBy) {
+    case "name":
+      return clip.processedClipPath ?? clip.originalObsPath ?? "";
+    case "sourceLeague":
+      return clip.sourceLeague;
+    case "targetDurationSeconds":
+      return clip.targetDurationSeconds;
+    case "sizeBytes":
+      return clip.sizeBytes;
+    default:
+      return clip.createdAt;
+  }
+}
+
+function compareReplayClips(
+  left: ReplayClip,
+  right: ReplayClip,
+  query: ReplayClipLibraryQuery,
+): number {
+  const sortDirection = query.sortDirection ?? "desc";
+  const leftValue = getReplayClipSortValue(left, query.sortBy);
+  const rightValue = getReplayClipSortValue(right, query.sortBy);
+  const sortMultiplier = sortDirection === "asc" ? 1 : -1;
+
+  if (typeof leftValue === "number" && typeof rightValue === "number") {
+    const result = leftValue - rightValue;
+    if (result !== 0) {
+      return result * sortMultiplier;
+    }
+  } else {
+    const result = String(leftValue).localeCompare(String(rightValue));
+    if (result !== 0) {
+      return result * sortMultiplier;
+    }
+  }
+
+  return right.createdAt.localeCompare(left.createdAt);
+}
+
+function upsertReplayClip(
+  items: ReplayClip[],
+  clip: ReplayClip,
+  query?: ReplayClipLibraryQuery,
+): ReplayClip[] {
+  const nextItems = [...items];
+  const index = nextItems.findIndex((item) => item.id === clip.id);
+  if (index >= 0) {
+    nextItems[index] = clip;
+  } else {
+    nextItems.push(clip);
+  }
+
+  if (query) {
+    nextItems.sort((left, right) => compareReplayClips(left, right, query));
+    return nextItems;
+  }
+
+  nextItems.sort((left, right) =>
+    right.createdAt.localeCompare(left.createdAt),
+  );
+  return nextItems.slice(0, MAX_RECENT_REPLAY_CLIPS);
+}
+
+function replayClipMatchesLibraryQuery(
+  clip: ReplayClip,
+  query: ReplayClipLibraryQuery | null,
+): boolean {
+  if (!query) {
+    return false;
+  }
+
+  return (
+    (!query.game || query.game === clip.sourceGame) &&
+    (!query.league || query.league === clip.sourceLeague) &&
+    (!query.kind || query.kind === clip.kind)
+  );
+}
+
 export const createReplayClipsSlice: BoundStoreStateCreator<
   ReplayClipsSlice
 > = (set, get) => {
+  let libraryRefreshTimer: number | null = null;
+
+  const scheduleLibraryRefresh = () => {
+    if (libraryRefreshTimer !== null) {
+      window.clearTimeout(libraryRefreshTimer);
+    }
+
+    libraryRefreshTimer = window.setTimeout(() => {
+      libraryRefreshTimer = null;
+      void get().replayClips.refreshLibrary();
+    }, REPLAY_CLIP_LIBRARY_REFRESH_DELAY_MS);
+  };
+
+  const patchReplayClipState = (clip: ReplayClip) => {
+    const query = get().replayClips.libraryQuery;
+    let shouldRefreshLibrary = false;
+
+    set((state) => {
+      state.replayClips.activeClip = clip;
+      state.replayClips.items = upsertReplayClip(state.replayClips.items, clip);
+      state.replayClips.error = null;
+
+      if (!query || !state.replayClips.libraryPage) {
+        return;
+      }
+
+      const libraryIndex = state.replayClips.libraryItems.findIndex(
+        (item) => item.id === clip.id,
+      );
+      const matchesLibrary = replayClipMatchesLibraryQuery(clip, query);
+      if (libraryIndex >= 0 && matchesLibrary) {
+        state.replayClips.libraryItems = upsertReplayClip(
+          state.replayClips.libraryItems,
+          clip,
+          query,
+        );
+        return;
+      }
+
+      if (libraryIndex >= 0 || matchesLibrary) {
+        shouldRefreshLibrary = true;
+      }
+    });
+
+    if (shouldRefreshLibrary) {
+      scheduleLibraryRefresh();
+    }
+  };
+
   const refreshReplayClipState = async (
     options: ReplayClipRefreshOptions = {},
   ) => {
@@ -160,7 +295,7 @@ export const createReplayClipsSlice: BoundStoreStateCreator<
       },
       startListening: () =>
         window.electron.replayClips.onStatusChanged((clip) => {
-          void refreshReplayClipState({ activeClip: clip });
+          patchReplayClipState(clip);
         }),
     },
   };

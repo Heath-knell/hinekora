@@ -9,7 +9,11 @@ import { useEffect, useRef, useState } from "react";
 import { AppChrome } from "~/renderer/components/AppChrome/AppChrome";
 import AppSetupAppBar from "~/renderer/modules/app-setup/AppSetup.components/AppSetupAppBar/AppSetupAppBar";
 import { BeaconHost } from "~/renderer/modules/onboarding";
-import { useAppMenu, useAppSetup, useRootActions } from "~/renderer/store";
+import {
+  useAppMenuShallow,
+  useAppSetupShallow,
+  useRootActions,
+} from "~/renderer/store";
 import "@repere/react/styles.css";
 
 function RootLayout() {
@@ -21,8 +25,13 @@ function RootLayout() {
   const [isSlow, setIsSlow] = useState(false);
   const slowTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const { hydrate, startListeners } = useRootActions();
-  const { isWhatsNewOpen } = useAppMenu();
-  const { isSetupComplete, setupState } = useAppSetup();
+  const { isWhatsNewOpen } = useAppMenuShallow((appMenu) => ({
+    isWhatsNewOpen: appMenu.isWhatsNewOpen,
+  }));
+  const { isSetupComplete, setupState } = useAppSetupShallow((appSetup) => ({
+    isSetupComplete: appSetup.isSetupComplete,
+    setupState: appSetup.setupState,
+  }));
   const isSetupMode = !setupState?.isComplete;
 
   useEffect(() => {
