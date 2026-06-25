@@ -15,6 +15,10 @@ import {
   createDefaultSettings,
   type ManagedRecorderStatus,
 } from "../../types";
+import {
+  type E2EBridgeDomainFactory,
+  e2eBridgeDomainFactorySource,
+} from "./bridge-fixture";
 
 interface TimelineClipSnapshot {
   durationSeconds: number;
@@ -248,315 +252,318 @@ function createEditorE2EProject(input: {
 
 async function setupEditorE2E(page: Page) {
   await page.setViewportSize({ height: 760, width: 1280 });
-  await page.addInitScript((fixture: EditorE2EFixture) => {
-    const { deathAsset, manualAsset, recordingAsset } = fixture.assets;
-    const { emptyProject, now, primaryProject, recordingStatus } = fixture;
-    const settings = { ...fixture.settings };
-    const secondaryProject = fixture.secondaryProject;
-    const unsubscribe = () => undefined;
-    const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
-    const projectsById = new Map([
-      [primaryProject.id, primaryProject],
-      [secondaryProject.id, secondaryProject],
-    ]);
-    const createProjectSummary = (
-      project: EditorProject,
-    ): EditorProjectSummary => ({
-      clipCount: project.tracks.reduce(
-        (clipCount, track) => clipCount + track.clips.length,
-        0,
-      ),
-      createdAt: project.createdAt,
-      durationSeconds: project.durationSeconds,
-      id: project.id,
-      title: project.title,
-      updatedAt: project.updatedAt,
-    });
-    const state = {
-      copyRequests: [] as unknown[],
-      createProjectInputs: [] as unknown[],
-      currentProjectId: primaryProject.id,
-      deleteAllCount: 0,
-      deletedProjectIds: [] as string[],
-      exportRequests: [] as unknown[],
-      savedProjects: [] as EditorProject[],
-      settingsUpdates: [] as Record<string, unknown>[],
-      unexpectedBridgeCalls: [] as string[],
-      workspaceQueries: [] as unknown[],
-    };
-    const createWorkspace = (
-      project = projectsById.get(state.currentProjectId),
-    ): EditorWorkspace => ({
-      assets: [deathAsset, manualAsset, recordingAsset],
-      hasMoreProjects: false,
-      project: project ?? emptyProject,
-      projects: Array.from(projectsById.values()).map(createProjectSummary),
-    });
-    const createBridgeDomain = <TBridge extends object>(
-      domain: string,
-      methods: Partial<TBridge>,
-    ): TBridge =>
-      new Proxy(methods as Record<PropertyKey, unknown>, {
-        get(target, property, receiver) {
-          if (typeof property === "symbol") {
-            return Reflect.get(target, property, receiver);
-          }
-
-          const callName = `${domain}.${property}`;
-          const value = Reflect.get(target, property, receiver);
-
-          if (typeof value === "function") {
-            return (...args: unknown[]) => {
-              return (value as (...args: unknown[]) => unknown)(...args);
-            };
-          }
-
-          if (value !== undefined) {
-            return value;
-          }
-
-          return () => {
-            state.unexpectedBridgeCalls.push(callName);
-            throw new Error(`Unexpected editor e2e bridge call: ${callName}`);
-          };
-        },
-      }) as TBridge;
-
-    const playbackFrames = new WeakMap<
-      HTMLMediaElement,
-      { frameId: number | null; lastMs: number }
-    >();
-    const stopPlaybackClock = (media: HTMLMediaElement) => {
-      const playback = playbackFrames.get(media);
-      if (playback?.frameId !== null && playback?.frameId !== undefined) {
-        window.cancelAnimationFrame(playback.frameId);
-      }
-      playbackFrames.delete(media);
-    };
-    HTMLMediaElement.prototype.play = async function play() {
-      if (playbackFrames.has(this)) {
-        return;
-      }
-
-      const playback: { frameId: number | null; lastMs: number } = {
-        frameId: null,
-        lastMs: performance.now(),
+  await page.addInitScript(
+    (input: { bridgeFactorySource: string; fixture: EditorE2EFixture }) => {
+      const { fixture } = input;
+      const { deathAsset, manualAsset, recordingAsset } = fixture.assets;
+      const { emptyProject, now, primaryProject, recordingStatus } = fixture;
+      const settings = { ...fixture.settings };
+      const secondaryProject = fixture.secondaryProject;
+      const unsubscribe = () => undefined;
+      const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+      const createBridgeDomainFactory = Function(
+        `"use strict"; return (${input.bridgeFactorySource});`,
+      )() as E2EBridgeDomainFactory;
+      const projectsById = new Map([
+        [primaryProject.id, primaryProject],
+        [secondaryProject.id, secondaryProject],
+      ]);
+      const createProjectSummary = (
+        project: EditorProject,
+      ): EditorProjectSummary => ({
+        clipCount: project.tracks.reduce(
+          (clipCount, track) => clipCount + track.clips.length,
+          0,
+        ),
+        createdAt: project.createdAt,
+        durationSeconds: project.durationSeconds,
+        id: project.id,
+        title: project.title,
+        updatedAt: project.updatedAt,
+      });
+      const state = {
+        copyRequests: [] as unknown[],
+        createProjectInputs: [] as unknown[],
+        currentProjectId: primaryProject.id,
+        deleteAllCount: 0,
+        deletedProjectIds: [] as string[],
+        exportRequests: [] as unknown[],
+        savedProjects: [] as EditorProject[],
+        settingsUpdates: [] as Record<string, unknown>[],
+        unexpectedBridgeCalls: [] as string[],
+        workspaceQueries: [] as unknown[],
       };
-      playbackFrames.set(this, playback);
+      const createWorkspace = (
+        project = projectsById.get(state.currentProjectId),
+      ): EditorWorkspace => ({
+        assets: [deathAsset, manualAsset, recordingAsset],
+        hasMoreProjects: false,
+        project: project ?? emptyProject,
+        projects: Array.from(projectsById.values()).map(createProjectSummary),
+      });
+      const createBridgeDomain = <TBridge extends object>(
+        domain: string,
+        methods: Partial<TBridge>,
+      ): TBridge =>
+        createBridgeDomainFactory(
+          domain,
+          methods,
+          state.unexpectedBridgeCalls,
+          "editor",
+        );
 
-      const advancePlayback = (nowMs: number) => {
-        const currentPlayback = playbackFrames.get(this);
-        if (!currentPlayback) {
+      const playbackFrames = new WeakMap<
+        HTMLMediaElement,
+        { frameId: number | null; lastMs: number }
+      >();
+      const stopPlaybackClock = (media: HTMLMediaElement) => {
+        const playback = playbackFrames.get(media);
+        if (playback?.frameId !== null && playback?.frameId !== undefined) {
+          window.cancelAnimationFrame(playback.frameId);
+        }
+        playbackFrames.delete(media);
+      };
+      HTMLMediaElement.prototype.play = async function play() {
+        if (playbackFrames.has(this)) {
           return;
         }
 
-        const elapsedSeconds =
-          Math.max(0, nowMs - currentPlayback.lastMs) / 1_000;
-        currentPlayback.lastMs = nowMs;
-        this.currentTime += elapsedSeconds;
-        this.dispatchEvent(new Event("timeupdate"));
-        currentPlayback.frameId = window.requestAnimationFrame(advancePlayback);
-      };
+        const playback: { frameId: number | null; lastMs: number } = {
+          frameId: null,
+          lastMs: performance.now(),
+        };
+        playbackFrames.set(this, playback);
 
-      playback.frameId = window.requestAnimationFrame(advancePlayback);
-    };
-    HTMLMediaElement.prototype.pause = function pause() {
-      stopPlaybackClock(this);
-    };
-    (
-      window as unknown as {
-        __HINEKORA_E2E__: typeof state;
-        electron: unknown;
-      }
-    ).__HINEKORA_E2E__ = state;
-    const electron: EditorE2EElectron = {
-      app: createBridgeDomain<EditorE2EElectron["app"]>("app", {
-        getVersion: async () => "0.1.1",
-      }),
-      appSetup: createBridgeDomain<EditorE2EElectron["appSetup"]>("appSetup", {
-        isSetupComplete: async () => true,
-        getSetupState: async () => ({
-          currentStep: 3,
-          isComplete: true,
-          poe1ClientPath: null,
-          poe2ClientPath: null,
-          selectedGames: ["poe2"],
-          telemetryCrashReporting: false,
-          telemetryUsageAnalytics: false,
-        }),
-      }),
-      capturePreview: createBridgeDomain<EditorE2EElectron["capturePreview"]>(
-        "capturePreview",
-        {},
-      ),
-      clientLog: createBridgeDomain<EditorE2EElectron["clientLog"]>(
-        "clientLog",
-        {
-          getStatus: async () => ({
-            activeGame: "poe2",
-            lastError: null,
-            path: null,
-            watching: false,
-          }),
-          onStatusChanged: () => unsubscribe,
-        },
-      ),
-      diagLog: createBridgeDomain<EditorE2EElectron["diagLog"]>("diagLog", {}),
-      editor: createBridgeDomain<EditorE2EElectron["editor"]>("editor", {
-        copyExport: async () => ({ error: null, ok: true }),
-        copyProjectToClipboard: async (input: unknown) => {
-          state.copyRequests.push(clone(input));
-
-          return { error: null, ok: true };
-        },
-        createProject: async (input: EditorCreateProjectInput = {}) => {
-          state.createProjectInputs.push(clone(input));
-          const project = {
-            ...emptyProject,
-            id: `project-new-${state.createProjectInputs.length}`,
-          };
-          state.currentProjectId = project.id;
-          projectsById.set(project.id, project);
-
-          return clone(project);
-        },
-        deleteAllProjects: async () => {
-          state.deleteAllCount += 1;
-          projectsById.clear();
-          state.currentProjectId = emptyProject.id;
-
-          return clone(createWorkspace(emptyProject));
-        },
-        deleteProject: async (projectId: string) => {
-          state.deletedProjectIds.push(projectId);
-          projectsById.delete(projectId);
-          state.currentProjectId =
-            Array.from(projectsById.values())[0]?.id ?? emptyProject.id;
-
-          return clone(
-            createWorkspace(
-              projectsById.get(state.currentProjectId) ?? emptyProject,
-            ),
-          );
-        },
-        exportProject: async (input: EditorExportInput) => {
-          state.exportRequests.push(clone(input));
-
-          return {
-            createdAt: now,
-            durationSeconds: 5,
-            exportId: "export-1",
-            fileName: "export.mp4",
-            mediaUrl: null,
-            mode: "new-file",
-            resolution: "1080p",
-            sizeBytes: 1024,
-          };
-        },
-        getWorkspace: async (query: EditorWorkspaceQuery = {}) => {
-          state.workspaceQueries.push(clone(query));
-          const project = query.projectId
-            ? projectsById.get(query.projectId)
-            : projectsById.get(state.currentProjectId);
-          if (project) {
-            state.currentProjectId = project.id;
+        const advancePlayback = (nowMs: number) => {
+          const currentPlayback = playbackFrames.get(this);
+          if (!currentPlayback) {
+            return;
           }
 
-          return clone(createWorkspace(project));
-        },
-        onExportProgress: () => unsubscribe,
-        revealExport: async () => ({ error: null, ok: true }),
-        saveProject: async ({
-          project,
-        }: {
-          project: typeof primaryProject;
-        }) => {
-          const nextProject = clone(project);
-          state.savedProjects.push(nextProject);
-          state.currentProjectId = nextProject.id;
-          projectsById.set(nextProject.id, nextProject);
+          const elapsedSeconds =
+            Math.max(0, nowMs - currentPlayback.lastMs) / 1_000;
+          currentPlayback.lastMs = nowMs;
+          this.currentTime += elapsedSeconds;
+          this.dispatchEvent(new Event("timeupdate"));
+          currentPlayback.frameId =
+            window.requestAnimationFrame(advancePlayback);
+        };
 
-          return clone(nextProject);
-        },
-      }),
-      mainWindow: createBridgeDomain<EditorE2EElectron["mainWindow"]>(
-        "mainWindow",
-        {
-          isMaximized: async () => false,
-        },
-      ),
-      managedRecorder: createBridgeDomain<EditorE2EElectron["managedRecorder"]>(
-        "managedRecorder",
-        {
+        playback.frameId = window.requestAnimationFrame(advancePlayback);
+      };
+      HTMLMediaElement.prototype.pause = function pause() {
+        stopPlaybackClock(this);
+      };
+      (
+        window as unknown as {
+          __HINEKORA_E2E__: typeof state;
+          electron: unknown;
+        }
+      ).__HINEKORA_E2E__ = state;
+      const electron: EditorE2EElectron = {
+        app: createBridgeDomain<EditorE2EElectron["app"]>("app", {
+          getVersion: async () => "0.1.1",
+        }),
+        appSetup: createBridgeDomain<EditorE2EElectron["appSetup"]>(
+          "appSetup",
+          {
+            isSetupComplete: async () => true,
+            getSetupState: async () => ({
+              currentStep: 3,
+              isComplete: true,
+              poe1ClientPath: null,
+              poe2ClientPath: null,
+              selectedGames: ["poe2"],
+              telemetryCrashReporting: false,
+              telemetryUsageAnalytics: false,
+            }),
+          },
+        ),
+        capturePreview: createBridgeDomain<EditorE2EElectron["capturePreview"]>(
+          "capturePreview",
+          {},
+        ),
+        clientLog: createBridgeDomain<EditorE2EElectron["clientLog"]>(
+          "clientLog",
+          {
+            getStatus: async () => ({
+              activeGame: "poe2",
+              lastError: null,
+              path: null,
+              watching: false,
+            }),
+            onStatusChanged: () => unsubscribe,
+          },
+        ),
+        diagLog: createBridgeDomain<EditorE2EElectron["diagLog"]>(
+          "diagLog",
+          {},
+        ),
+        editor: createBridgeDomain<EditorE2EElectron["editor"]>("editor", {
+          copyExport: async () => ({ error: null, ok: true }),
+          copyProjectToClipboard: async (input: unknown) => {
+            state.copyRequests.push(clone(input));
+
+            return { error: null, ok: true };
+          },
+          createProject: async (input: EditorCreateProjectInput = {}) => {
+            state.createProjectInputs.push(clone(input));
+            const project = {
+              ...emptyProject,
+              id: `project-new-${state.createProjectInputs.length}`,
+            };
+            state.currentProjectId = project.id;
+            projectsById.set(project.id, project);
+
+            return clone(project);
+          },
+          deleteAllProjects: async () => {
+            state.deleteAllCount += 1;
+            projectsById.clear();
+            state.currentProjectId = emptyProject.id;
+
+            return clone(createWorkspace(emptyProject));
+          },
+          deleteProject: async (projectId: string) => {
+            state.deletedProjectIds.push(projectId);
+            projectsById.delete(projectId);
+            state.currentProjectId =
+              Array.from(projectsById.values())[0]?.id ?? emptyProject.id;
+
+            return clone(
+              createWorkspace(
+                projectsById.get(state.currentProjectId) ?? emptyProject,
+              ),
+            );
+          },
+          exportProject: async (input: EditorExportInput) => {
+            state.exportRequests.push(clone(input));
+
+            return {
+              createdAt: now,
+              durationSeconds: 5,
+              exportId: "export-1",
+              fileName: "export.mp4",
+              mediaUrl: null,
+              mode: "new-file",
+              resolution: "1080p",
+              sizeBytes: 1024,
+            };
+          },
+          getWorkspace: async (query: EditorWorkspaceQuery = {}) => {
+            state.workspaceQueries.push(clone(query));
+            const project = query.projectId
+              ? projectsById.get(query.projectId)
+              : projectsById.get(state.currentProjectId);
+            if (project) {
+              state.currentProjectId = project.id;
+            }
+
+            return clone(createWorkspace(project));
+          },
+          onExportProgress: () => unsubscribe,
+          revealExport: async () => ({ error: null, ok: true }),
+          saveProject: async ({
+            project,
+          }: {
+            project: typeof primaryProject;
+          }) => {
+            const nextProject = clone(project);
+            state.savedProjects.push(nextProject);
+            state.currentProjectId = nextProject.id;
+            projectsById.set(nextProject.id, nextProject);
+
+            return clone(nextProject);
+          },
+        }),
+        mainWindow: createBridgeDomain<EditorE2EElectron["mainWindow"]>(
+          "mainWindow",
+          {
+            isMaximized: async () => false,
+          },
+        ),
+        managedRecorder: createBridgeDomain<
+          EditorE2EElectron["managedRecorder"]
+        >("managedRecorder", {
           getCaptureMode: async () => "rewind",
           getStatus: async () => recordingStatus,
           onCaptureModeChanged: () => unsubscribe,
           onStatusChanged: () => unsubscribe,
-        },
-      ),
-      overlayWindows: createBridgeDomain<EditorE2EElectron["overlayWindows"]>(
-        "overlayWindows",
-        {
-          isAuraLocked: async () => false,
-          isRecorderVisible: async () => false,
-          onAuraLockChanged: () => unsubscribe,
-          onRecorderVisibilityChanged: () => unsubscribe,
-        },
-      ),
-      poeProcess: createBridgeDomain<EditorE2EElectron["poeProcess"]>(
-        "poeProcess",
-        {
-          getState: async () => ({ isRunning: false, processName: "" }),
-          onError: () => unsubscribe,
-          onStart: () => unsubscribe,
-          onState: () => unsubscribe,
-          onStop: () => unsubscribe,
-        },
-      ),
-      profiles: createBridgeDomain<EditorE2EElectron["profiles"]>("profiles", {
-        list: async () => [],
-        onChanged: () => unsubscribe,
-      }),
-      recordingStorage: createBridgeDomain<
-        EditorE2EElectron["recordingStorage"]
-      >("recordingStorage", {}),
-      replayClips: createBridgeDomain<EditorE2EElectron["replayClips"]>(
-        "replayClips",
-        {
-          onStatusChanged: () => unsubscribe,
-        },
-      ),
-      settings: createBridgeDomain<EditorE2EElectron["settings"]>("settings", {
-        get: async () => clone(settings),
-        update: async (input: Partial<typeof settings>) => {
-          state.settingsUpdates.push(clone(input));
-          Object.assign(settings, input);
-
-          return clone(settings);
-        },
-      }),
-      storage: createBridgeDomain<EditorE2EElectron["storage"]>("storage", {
-        checkDiskSpace: async () => ({
-          diskFreeBytes: 1_000_000_000,
-          isLow: false,
         }),
-      }),
-      stateTransfer: createBridgeDomain<EditorE2EElectron["stateTransfer"]>(
-        "stateTransfer",
-        {},
-      ),
-      updater: createBridgeDomain<EditorE2EElectron["updater"]>("updater", {
-        getRecentReleases: async () => [],
-        onDownloadProgress: () => unsubscribe,
-        onUpdateAvailable: () => unsubscribe,
-      }),
-    };
-    (
-      window as unknown as {
-        electron: EditorE2EElectron;
-      }
-    ).electron = electron;
-  }, createEditorE2EFixture());
+        overlayWindows: createBridgeDomain<EditorE2EElectron["overlayWindows"]>(
+          "overlayWindows",
+          {
+            isAuraLocked: async () => false,
+            isRecorderVisible: async () => false,
+            onAuraLockChanged: () => unsubscribe,
+            onRecorderVisibilityChanged: () => unsubscribe,
+          },
+        ),
+        poeProcess: createBridgeDomain<EditorE2EElectron["poeProcess"]>(
+          "poeProcess",
+          {
+            getState: async () => ({ isRunning: false, processName: "" }),
+            onError: () => unsubscribe,
+            onStart: () => unsubscribe,
+            onState: () => unsubscribe,
+            onStop: () => unsubscribe,
+          },
+        ),
+        profiles: createBridgeDomain<EditorE2EElectron["profiles"]>(
+          "profiles",
+          {
+            list: async () => [],
+            onChanged: () => unsubscribe,
+          },
+        ),
+        recordingStorage: createBridgeDomain<
+          EditorE2EElectron["recordingStorage"]
+        >("recordingStorage", {}),
+        replayClips: createBridgeDomain<EditorE2EElectron["replayClips"]>(
+          "replayClips",
+          {
+            onStatusChanged: () => unsubscribe,
+          },
+        ),
+        settings: createBridgeDomain<EditorE2EElectron["settings"]>(
+          "settings",
+          {
+            get: async () => clone(settings),
+            update: async (input: Partial<typeof settings>) => {
+              state.settingsUpdates.push(clone(input));
+              Object.assign(settings, input);
+
+              return clone(settings);
+            },
+          },
+        ),
+        storage: createBridgeDomain<EditorE2EElectron["storage"]>("storage", {
+          checkDiskSpace: async () => ({
+            diskFreeBytes: 1_000_000_000,
+            isLow: false,
+          }),
+        }),
+        stateTransfer: createBridgeDomain<EditorE2EElectron["stateTransfer"]>(
+          "stateTransfer",
+          {},
+        ),
+        updater: createBridgeDomain<EditorE2EElectron["updater"]>("updater", {
+          getRecentReleases: async () => [],
+          onDownloadProgress: () => unsubscribe,
+          onUpdateAvailable: () => unsubscribe,
+        }),
+      };
+      (
+        window as unknown as {
+          electron: EditorE2EElectron;
+        }
+      ).electron = electron;
+    },
+    {
+      bridgeFactorySource: e2eBridgeDomainFactorySource,
+      fixture: createEditorE2EFixture(),
+    },
+  );
 
   await page.goto("/#/editor?kind=clip&id=asset-1");
   await expect(page.getByRole("heading", { name: "Editor" })).toBeVisible();

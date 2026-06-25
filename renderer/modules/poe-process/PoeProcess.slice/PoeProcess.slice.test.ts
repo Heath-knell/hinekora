@@ -93,11 +93,27 @@ describe("PoeProcess slice", () => {
     });
   });
 
-  it("listens for process state and error updates", () => {
+  it("refreshes capture sources only when process state changes", () => {
     const store = createTestStore();
     const unsubscribe = store.getState().poeProcess.startListening();
 
     listeners.state?.({
+      isRunning: true,
+      processName: "PathOfExile2Steam.exe",
+    });
+    expect(store.getState().poeProcess.state).toEqual({
+      isRunning: true,
+      processName: "PathOfExile2Steam.exe",
+    });
+    expect(refreshCapturePreview).toHaveBeenCalledWith({ force: true });
+
+    listeners.state?.({
+      isRunning: true,
+      processName: "PathOfExile2Steam.exe",
+    });
+    expect(refreshCapturePreview).toHaveBeenCalledTimes(1);
+
+    listeners.stop?.({
       isRunning: false,
       processName: "",
     });
@@ -105,7 +121,7 @@ describe("PoeProcess slice", () => {
       isRunning: false,
       processName: "",
     });
-    expect(refreshCapturePreview).toHaveBeenCalledWith({ force: true });
+    expect(refreshCapturePreview).toHaveBeenCalledTimes(2);
 
     listeners.error?.({ error: "process failed" });
     expect(store.getState().poeProcess.error).toBe("process failed");

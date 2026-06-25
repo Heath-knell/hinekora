@@ -25,11 +25,18 @@ export const createPoeProcessSlice: BoundStoreStateCreator<PoeProcessSlice> = (
     },
     startListening: () => {
       const setProcessState = (state: PoeProcessState) => {
+        const previousState = get().poeProcess.state;
+        const hasProcessStateChanged =
+          previousState?.isRunning !== state.isRunning ||
+          previousState?.processName !== state.processName;
+
         set((store) => {
           store.poeProcess.state = state;
           store.poeProcess.error = null;
         });
-        void get().capturePreview.refresh({ force: true });
+        if (hasProcessStateChanged) {
+          void get().capturePreview.refresh({ force: true });
+        }
       };
 
       const unsubscribeStart =
