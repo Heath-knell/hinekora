@@ -32,6 +32,7 @@ import {
 
 interface DashboardE2ECalls {
   audioDeviceRequests: Array<ManagedRecorderListAudioDevicesOptions | null>;
+  auraLockEvents: boolean[];
   captureModeChanges: ManagedRecorderCaptureMode[];
   captureSourceRequests: boolean[];
   captureSourceResponses: string[][];
@@ -41,6 +42,7 @@ interface DashboardE2ECalls {
   mainWindowActions: string[];
   profileUpdates: ProfileUpdateInput[];
   recorderOverlayToggles: number;
+  recorderVisibilityEvents: boolean[];
   settingsUpdates: Array<Partial<AppSettings>>;
   sourceThumbnailRequests: string[];
   startBufferCount: number;
@@ -51,13 +53,16 @@ interface DashboardE2ECalls {
 }
 
 interface DashboardE2EApi {
+  emitAuraLockChanged: (locked: boolean) => void;
   emitPoeProcessStart: (state: PoeProcessState) => void;
   emitPoeProcessStop: (state?: PoeProcessState) => void;
+  emitRecorderOverlayVisibility: (visible: boolean) => void;
   setCaptureSources: (sources: CapturePreviewSource[]) => void;
 }
 
 interface DashboardE2EFixture {
   audioDevices: ManagedRecorderAudioDevices;
+  auraLocked: boolean;
   clientLogStatus: ClientLogStatus;
   now: string;
   poeProcessState: PoeProcessState;
@@ -68,13 +73,21 @@ interface DashboardE2EFixture {
   setupState: SetupState;
   sources: CapturePreviewSource[];
   storageInfo: StorageInfo;
+  recorderOverlayVisible: boolean;
 }
 
 type DashboardE2EElectron = Window["electron"];
 
 const dashboardE2ENow = "2026-06-25T00:00:00.000Z";
 
-function createDashboardE2EFixture(): DashboardE2EFixture {
+interface DashboardE2EOptions {
+  auraLocked?: boolean;
+  recorderOverlayVisible?: boolean;
+}
+
+function createDashboardE2EFixture(
+  options: DashboardE2EOptions = {},
+): DashboardE2EFixture {
   const settings: AppSettings = {
     ...createDefaultSettings(),
     activeGame: "poe2",
@@ -177,6 +190,7 @@ function createDashboardE2EFixture(): DashboardE2EFixture {
         { id: "{headset-1}", label: "Headset Output" },
       ],
     },
+    auraLocked: options.auraLocked ?? true,
     clientLogStatus: {
       activeGame: "poe2",
       lastError: null,
@@ -190,6 +204,7 @@ function createDashboardE2EFixture(): DashboardE2EFixture {
       processName: "PathOfExileSteam.exe",
     },
     profile,
+    recorderOverlayVisible: options.recorderOverlayVisible ?? false,
     recordingStorageUsage: {
       calculatedAt: dashboardE2ENow,
       clipsSizeBytes: 0,
@@ -219,7 +234,10 @@ function createDashboardE2EFixture(): DashboardE2EFixture {
   };
 }
 
-async function setupDashboardE2E(page: Page) {
+async function setupDashboardE2E(
+  page: Page,
+  options: DashboardE2EOptions = {},
+) {
   await page.setViewportSize({ height: 760, width: 1280 });
   await page.addInitScript(
     (input: { bridgeFactorySource: string; fixture: DashboardE2EFixture }) => {
@@ -234,7 +252,8 @@ async function setupDashboardE2E(page: Page) {
       let settings = clone(fixture.settings);
       let recorderStatus = clone(fixture.recorderStatus);
       let captureMode: ManagedRecorderCaptureMode = "rewind";
-      let recorderOverlayVisible = false;
+      let recorderOverlayVisible = fixture.recorderOverlayVisible;
+      let auraLocked = fixture.auraLocked;
       let isMaximized = false;
       const profilesById = new Map([
         [fixture.profile.id, clone(fixture.profile)],
@@ -258,6 +277,7 @@ async function setupDashboardE2E(page: Page) {
       } = {};
       const calls: DashboardE2ECalls = {
         audioDeviceRequests: [],
+        auraLockEvents: [],
         captureModeChanges: [],
         captureSourceRequests: [],
         captureSourceResponses: [],
@@ -267,6 +287,7 @@ async function setupDashboardE2E(page: Page) {
         mainWindowActions: [],
         profileUpdates: [],
         recorderOverlayToggles: 0,
+        recorderVisibilityEvents: [],
         settingsUpdates: [],
         sourceThumbnailRequests: [],
         startBufferCount: 0,
@@ -285,6 +306,16 @@ async function setupDashboardE2E(page: Page) {
           calls.unexpectedBridgeCalls,
           "dashboard",
         );
+      const emitAuraLock = (locked: boolean) => {
+        auraLocked = locked;
+        calls.auraLockEvents.push(locked);
+        listeners.auraLock?.(locked);
+      };
+      const emitRecorderVisibility = (visible: boolean) => {
+        recorderOverlayVisible = visible;
+        calls.recorderVisibilityEvents.push(visible);
+        listeners.recorderVisibility?.(visible);
+      };
       const updateRecorderStatus = (
         nextStatus: Partial<ManagedRecorderStatus>,
       ) => {
@@ -483,10 +514,9 @@ async function setupDashboardE2E(page: Page) {
         >("overlayWindows", {
           getRecorderMode: async () => "expanded",
           hideRecorder: async () => {
-            recorderOverlayVisible = false;
-            listeners.recorderVisibility?.(recorderOverlayVisible);
+            emitRecorderVisibility(false);
           },
-          isAuraLocked: async () => true,
+          isAuraLocked: async () => auraLocked,
           isRecorderVisible: async () => recorderOverlayVisible,
           onAuraAddRequested: () => unsubscribe,
           onAuraLockChanged: (callback) => {
@@ -501,17 +531,15 @@ async function setupDashboardE2E(page: Page) {
             return unsubscribe;
           },
           setAuraLocked: async (locked) => {
-            listeners.auraLock?.(locked);
+            emitAuraLock(locked);
           },
           setRecorderMode: async (mode) => mode,
           showRecorder: async () => {
-            recorderOverlayVisible = true;
-            listeners.recorderVisibility?.(recorderOverlayVisible);
+            emitRecorderVisibility(true);
           },
           toggleRecorder: async () => {
             calls.recorderOverlayToggles += 1;
-            recorderOverlayVisible = !recorderOverlayVisible;
-            listeners.recorderVisibility?.(recorderOverlayVisible);
+            emitRecorderVisibility(!recorderOverlayVisible);
           },
         }),
         poeProcess: createBridgeDomain<DashboardE2EElectron["poeProcess"]>(
@@ -646,6 +674,9 @@ async function setupDashboardE2E(page: Page) {
           __HINEKORA_DASHBOARD_E2E_API__: DashboardE2EApi;
         }
       ).__HINEKORA_DASHBOARD_E2E_API__ = {
+        emitAuraLockChanged: (locked) => {
+          emitAuraLock(locked);
+        },
         emitPoeProcessStart: (state) => {
           poeProcessState = clone(state);
           listeners.poeStart?.(clone(poeProcessState));
@@ -661,6 +692,9 @@ async function setupDashboardE2E(page: Page) {
           listeners.poeStop?.(clone(poeProcessState));
           listeners.captureRefreshRequested?.();
         },
+        emitRecorderOverlayVisibility: (visible) => {
+          emitRecorderVisibility(visible);
+        },
         setCaptureSources: (sources) => {
           captureSources = clone(sources);
         },
@@ -668,7 +702,7 @@ async function setupDashboardE2E(page: Page) {
     },
     {
       bridgeFactorySource: e2eBridgeDomainFactorySource,
-      fixture: createDashboardE2EFixture(),
+      fixture: createDashboardE2EFixture(options),
     },
   );
 
@@ -679,6 +713,16 @@ async function setupDashboardE2E(page: Page) {
   ).toBeVisible();
 }
 
+async function emitDashboardAuraLockChanged(page: Page, locked: boolean) {
+  await page.evaluate((nextLocked) => {
+    const e2eWindow = window as unknown as {
+      __HINEKORA_DASHBOARD_E2E_API__: DashboardE2EApi;
+    };
+
+    e2eWindow.__HINEKORA_DASHBOARD_E2E_API__.emitAuraLockChanged(nextLocked);
+  }, locked);
+}
+
 async function getDashboardE2ECalls(page: Page): Promise<DashboardE2ECalls> {
   return page.evaluate(() => {
     const e2eWindow = window as unknown as {
@@ -687,6 +731,21 @@ async function getDashboardE2ECalls(page: Page): Promise<DashboardE2ECalls> {
 
     return e2eWindow.__HINEKORA_DASHBOARD_E2E__;
   });
+}
+
+async function emitDashboardRecorderOverlayVisibility(
+  page: Page,
+  visible: boolean,
+) {
+  await page.evaluate((nextVisible) => {
+    const e2eWindow = window as unknown as {
+      __HINEKORA_DASHBOARD_E2E_API__: DashboardE2EApi;
+    };
+
+    e2eWindow.__HINEKORA_DASHBOARD_E2E_API__.emitRecorderOverlayVisibility(
+      nextVisible,
+    );
+  }, visible);
 }
 
 async function emitDashboardPoeProcessStart(
@@ -760,8 +819,10 @@ async function expectNoUnexpectedDashboardBridgeCalls(page: Page) {
 }
 
 export {
+  emitDashboardAuraLockChanged,
   emitDashboardPoeProcessStart,
   emitDashboardPoeProcessStop,
+  emitDashboardRecorderOverlayVisibility,
   expectNoUnexpectedDashboardBridgeCalls,
   getDashboardE2ECalls,
   scheduleDashboardCaptureSources,

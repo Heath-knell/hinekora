@@ -3,8 +3,10 @@ import { expect, type Locator, test } from "@playwright/test";
 import type { PoeProcessState } from "../../main/modules/poe-process/PoeProcess.dto";
 import type { CapturePreviewSource, GameId } from "../../types";
 import {
+  emitDashboardAuraLockChanged,
   emitDashboardPoeProcessStart,
   emitDashboardPoeProcessStop,
+  emitDashboardRecorderOverlayVisibility,
   expectNoUnexpectedDashboardBridgeCalls,
   getDashboardE2ECalls,
   scheduleDashboardCaptureSources,
@@ -483,4 +485,69 @@ test("covers dashboard app shell game, overlay, and window controls", async ({
       return calls.mainWindowActions;
     })
     .toEqual(["minimize", "maximize", "unmaximize", "close"]);
+});
+
+test("reflects startup and focus-gate recorder overlay visibility from main", async ({
+  page,
+}) => {
+  await setupDashboardE2E(page, { recorderOverlayVisible: true });
+
+  await expect(page.getByTitle("Hide Overlay")).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+
+  await emitDashboardRecorderOverlayVisibility(page, false);
+  await expect(page.getByTitle("Show Overlay")).toHaveAttribute(
+    "aria-pressed",
+    "false",
+  );
+
+  await emitDashboardRecorderOverlayVisibility(page, true);
+  await expect(page.getByTitle("Hide Overlay")).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+
+  await expect
+    .poll(async () => {
+      const calls = await getDashboardE2ECalls(page);
+
+      return calls.recorderVisibilityEvents;
+    })
+    .toEqual([false, true]);
+});
+
+test("keeps recorder overlay control stable during aura lock bridge events", async ({
+  page,
+}) => {
+  await setupDashboardE2E(page, {
+    auraLocked: true,
+    recorderOverlayVisible: true,
+  });
+
+  await expect(page.getByTitle("Hide Overlay")).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+
+  await emitDashboardAuraLockChanged(page, false);
+  await expect(page.getByTitle("Hide Overlay")).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+
+  await expect
+    .poll(async () => {
+      const calls = await getDashboardE2ECalls(page);
+
+      return {
+        auraLockEvents: calls.auraLockEvents,
+        recorderVisibilityEvents: calls.recorderVisibilityEvents,
+      };
+    })
+    .toEqual({
+      auraLockEvents: [false],
+      recorderVisibilityEvents: [],
+    });
 });
