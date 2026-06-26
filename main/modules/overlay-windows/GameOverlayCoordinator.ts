@@ -95,7 +95,7 @@ class GameOverlayCoordinator {
   async applyFocusGateToGameOverlays(): Promise<void> {
     if (!this.canShowGameOverlays()) {
       this.restoringGameOverlays = false;
-      for (const participant of this.participants) {
+      for (const participant of [...this.participants]) {
         participant.suspendRequestedOverlay();
       }
       return;
@@ -107,7 +107,7 @@ class GameOverlayCoordinator {
 
     this.restoringGameOverlays = true;
     try {
-      for (const participant of this.participants) {
+      for (const participant of [...this.participants]) {
         await participant.restoreRequestedOverlay();
       }
     } finally {

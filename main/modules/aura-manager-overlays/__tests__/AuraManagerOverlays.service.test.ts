@@ -381,7 +381,7 @@ describe("AuraManagerOverlaysService", () => {
     expect(setOverlayFocusActive).toHaveBeenCalledWith("aura-overlay", false);
   });
 
-  it("keeps the editable aura overlay visible until it is locked", async () => {
+  it("keeps the editable aura overlay visible while focused and suspends it after blur", async () => {
     const profile = createAuraProfile();
     vi.spyOn(ProfilesService, "getInstance").mockReturnValue({
       list: () => [profile],
@@ -397,9 +397,13 @@ describe("AuraManagerOverlaysService", () => {
     service.setLocked(false);
 
     await service.show(profile.id);
+    const focusListener = auraWindow.on.mock.calls.find(
+      ([eventName]) => eventName === "focus",
+    )?.[1];
     const blurListener = auraWindow.on.mock.calls.find(
       ([eventName]) => eventName === "blur",
     )?.[1];
+    focusListener?.();
 
     await flushTimers();
     auraWindow.setOpacity.mockClear();
@@ -412,12 +416,6 @@ describe("AuraManagerOverlaysService", () => {
     expect(auraWindow.setIgnoreMouseEvents).not.toHaveBeenCalledWith(true);
 
     blurListener?.();
-    await flushTimers();
-
-    expect(auraWindow.setOpacity).not.toHaveBeenCalledWith(0);
-    expect(auraWindow.setIgnoreMouseEvents).not.toHaveBeenCalledWith(true);
-
-    service.setLocked(true);
     await flushTimers();
 
     expect(auraWindow.setOpacity).toHaveBeenCalledWith(0);

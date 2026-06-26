@@ -48,6 +48,7 @@ class AuraManagerOverlaysService {
   private gameRunningActive = false;
   private addAuraRequestId = 0;
   private inputPassthroughActive = false;
+  private auraOverlayFocused = false;
 
   constructor(
     private readonly coordinator: GameOverlayCoordinator,
@@ -228,17 +229,15 @@ class AuraManagerOverlaysService {
       contentProtection: this.getContentProtectionEnabled(),
     });
     window.on("focus", () => {
-      this.coordinator.setOverlayFocusActive(
-        AURA_OVERLAY_FOCUS_ID,
-        this.canOwnOverlayFocus(),
-      );
+      this.auraOverlayFocused = true;
+      this.updateOverlayFocusState();
     });
     window.on("blur", () => {
-      if (!this.canOwnOverlayFocus()) {
-        this.coordinator.setOverlayFocusActive(AURA_OVERLAY_FOCUS_ID, false);
-      }
+      this.auraOverlayFocused = false;
+      this.updateOverlayFocusState();
     });
     window.on("closed", () => {
+      this.auraOverlayFocused = false;
       this.coordinator.setOverlayFocusActive(AURA_OVERLAY_FOCUS_ID, false);
       unregisterIpcWindowRole(auraWebContents);
       if (this.auraWindow === window) {
@@ -352,17 +351,29 @@ class AuraManagerOverlaysService {
     if (this.auraOverlayLocked || this.inputPassthroughActive) {
       window.setIgnoreMouseEvents(true);
       window.setFocusable(false);
-      this.coordinator.setOverlayFocusActive(AURA_OVERLAY_FOCUS_ID, false);
+      this.updateOverlayFocusState();
       return;
     }
 
-    this.coordinator.setOverlayFocusActive(AURA_OVERLAY_FOCUS_ID, true);
     window.setFocusable(true);
     window.setIgnoreMouseEvents(false);
+    this.updateOverlayFocusState();
   }
 
   private canOwnOverlayFocus(): boolean {
     return !this.auraOverlayLocked && !this.inputPassthroughActive;
+  }
+
+  private updateOverlayFocusState(): void {
+    const windowFocused =
+      this.auraOverlayFocused ||
+      (this.auraWindow !== null &&
+        !this.auraWindow.isDestroyed() &&
+        this.auraWindow.isFocused());
+    this.coordinator.setOverlayFocusActive(
+      AURA_OVERLAY_FOCUS_ID,
+      windowFocused && this.canOwnOverlayFocus(),
+    );
   }
 
   private publishLockState(): void {
@@ -392,6 +403,7 @@ class AuraManagerOverlaysService {
     const window = this.auraWindow;
     this.auraWindow = null;
     this.auraWindowProfileId = undefined;
+    this.auraOverlayFocused = false;
     this.coordinator.setOverlayFocusActive(AURA_OVERLAY_FOCUS_ID, false);
     if (window && !window.isDestroyed()) {
       logInfo(AURA_OVERLAY_SCOPE, "Aura overlay closed", { reason });

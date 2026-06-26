@@ -1,7 +1,10 @@
 import { BrowserWindow, globalShortcut, screen } from "electron";
 
 import { WindowName } from "~/main/modules/main-window/MainWindow.types";
-import type { GameOverlayCoordinator } from "~/main/modules/overlay-windows/GameOverlayCoordinator";
+import type {
+  GameOverlayCoordinator,
+  GameOverlayParticipant,
+} from "~/main/modules/overlay-windows/GameOverlayCoordinator";
 import {
   applyGameOverlayContentProtection,
   closeOverlayWindow,
@@ -21,7 +24,7 @@ const MIN_CROP_SIZE = 8;
 const GRID_LINES_OVERLAY_SCOPE = "grid-lines-overlay";
 const CROP_SELECTOR_OVERLAY_FOCUS_ID = "crop-selector-overlay";
 
-class GridLinesOverlayService {
+class GridLinesOverlayService implements GameOverlayParticipant {
   private cropSelectorWindow: BrowserWindow | null = null;
   private cropSelectionEscapeRegistered = false;
   private cropSelectorOverlayFocusActive = false;
@@ -33,7 +36,9 @@ class GridLinesOverlayService {
     private readonly coordinator: GameOverlayCoordinator,
     private readonly getContentProtectionEnabled = () => false,
     private readonly onOverlayFocusRelease = () => {},
-  ) {}
+  ) {
+    this.coordinator.register(this);
+  }
 
   async selectCropRegion(): Promise<CropRegionSelection | null> {
     this.cancelCropRegionSelection();
@@ -82,6 +87,26 @@ class GridLinesOverlayService {
     applyGameOverlayContentProtection(this.cropSelectorWindow, enabled);
   }
 
+  suspendRequestedOverlay(): void {
+    if (!this.pendingCropSelection) {
+      return;
+    }
+
+    this.coordinator.suspendGameOverlayWindow(this.cropSelectorWindow);
+  }
+
+  restoreRequestedOverlay(): void {
+    if (!this.pendingCropSelection) {
+      return;
+    }
+
+    const shouldFocus = !this.cropSelectorOverlayFocusActive;
+    this.coordinator.showGameOverlayWindow(this.cropSelectorWindow);
+    if (shouldFocus) {
+      this.cropSelectorWindow?.focus();
+    }
+  }
+
   private async createWindow(): Promise<void> {
     if (this.cropSelectorWindow && !this.cropSelectorWindow.isDestroyed()) {
       return;
@@ -119,6 +144,12 @@ class GridLinesOverlayService {
       contentProtection: this.getContentProtectionEnabled(),
     });
     cropSelectorWindow.setFullScreenable(false);
+    cropSelectorWindow.on("focus", () => {
+      this.setCropSelectorOverlayFocusActive(true);
+    });
+    cropSelectorWindow.on("blur", () => {
+      this.setCropSelectorOverlayFocusActive(false, { startHandoff: false });
+    });
     cropSelectorWindow.on("closed", () => {
       unregisterIpcWindowRole(cropSelectorWebContents);
       logInfo(GRID_LINES_OVERLAY_SCOPE, "Crop selector overlay closed");

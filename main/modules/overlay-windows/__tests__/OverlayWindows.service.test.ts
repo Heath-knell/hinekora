@@ -173,8 +173,9 @@ async function flushTimers(): Promise<void> {
 }
 
 async function flushPromises(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
+  for (let index = 0; index < 8; index += 1) {
+    await Promise.resolve();
+  }
 }
 
 function createIpcEvent(senderId: number): Electron.IpcMainInvokeEvent {
@@ -604,6 +605,7 @@ describe("OverlayWindowsService", () => {
     const service = new OverlayWindowsService();
     service.setGameRunningActive(true);
     service.setPoeFocusActive(false);
+    await flushPromises();
     const participant = {
       restoreRequestedOverlay: vi.fn(),
       suspendRequestedOverlay: vi.fn(),
@@ -632,6 +634,7 @@ describe("OverlayWindowsService", () => {
     const service = new OverlayWindowsService();
     service.setGameRunningActive(true);
     service.setPoeFocusActive(false);
+    await flushPromises();
     const deathClipsOverlay = getInternals(service).deathClipsOverlay as {
       hide(): boolean;
     };
@@ -1008,10 +1011,12 @@ describe("GridLinesOverlayService", () => {
     await expect(selection).resolves.toBeNull();
   });
 
-  it("keeps crop selector selection active across native window blur", async () => {
+  it("suspends crop selector selection on native blur and restores it on game focus", async () => {
     const cropWindow = createFakeWindow();
     electronMocks.browserWindowFactory.mockReturnValue(cropWindow);
     const service = new OverlayWindowsService();
+    service.setGameRunningActive(true);
+    service.setPoeFocusActive(true);
     const setOverlayFocusActive = vi.spyOn(
       getInternals(service).coordinator,
       "setOverlayFocusActive",
@@ -1023,7 +1028,28 @@ describe("GridLinesOverlayService", () => {
       ([eventName]) => eventName === "blur",
     )?.[1];
 
-    expect(blurListener).toBeUndefined();
+    service.setPoeFocusActive(false);
+    await flushTimers();
+
+    expect(cropWindow.setOpacity).not.toHaveBeenCalledWith(0);
+    expect(cropWindow.setIgnoreMouseEvents).not.toHaveBeenCalledWith(true);
+
+    blurListener?.();
+    await flushTimers();
+
+    expect(setOverlayFocusActive).toHaveBeenCalledWith(
+      "crop-selector-overlay",
+      false,
+    );
+    expect(cropWindow.setOpacity).toHaveBeenCalledWith(0);
+    expect(cropWindow.setIgnoreMouseEvents).toHaveBeenCalledWith(true);
+
+    service.setPoeFocusActive(true);
+    await flushTimers();
+
+    expect(cropWindow.setOpacity).toHaveBeenCalledWith(1);
+    expect(cropWindow.setIgnoreMouseEvents).toHaveBeenCalledWith(false);
+    expect(cropWindow.focus).toHaveBeenCalledTimes(2);
 
     service.cancelCropRegionSelection();
     await expect(selection).resolves.toBeNull();
