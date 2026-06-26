@@ -9,7 +9,7 @@ function isPoeProcessStateForGame(
 ): boolean {
   return (
     state?.isRunning === true &&
-    resolvePathOfExileProcessGame(state.processName) === game
+    (state.game ?? resolvePathOfExileProcessGame(state.processName)) === game
   );
 }
 

@@ -77,16 +77,22 @@ vi.mock("../ManagedRecorder.noobs", () => ({
 vi.mock("~/main/pollers", () => ({
   detectPoeProcessState: pollerMocks.detectPoeProcessState,
   isPoeProcessStateForGame: (
-    state: { isRunning: boolean; processName: string },
+    state: {
+      game?: "poe1" | "poe2" | null;
+      isRunning: boolean;
+      processName: string;
+    },
     game: "poe1" | "poe2",
   ) => {
     if (!state.isRunning) {
       return false;
     }
 
-    const stateGame = state.processName.toLowerCase().includes("pathofexile2")
-      ? "poe2"
-      : "poe1";
+    const stateGame =
+      state.game ??
+      (state.processName.toLowerCase().includes("pathofexile2")
+        ? "poe2"
+        : "poe1");
 
     return stateGame === game;
   },

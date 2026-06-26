@@ -10,7 +10,7 @@ interface FakeBrowserWindowOptions {
 
 function createFakeBrowserWindow(options: FakeBrowserWindowOptions = {}) {
   let visible = options.visible ?? false;
-  const bounds = options.bounds ?? { x: 100, y: 100, width: 360, height: 96 };
+  let bounds = options.bounds ?? { x: 100, y: 100, width: 360, height: 96 };
 
   return {
     blur: vi.fn(),
@@ -34,8 +34,11 @@ function createFakeBrowserWindow(options: FakeBrowserWindowOptions = {}) {
     loadURL: vi.fn().mockResolvedValue(undefined),
     moveTop: vi.fn(),
     on: vi.fn(),
+    removeListener: vi.fn(),
     setAlwaysOnTop: vi.fn(),
-    setBounds: vi.fn(),
+    setBounds: vi.fn((nextBounds: Partial<Electron.Rectangle>) => {
+      bounds = { ...bounds, ...nextBounds };
+    }),
     setContentProtection: vi.fn(),
     setFocusable: vi.fn(),
     setFullScreenable: vi.fn(),

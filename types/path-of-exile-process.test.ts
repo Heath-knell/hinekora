@@ -7,16 +7,17 @@ import {
 
 describe("Path of Exile process utilities", () => {
   it("maps unambiguous process names to game ids", () => {
-    expect(resolvePathOfExileProcessGame("PathOfExile.exe")).toBe("poe1");
     expect(resolvePathOfExileProcessGame("PathOfExile_x64Steam.exe")).toBe(
       "poe1",
     );
-    expect(resolvePathOfExileProcessGame("PathOfExile2Steam.exe")).toBe("poe2");
-    expect(resolvePathOfExileProcessGame("PathOfExile2.exe")).toBe("poe2");
+    expect(resolvePathOfExileProcessGame("PathOfExile_x64.exe")).toBe("poe1");
   });
 
   it("does not guess a game from generic or unrelated process names", () => {
+    expect(resolvePathOfExileProcessGame("PathOfExile.exe")).toBeNull();
     expect(resolvePathOfExileProcessGame("PathOfExileSteam.exe")).toBeNull();
+    expect(resolvePathOfExileProcessGame("PathOfExileUnknown.exe")).toBeNull();
+    expect(resolvePathOfExileProcessGame("PathOfExileBeta.exe")).toBeNull();
     expect(resolvePathOfExileProcessGame("steam.exe")).toBeNull();
     expect(resolvePathOfExileProcessGame("")).toBeNull();
   });
@@ -25,8 +26,8 @@ describe("Path of Exile process utilities", () => {
     expect(isAmbiguousPathOfExileProcessName("PathOfExileSteam.exe")).toBe(
       true,
     );
-    expect(isAmbiguousPathOfExileProcessName("PathOfExile.exe")).toBe(false);
-    expect(isAmbiguousPathOfExileProcessName("PathOfExile2Steam.exe")).toBe(
+    expect(isAmbiguousPathOfExileProcessName("PathOfExile.exe")).toBe(true);
+    expect(isAmbiguousPathOfExileProcessName("PathOfExile_x64Steam.exe")).toBe(
       false,
     );
   });

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { mockIpcMainHandlers } from "~/main/test/ipc";
 
+import { CapturePreviewChannel } from "../../capture-preview/CapturePreview.channels";
 import { PoeProcessChannel } from "../PoeProcess.channels";
 import { PoeProcessService } from "../PoeProcess.service";
 
@@ -81,16 +82,22 @@ vi.mock("~/main/pollers", () => {
 
   return {
     isPoeProcessStateForGame: (
-      state: { isRunning: boolean; processName: string },
+      state: {
+        game?: "poe1" | "poe2" | null;
+        isRunning: boolean;
+        processName: string;
+      },
       game: "poe1" | "poe2",
     ) => {
       if (!state.isRunning) {
         return false;
       }
 
-      const stateGame = state.processName.toLowerCase().includes("pathofexile2")
-        ? "poe2"
-        : "poe1";
+      const stateGame =
+        state.game ??
+        (state.processName.toLowerCase().includes("pathofexile2")
+          ? "poe2"
+          : "poe1");
 
       return stateGame === game;
     },
@@ -211,12 +218,14 @@ describe("PoeProcessService", () => {
     service.initialize();
 
     getPollerListener("start")({
+      game: "poe2",
       isRunning: true,
-      processName: "PathOfExile2Steam.exe",
+      processName: "PathOfExileSteam.exe",
     });
     expect(service.getState()).toEqual({
+      game: "poe2",
       isRunning: true,
-      processName: "PathOfExile2Steam.exe",
+      processName: "PathOfExileSteam.exe",
     });
     expect(service.isActiveGameRunning()).toBe(true);
     expect(serviceMocks.overlaySetGameRunningActive).toHaveBeenLastCalledWith(
@@ -227,7 +236,14 @@ describe("PoeProcessService", () => {
     );
     expect(window.webContents.send).toHaveBeenCalledWith(
       PoeProcessChannel.Start,
-      { isRunning: true, processName: "PathOfExile2Steam.exe" },
+      {
+        game: "poe2",
+        isRunning: true,
+        processName: "PathOfExileSteam.exe",
+      },
+    );
+    expect(window.webContents.send).toHaveBeenCalledWith(
+      CapturePreviewChannel.RefreshRequested,
     );
 
     getPollerListener("data")({
@@ -248,6 +264,9 @@ describe("PoeProcessService", () => {
       PoeProcessChannel.Stop,
       { isRunning: false, processName: "" },
     );
+    expect(window.webContents.send).toHaveBeenLastCalledWith(
+      CapturePreviewChannel.RefreshRequested,
+    );
   });
 
   it("does not resync consumers or broadcast unchanged poller data", () => {
@@ -267,6 +286,48 @@ describe("PoeProcessService", () => {
     expect(window.webContents.send).not.toHaveBeenCalled();
   });
 
+  it("resyncs consumers and broadcasts when only the resolved game changes", () => {
+    const window = createWindow({});
+    electronMocks.getAllWindows.mockReturnValue([window]);
+    const service = new PoeProcessService();
+    service.initialize();
+
+    getPollerListener("start")({
+      game: "poe2",
+      isRunning: true,
+      processName: "PathOfExileSteam.exe",
+    });
+    expect(service.isActiveGameRunning()).toBe(true);
+    window.webContents.send.mockClear();
+
+    getPollerListener("data")({
+      game: "poe1",
+      isRunning: true,
+      processName: "PathOfExileSteam.exe",
+    });
+
+    expect(service.getState()).toEqual({
+      game: "poe1",
+      isRunning: true,
+      processName: "PathOfExileSteam.exe",
+    });
+    expect(service.isActiveGameRunning()).toBe(false);
+    expect(serviceMocks.overlaySetGameRunningActive).toHaveBeenLastCalledWith(
+      false,
+    );
+    expect(window.webContents.send).toHaveBeenCalledWith(
+      PoeProcessChannel.GetState,
+      {
+        game: "poe1",
+        isRunning: true,
+        processName: "PathOfExileSteam.exe",
+      },
+    );
+    expect(window.webContents.send).toHaveBeenCalledWith(
+      CapturePreviewChannel.RefreshRequested,
+    );
+  });
+
   it("ignores late poller state events after stop", () => {
     const service = new PoeProcessService();
     service.initialize();
@@ -277,16 +338,19 @@ describe("PoeProcessService", () => {
 
     expect(() => {
       getPollerListener("data")({
+        game: "poe2",
         isRunning: true,
-        processName: "PathOfExile2Steam.exe",
+        processName: "PathOfExileSteam.exe",
       });
       getPollerListener("start")({
+        game: "poe2",
         isRunning: true,
-        processName: "PathOfExile2Steam.exe",
+        processName: "PathOfExileSteam.exe",
       });
       getPollerListener("stop")({
+        game: "poe2",
         isRunning: true,
-        processName: "PathOfExile2Steam.exe",
+        processName: "PathOfExileSteam.exe",
       });
       getPollerListener("error")(new Error("database closed"));
     }).not.toThrow();
@@ -300,13 +364,15 @@ describe("PoeProcessService", () => {
     electronMocks.getAllWindows.mockReturnValue([window]);
     const service = new PoeProcessService();
     pollerMocks.pollNow.mockResolvedValue({
+      game: "poe2",
       isRunning: true,
-      processName: "PathOfExile2Steam.exe",
+      processName: "PathOfExileSteam.exe",
     });
 
     await expect(service.refreshState()).resolves.toEqual({
+      game: "poe2",
       isRunning: true,
-      processName: "PathOfExile2Steam.exe",
+      processName: "PathOfExileSteam.exe",
     });
     expect(serviceMocks.overlaySetGameRunningActive).toHaveBeenLastCalledWith(
       true,
@@ -316,7 +382,39 @@ describe("PoeProcessService", () => {
     );
     expect(window.webContents.send).toHaveBeenCalledWith(
       PoeProcessChannel.GetState,
-      { isRunning: true, processName: "PathOfExile2Steam.exe" },
+      {
+        game: "poe2",
+        isRunning: true,
+        processName: "PathOfExileSteam.exe",
+      },
+    );
+    expect(window.webContents.send).toHaveBeenCalledWith(
+      CapturePreviewChannel.RefreshRequested,
+    );
+  });
+
+  it("skips capture source refresh requests for capture-preview-owned process refreshes", async () => {
+    const window = createWindow({});
+    electronMocks.getAllWindows.mockReturnValue([window]);
+    const service = new PoeProcessService();
+    pollerMocks.pollNow.mockResolvedValue({
+      game: "poe2",
+      isRunning: true,
+      processName: "PathOfExileSteam.exe",
+    });
+
+    await service.refreshState({ requestCapturePreviewRefresh: false });
+
+    expect(window.webContents.send).toHaveBeenCalledWith(
+      PoeProcessChannel.GetState,
+      {
+        game: "poe2",
+        isRunning: true,
+        processName: "PathOfExileSteam.exe",
+      },
+    );
+    expect(window.webContents.send).not.toHaveBeenCalledWith(
+      CapturePreviewChannel.RefreshRequested,
     );
   });
 
@@ -328,8 +426,9 @@ describe("PoeProcessService", () => {
     service.initialize();
 
     getPollerListener("start")({
+      game: "poe2",
       isRunning: true,
-      processName: "PathOfExile2Steam.exe",
+      processName: "PathOfExileSteam.exe",
     });
     expect(serviceMocks.overlaySetGameRunningActive).toHaveBeenLastCalledWith(
       false,
@@ -338,8 +437,9 @@ describe("PoeProcessService", () => {
 
     serviceMocks.getSettings.mockReturnValue({ activeGame: "poe2" });
     pollerMocks.pollNow.mockResolvedValue({
+      game: "poe2",
       isRunning: true,
-      processName: "PathOfExile2Steam.exe",
+      processName: "PathOfExileSteam.exe",
     });
 
     await service.refreshState();
@@ -406,8 +506,9 @@ describe("PoeProcessService", () => {
     service.initialize();
 
     getPollerListener("start")({
+      game: "poe2",
       isRunning: true,
-      processName: "PathOfExile2Steam.exe",
+      processName: "PathOfExileSteam.exe",
     });
     await Promise.resolve();
 
@@ -435,8 +536,9 @@ describe("PoeProcessService", () => {
     expect(pollerMocks.stop).toHaveBeenCalledTimes(2);
     expect(service.getState()).toEqual({ isRunning: false, processName: "" });
     pollerMocks.pollNow.mockResolvedValue({
+      game: "poe2",
       isRunning: true,
-      processName: "PathOfExile2Steam.exe",
+      processName: "PathOfExileSteam.exe",
     });
     await expect(service.refreshState()).resolves.toEqual({
       isRunning: false,

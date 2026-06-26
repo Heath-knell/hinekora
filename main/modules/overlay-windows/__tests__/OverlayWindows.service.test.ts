@@ -387,6 +387,21 @@ describe("OverlayWindowsService", () => {
     expect(auraWindow.setContentProtection).toHaveBeenLastCalledWith(false);
   });
 
+  it("uses a focus handoff when toggling the recorder overlay from the appbar", async () => {
+    const recorderWindow = createFakeWindow();
+    electronMocks.browserWindowFactory.mockReturnValue(recorderWindow);
+    const service = new OverlayWindowsService();
+
+    service.setGameRunningActive(true);
+    service.setPoeFocusActive(false);
+
+    await service.toggleRecorderOverlay();
+
+    expect(recorderWindow.setIgnoreMouseEvents).toHaveBeenCalledWith(false);
+    expect(recorderWindow.setOpacity).toHaveBeenCalledWith(1);
+    expect(recorderWindow.showInactive).toHaveBeenCalled();
+  });
+
   it("requests persistent aura overlays when the game becomes running", () => {
     vi.spyOn(ProfilesService, "getInstance").mockReturnValue({
       list: () => [createProfile()],
@@ -412,6 +427,31 @@ describe("OverlayWindowsService", () => {
     expect(setPoeFocusActive).toHaveBeenCalledWith(true);
     expect(auraManagerOverlays.show).toHaveBeenCalledTimes(1);
     expect(auraManagerOverlays.show).toHaveBeenCalledWith("profile-1");
+  });
+
+  it("does not assume game focus from the running process after focus is lost", () => {
+    vi.spyOn(ProfilesService, "getInstance").mockReturnValue({
+      list: () => [createProfile()],
+    } as unknown as ProfilesService);
+    const service = new OverlayWindowsService();
+    const auraManagerOverlays = getInternals(service).auraManagerOverlays as {
+      setGameRunningActive(active: boolean): void;
+      show(profileId?: string): Promise<void>;
+    };
+    vi.spyOn(auraManagerOverlays, "setGameRunningActive").mockImplementation(
+      () => undefined,
+    );
+    vi.spyOn(auraManagerOverlays, "show").mockResolvedValue(undefined);
+    const setPoeFocusActive = vi.spyOn(
+      getInternals(service).coordinator,
+      "setPoeFocusActive",
+    );
+
+    service.setPoeFocusActive(false);
+    service.setGameRunningActive(true);
+
+    expect(setPoeFocusActive).toHaveBeenCalledWith(false);
+    expect(setPoeFocusActive).not.toHaveBeenCalledWith(true);
   });
 
   it("does not assume game focus from the running process after system suspend", () => {
@@ -482,6 +522,38 @@ describe("OverlayWindowsService", () => {
 
     expect(auraManagerOverlays.show).toHaveBeenCalledTimes(1);
     expect(auraManagerOverlays.show).toHaveBeenCalledWith("profile-1");
+  });
+
+  it("does not reopen an editable aura overlay after the game restarts", async () => {
+    vi.spyOn(ProfilesService, "getInstance").mockReturnValue({
+      list: () => [createProfile()],
+    } as unknown as ProfilesService);
+    const firstWindow = createFakeWindow({
+      bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+      url: `app://-/${WindowName.AuraOverlay}`,
+    });
+    const restoredWindow = createFakeWindow({
+      bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+      url: `app://-/${WindowName.AuraOverlay}`,
+    });
+    electronMocks.browserWindowFactory
+      .mockReturnValueOnce(firstWindow)
+      .mockReturnValueOnce(restoredWindow);
+    const service = new OverlayWindowsService();
+
+    await service.showAuraOverlay("profile-1");
+    service.setGameRunningActive(true);
+    await flushTimers();
+
+    service.setAuraOverlayLocked(false);
+    service.setGameRunningActive(false);
+    service.setGameRunningActive(true);
+    await flushTimers();
+
+    expect(service.isAuraOverlayLocked()).toBe(true);
+    expect(firstWindow.close).toHaveBeenCalledTimes(1);
+    expect(electronMocks.BrowserWindow).toHaveBeenCalledTimes(1);
+    expect(restoredWindow.loadFile).not.toHaveBeenCalled();
   });
 
   it("keeps overlays eligible during aura focus handoff grace", async () => {
@@ -862,10 +934,6 @@ describe("GridLinesOverlayService", () => {
     const cropWindow = createFakeWindow();
     electronMocks.browserWindowFactory.mockReturnValue(cropWindow);
     const service = new OverlayWindowsService();
-    const setPoeFocusActive = vi.spyOn(
-      getInternals(service).coordinator,
-      "setPoeFocusActive",
-    );
     const setOverlayFocusActive = vi.spyOn(
       getInternals(service).coordinator,
       "setOverlayFocusActive",
@@ -878,7 +946,6 @@ describe("GridLinesOverlayService", () => {
       true,
     );
     expect(cropWindow.focus).toHaveBeenCalledTimes(1);
-    vi.useFakeTimers();
     service.completeCropRegionSelection({
       x: 12.2,
       y: -5,
@@ -901,19 +968,12 @@ describe("GridLinesOverlayService", () => {
     expect(electronMocks.globalShortcutUnregister).toHaveBeenCalledWith(
       "Escape",
     );
-    expect(setPoeFocusActive).toHaveBeenCalledWith(true);
     expect(setOverlayFocusActive).toHaveBeenCalledWith(
       "crop-selector-overlay",
       false,
     );
     expect(cropWindow.close).toHaveBeenCalled();
 
-    setPoeFocusActive.mockClear();
-    await vi.advanceTimersByTimeAsync(1_500);
-    expect(setPoeFocusActive).toHaveBeenCalledWith(true);
-    vi.useRealTimers();
-
-    setPoeFocusActive.mockClear();
     const invalidSelection = service.selectCropRegion();
     await flushTimers();
     service.completeCropRegionSelection({
@@ -931,7 +991,6 @@ describe("GridLinesOverlayService", () => {
     service.completeCropRegionSelection(null);
     service.cancelCropRegionSelection();
     await expect(invalidSelection).resolves.toBeNull();
-    expect(setPoeFocusActive).not.toHaveBeenCalled();
   });
 
   it("uses disabled content protection by default", async () => {
@@ -949,7 +1008,7 @@ describe("GridLinesOverlayService", () => {
     await expect(selection).resolves.toBeNull();
   });
 
-  it("cancels crop selector selection when the selector window loses focus", async () => {
+  it("keeps crop selector selection active across native window blur", async () => {
     const cropWindow = createFakeWindow();
     electronMocks.browserWindowFactory.mockReturnValue(cropWindow);
     const service = new OverlayWindowsService();
@@ -964,13 +1023,11 @@ describe("GridLinesOverlayService", () => {
       ([eventName]) => eventName === "blur",
     )?.[1];
 
-    expect(blurListener).toEqual(expect.any(Function));
-    blurListener?.();
+    expect(blurListener).toBeUndefined();
 
+    service.cancelCropRegionSelection();
     await expect(selection).resolves.toBeNull();
     expect(cropWindow.close).toHaveBeenCalled();
-    blurListener?.();
-    expect(cropWindow.close).toHaveBeenCalledTimes(1);
     expect(electronMocks.globalShortcutUnregister).toHaveBeenCalledWith(
       "Escape",
     );
@@ -1014,7 +1071,7 @@ describe("GridLinesOverlayService", () => {
     expect(auraWindow.setOpacity).toHaveBeenCalledWith(0);
   });
 
-  it("clears pending crop focus restore timers and omits invalid viewport sizes", async () => {
+  it("omits invalid viewport sizes without forcing PoE focus active", async () => {
     const cropWindow = createFakeWindow();
     cropWindow.getBounds.mockReturnValue({
       x: 0,
@@ -1031,7 +1088,6 @@ describe("GridLinesOverlayService", () => {
 
     const selection = service.selectCropRegion();
     await flushTimers();
-    vi.useFakeTimers();
     service.completeCropRegionSelection({
       x: 12,
       y: 14,
@@ -1045,12 +1101,9 @@ describe("GridLinesOverlayService", () => {
       width: 100,
       height: 80,
     });
-    expect(setPoeFocusActive).toHaveBeenCalledTimes(1);
 
     service.destroyAll();
-    await vi.advanceTimersByTimeAsync(1_500);
-    expect(setPoeFocusActive).toHaveBeenCalledTimes(1);
-    vi.useRealTimers();
+    expect(setPoeFocusActive).not.toHaveBeenCalled();
   });
 
   it("cancels crop selector selection from the temporary Escape shortcut", async () => {

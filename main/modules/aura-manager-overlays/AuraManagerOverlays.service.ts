@@ -163,13 +163,17 @@ class AuraManagerOverlaysService {
     profile: Profile,
     options: ShowAuraOverlayOptions = {},
   ): Promise<void> {
-    if (this.auraOverlayLocked && !this.hasRenderableAuraPlacements(profile)) {
+    const startAddingAura = options.startAddingAura === true;
+    if (
+      this.auraOverlayLocked &&
+      !startAddingAura &&
+      !this.hasRenderableAuraPlacements(profile)
+    ) {
       this.closeWindow("no-renderable-placements");
       return;
     }
 
     const window = this.auraWindow ?? this.createWindow();
-    const startAddingAura = options.startAddingAura === true;
     const canDispatchAddAuraRequest =
       startAddingAura &&
       this.auraWindowProfileId === profile.id &&
@@ -233,6 +237,9 @@ class AuraManagerOverlaysService {
       this.coordinator.setOverlayFocusActive(AURA_OVERLAY_FOCUS_ID, false);
       unregisterIpcWindowRole(auraWebContents);
       if (this.auraWindow === window) {
+        if (this.lockClosedOverlay()) {
+          this.forgetRequestedOverlay();
+        }
         logInfo(AURA_OVERLAY_SCOPE, "Aura overlay closed", {
           reason: "window-closed",
         });
@@ -367,6 +374,11 @@ class AuraManagerOverlaysService {
   }
 
   private closeWindow(reason: AuraOverlayCloseReason): void {
+    const wasUnlocked = this.lockClosedOverlay();
+    if (reason === "game-stopped" && wasUnlocked) {
+      this.forgetRequestedOverlay();
+    }
+
     const window = this.auraWindow;
     this.auraWindow = null;
     this.auraWindowProfileId = undefined;
@@ -375,6 +387,20 @@ class AuraManagerOverlaysService {
       logInfo(AURA_OVERLAY_SCOPE, "Aura overlay closed", { reason });
     }
     closeOverlayWindow(window);
+  }
+
+  private lockClosedOverlay(): boolean {
+    if (this.auraOverlayLocked) {
+      return false;
+    }
+
+    this.setLocked(true);
+    return true;
+  }
+
+  private forgetRequestedOverlay(): void {
+    this.auraOverlayRequested = false;
+    this.auraOverlayProfileId = undefined;
   }
 
   private resolveProfile(profileId?: string): Profile | null {

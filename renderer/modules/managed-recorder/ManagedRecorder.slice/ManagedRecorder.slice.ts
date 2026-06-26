@@ -6,7 +6,7 @@ import type {
 
 export const createManagedRecorderSlice: BoundStoreStateCreator<
   ManagedRecorderSlice
-> = (set, get) => ({
+> = (set) => ({
   managedRecorder: {
     captureMode: "rewind",
     status: null,
@@ -71,16 +71,9 @@ export const createManagedRecorderSlice: BoundStoreStateCreator<
     startListening: () => {
       const stopRecorderStatusListener =
         window.electron.managedRecorder.onStatusChanged((status) => {
-          let shouldRefreshCapturePreview = false;
           set((state) => {
-            shouldRefreshCapturePreview =
-              state.managedRecorder.status?.gameRunning !== true &&
-              status.gameRunning === true;
             state.managedRecorder.status = status;
           });
-          if (shouldRefreshCapturePreview) {
-            void get().capturePreview.refresh({ force: true });
-          }
         });
       const stopCaptureModeListener =
         window.electron.managedRecorder.onCaptureModeChanged((captureMode) => {

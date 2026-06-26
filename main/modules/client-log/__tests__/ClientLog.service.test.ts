@@ -58,8 +58,9 @@ beforeEach(() => {
   ]);
   poeProcessMocks.refreshState.mockReset();
   poeProcessMocks.refreshState.mockResolvedValue({
+    game: "poe1",
     isRunning: true,
-    processName: "PathOfExile2Steam.exe",
+    processName: "PathOfExile_x64Steam.exe",
   });
   poeProcessMocks.isActiveGameRunning.mockReset();
   poeProcessMocks.isActiveGameRunning.mockReturnValue(true);
@@ -322,8 +323,9 @@ describe("ClientLogService", () => {
 
     expect(poeProcessMocks.refreshState).toHaveBeenCalledTimes(1);
     expect(poeProcessMocks.isActiveGameRunning).toHaveBeenCalledWith({
+      game: "poe1",
       isRunning: true,
-      processName: "PathOfExile2Steam.exe",
+      processName: "PathOfExile_x64Steam.exe",
     });
     expect(setPoeFocusActive).toHaveBeenCalledWith(true);
     expect(setPoeFocusActive).toHaveBeenCalledTimes(1);
@@ -406,7 +408,7 @@ describe("ClientLogService", () => {
       expect.objectContaining({
         fallbackFocusState: false,
         game: "poe1",
-        processName: "PathOfExile2Steam.exe",
+        processName: "PathOfExile_x64Steam.exe",
       }),
     );
     service.stopWatchFile();

@@ -1,13 +1,17 @@
 import { join } from "node:path";
 
-import { app, BrowserWindow, Menu, shell, Tray } from "electron";
+import { app, BrowserWindow, Menu, screen, shell } from "electron";
 
 import { OverlayWindowsService } from "~/main/modules/overlay-windows";
 import { SettingsStoreService } from "~/main/modules/settings-store";
+import { TrayService } from "~/main/modules/tray";
 import { UpdaterService } from "~/main/modules/updater";
+import { logWarn } from "~/main/utils/app-log";
+import { validateBoundsOnDisplays } from "~/main/utils/display-geometry";
 import {
   assertString,
   handleValidationError,
+  safeErrorMessage,
 } from "~/main/utils/ipc-validation";
 import {
   registerGuardedIpcHandler,
@@ -22,13 +26,23 @@ import { isAllowedExternalUrl } from "./MainWindow.utils";
 const currentDir = __dirname;
 const START_MINIMIZED_ARG = "--hidden";
 const MAIN_WINDOW_EDITOR_CLIP_ID_MAX_LENGTH = 128;
+const MAIN_WINDOW_LOG_SCOPE = "main-window";
+const MAIN_WINDOW_DEFAULT_WIDTH = 1200;
+const MAIN_WINDOW_DEFAULT_HEIGHT = 800;
+const MAIN_WINDOW_BOUNDS_MIN_OVERLAP = 100;
+const MAIN_WINDOW_BOUNDS_SAVE_DEBOUNCE_MS = 500;
+const HINEKORA_DISCORD_URL = "https://discord.gg/mrqmPYXHHT";
+const HINEKORA_GITHUB_URL = "https://github.com/navali-creations/hinekora";
 
 class MainWindowService {
   private static instance: MainWindowService | null = null;
 
   private mainWindow: BrowserWindow | null = null;
-  private tray: Tray | null = null;
   private isQuitting = false;
+  private savedBoundsForQuit = false;
+  private debouncedSaveBoundsTimer: ReturnType<typeof setTimeout> | null = null;
+  private boundsMovedHandler: (() => void) | null = null;
+  private boundsResizedHandler: (() => void) | null = null;
 
   static getInstance(): MainWindowService {
     if (!MainWindowService.instance) {
@@ -41,6 +55,8 @@ class MainWindowService {
   constructor() {
     app.on("before-quit", () => {
       this.isQuitting = true;
+      this.saveMainWindowBoundsForQuit();
+      TrayService.getInstance().destroyTray();
     });
     this.setupHandlers();
   }
@@ -52,11 +68,18 @@ class MainWindowService {
 
     Menu.setApplicationMenu(null);
 
+    const restoredBounds = this.getRestoredMainWindowBounds();
     this.mainWindow = new BrowserWindow({
-      width: 1200,
-      height: 800,
-      minWidth: 1200,
-      minHeight: 800,
+      ...(restoredBounds
+        ? {
+            x: restoredBounds.x,
+            y: restoredBounds.y,
+          }
+        : {}),
+      width: restoredBounds?.width ?? MAIN_WINDOW_DEFAULT_WIDTH,
+      height: restoredBounds?.height ?? MAIN_WINDOW_DEFAULT_HEIGHT,
+      minWidth: MAIN_WINDOW_DEFAULT_WIDTH,
+      minHeight: MAIN_WINDOW_DEFAULT_HEIGHT,
       autoHideMenuBar: true,
       backgroundColor: "#080909",
       frame: false,
@@ -79,7 +102,6 @@ class MainWindowService {
       }
 
       if (this.shouldStartMinimized()) {
-        this.ensureTray();
         return;
       }
 
@@ -97,6 +119,7 @@ class MainWindowService {
         return;
       }
 
+      this.saveMainWindowBoundsImmediate(mainWindow);
       event.preventDefault();
       if (this.shouldMinimizeToTray()) {
         this.hideMainWindowToTray();
@@ -106,6 +129,7 @@ class MainWindowService {
       this.quitApplication();
     });
     mainWindow.on("closed", () => {
+      this.removeBoundsListeners(mainWindow);
       unregisterIpcWindowRole(mainWindowWebContents);
       if (this.mainWindow === mainWindow) {
         this.mainWindow = null;
@@ -117,6 +141,8 @@ class MainWindowService {
     mainWindow.on("focus", () => {
       OverlayWindowsService.getInstance().setPoeFocusActive(false);
     });
+    this.createTray();
+    this.attachBoundsListeners(mainWindow);
     this.setupDevelopmentShortcuts(mainWindow);
     UpdaterService.getInstance().initialize(mainWindow);
 
@@ -220,13 +246,20 @@ class MainWindowService {
   }
 
   private hideMainWindowToTray(): void {
-    this.ensureTray();
+    this.createTray();
+    this.saveMainWindowBoundsImmediate();
     this.mainWindow?.hide();
   }
 
   private async openEditorClip(clipId: string): Promise<void> {
     const mainWindow = await this.createMainWindow();
     await this.navigateMainWindowToEditorClip(mainWindow, clipId);
+    this.showMainWindow();
+  }
+
+  private async openSettingsHelp(): Promise<void> {
+    const mainWindow = await this.createMainWindow();
+    await this.navigateMainWindowToSettingsHelp(mainWindow);
     this.showMainWindow();
   }
 
@@ -241,6 +274,18 @@ class MainWindowService {
     const hash = `#/editor?kind=clip&id=${encodeURIComponent(clipId)}`;
     await mainWindow.webContents.executeJavaScript(
       `globalThis.location.hash = ${JSON.stringify(hash)}`,
+    );
+  }
+
+  private async navigateMainWindowToSettingsHelp(
+    mainWindow: BrowserWindow,
+  ): Promise<void> {
+    if (mainWindow.isDestroyed()) {
+      return;
+    }
+
+    await mainWindow.webContents.executeJavaScript(
+      `globalThis.location.hash = ${JSON.stringify("#/settings?tab=help")}`,
     );
   }
 
@@ -276,31 +321,103 @@ class MainWindowService {
     });
   }
 
-  private ensureTray(): void {
-    if (this.tray) {
+  private quitApplication(): void {
+    this.saveMainWindowBoundsForQuit();
+    this.isQuitting = true;
+    app.quit();
+  }
+
+  private createTray(): void {
+    TrayService.getInstance().createTray({
+      openDiscord: () => {
+        void shell.openExternal(HINEKORA_DISCORD_URL);
+      },
+      openGitHub: () => {
+        void shell.openExternal(HINEKORA_GITHUB_URL);
+      },
+      openHelp: () => this.openSettingsHelp(),
+      showMainWindow: () => this.showMainWindow(),
+      quitApplication: () => this.quitApplication(),
+    });
+  }
+
+  private getRestoredMainWindowBounds(): Electron.Rectangle | null {
+    try {
+      return validateBoundsOnDisplays(
+        SettingsStoreService.getInstance().get().mainWindowBounds,
+        screen.getAllDisplays(),
+        MAIN_WINDOW_BOUNDS_MIN_OVERLAP,
+      );
+    } catch (error) {
+      logWarn(MAIN_WINDOW_LOG_SCOPE, "Failed to restore main window bounds", {
+        error: safeErrorMessage(error),
+      });
+      return null;
+    }
+  }
+
+  private attachBoundsListeners(mainWindow: BrowserWindow): void {
+    const debouncedSaveBounds = () => {
+      if (this.debouncedSaveBoundsTimer) {
+        clearTimeout(this.debouncedSaveBoundsTimer);
+      }
+
+      this.debouncedSaveBoundsTimer = setTimeout(() => {
+        this.saveMainWindowBoundsImmediate(mainWindow);
+        this.debouncedSaveBoundsTimer = null;
+      }, MAIN_WINDOW_BOUNDS_SAVE_DEBOUNCE_MS);
+    };
+
+    this.boundsMovedHandler = debouncedSaveBounds;
+    this.boundsResizedHandler = debouncedSaveBounds;
+    mainWindow.on("moved", this.boundsMovedHandler);
+    mainWindow.on("resized", this.boundsResizedHandler);
+  }
+
+  private removeBoundsListeners(mainWindow: BrowserWindow | null): void {
+    if (this.debouncedSaveBoundsTimer) {
+      clearTimeout(this.debouncedSaveBoundsTimer);
+      this.debouncedSaveBoundsTimer = null;
+    }
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (this.boundsMovedHandler) {
+        mainWindow.removeListener("moved", this.boundsMovedHandler);
+      }
+      if (this.boundsResizedHandler) {
+        mainWindow.removeListener("resized", this.boundsResizedHandler);
+      }
+    }
+
+    this.boundsMovedHandler = null;
+    this.boundsResizedHandler = null;
+  }
+
+  private saveMainWindowBoundsImmediate(
+    mainWindow: BrowserWindow | null = this.mainWindow,
+  ): void {
+    if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isMaximized()) {
       return;
     }
 
-    this.tray = new Tray(this.resolveTrayIconPath());
-    this.tray.setToolTip("Hinekora");
-    this.tray.setContextMenu(
-      Menu.buildFromTemplate([
-        {
-          label: "Show Hinekora",
-          click: () => this.showMainWindow(),
-        },
-        {
-          label: "Quit Hinekora",
-          click: () => this.quitApplication(),
-        },
-      ]),
-    );
-    this.tray.on("click", () => this.showMainWindow());
+    try {
+      SettingsStoreService.getInstance().update({
+        mainWindowBounds: mainWindow.getBounds(),
+      });
+    } catch (error) {
+      logWarn(MAIN_WINDOW_LOG_SCOPE, "Failed to save main window bounds", {
+        error: safeErrorMessage(error),
+      });
+    }
   }
 
-  private quitApplication(): void {
-    this.isQuitting = true;
-    app.quit();
+  private saveMainWindowBoundsForQuit(): void {
+    if (this.savedBoundsForQuit) {
+      return;
+    }
+
+    this.savedBoundsForQuit = true;
+    this.saveMainWindowBoundsImmediate();
   }
 
   private shouldMinimizeToTray(): boolean {
@@ -324,21 +441,6 @@ class MainWindowService {
     } catch {
       return false;
     }
-  }
-
-  private resolveTrayIconPath(): string {
-    const platformIconPath =
-      process.platform === "darwin"
-        ? ["logo", "macos", "16x16.png"]
-        : process.platform === "linux"
-          ? ["logo", "linux", "icons", "32x32.png"]
-          : ["logo", "windows", "32x32.png"];
-
-    if (app.isPackaged && process.resourcesPath) {
-      return join(process.resourcesPath, ...platformIconPath);
-    }
-
-    return join(app.getAppPath(), "renderer", "assets", ...platformIconPath);
   }
 
   private async loadRenderer(window: BrowserWindow): Promise<void> {

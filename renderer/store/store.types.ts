@@ -88,6 +88,7 @@ export interface CapturePreviewSlice {
     getThumbnail: (sourceId: string) => Promise<string | null>;
     refresh: (options?: { force?: boolean }) => Promise<void>;
     select: (id: string) => void;
+    startListening: () => () => void;
   };
 }
 

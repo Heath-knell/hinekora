@@ -1,3 +1,4 @@
+import type { PoeProcessState } from "~/main/modules/poe-process/PoeProcess.dto";
 import { resolveCapturePreviewSourceId } from "~/renderer/modules/capture-preview/CapturePreview.utils/CapturePreview.utils";
 import { trackEvent } from "~/renderer/modules/umami";
 import type {
@@ -5,7 +6,10 @@ import type {
   CapturePreviewSlice,
 } from "~/renderer/store/store.types";
 
+import type { CapturePreviewSource, GameId } from "~/types";
+
 const MAX_CAPTURE_PREVIEW_THUMBNAILS = 16;
+const CAPTURE_SOURCE_REFRESH_RETRY_DELAY_MS = 2_500;
 
 function pruneCapturePreviewThumbnails(
   thumbnailsBySourceId: Record<string, string | null | undefined>,
@@ -31,6 +35,30 @@ function pruneCapturePreviewThumbnails(
   }
 }
 
+function shouldRetryCaptureSourceRefresh(
+  poeProcessState: PoeProcessState | null,
+  sources: CapturePreviewSource[],
+): boolean {
+  if (!poeProcessState?.isRunning || !poeProcessState.game) {
+    return false;
+  }
+
+  const runningGame = poeProcessState.game;
+
+  return !sources.some((source) => isCaptureSourceForGame(source, runningGame));
+}
+
+function isCaptureSourceForGame(
+  source: CapturePreviewSource,
+  game: GameId,
+): boolean {
+  if (source.kind !== "window") {
+    return false;
+  }
+
+  return source.game === game;
+}
+
 export const createCapturePreviewSlice: BoundStoreStateCreator<
   CapturePreviewSlice
 > = (set, get) => ({
@@ -42,6 +70,63 @@ export const createCapturePreviewSlice: BoundStoreStateCreator<
     error: null,
     hydrate: async () => {
       await get().capturePreview.refresh();
+    },
+    startListening: () => {
+      let retryTimer: number | null = null;
+      let requestVersion = 0;
+      const clearRetryTimer = () => {
+        if (retryTimer === null) {
+          return;
+        }
+
+        window.clearTimeout(retryTimer);
+        retryTimer = null;
+      };
+      const refreshAfterRequest = async (version: number) => {
+        await get().capturePreview.refresh({ force: true });
+        if (version !== requestVersion) {
+          return;
+        }
+
+        const store = get();
+        if (
+          !shouldRetryCaptureSourceRefresh(
+            store.poeProcess.state,
+            store.capturePreview.sources,
+          )
+        ) {
+          return;
+        }
+
+        retryTimer = window.setTimeout(() => {
+          retryTimer = null;
+          const nextStore = get();
+          if (
+            version !== requestVersion ||
+            !shouldRetryCaptureSourceRefresh(
+              nextStore.poeProcess.state,
+              nextStore.capturePreview.sources,
+            )
+          ) {
+            return;
+          }
+
+          void get().capturePreview.refresh({ force: true });
+        }, CAPTURE_SOURCE_REFRESH_RETRY_DELAY_MS);
+      };
+      const unsubscribe = window.electron.capturePreview.onRefreshRequested(
+        () => {
+          requestVersion += 1;
+          clearRetryTimer();
+          void refreshAfterRequest(requestVersion);
+        },
+      );
+
+      return () => {
+        requestVersion += 1;
+        clearRetryTimer();
+        unsubscribe();
+      };
     },
     refresh: async (options = {}) => {
       set((state) => {

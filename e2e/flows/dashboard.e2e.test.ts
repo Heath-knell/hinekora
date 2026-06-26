@@ -1,10 +1,117 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Locator, test } from "@playwright/test";
 
+import type { PoeProcessState } from "../../main/modules/poe-process/PoeProcess.dto";
+import type { CapturePreviewSource, GameId } from "../../types";
 import {
+  emitDashboardPoeProcessStart,
+  emitDashboardPoeProcessStop,
   expectNoUnexpectedDashboardBridgeCalls,
   getDashboardE2ECalls,
+  scheduleDashboardCaptureSources,
+  setDashboardCaptureSources,
   setupDashboardE2E,
 } from "../helpers/dashboard-fixture";
+
+const dashboardScreenSource: CapturePreviewSource = {
+  displayId: "1",
+  height: 1440,
+  id: "screen:1:0",
+  kind: "screen",
+  name: "Screen 1 (Display Model)",
+  thumbnailDataUrl: null,
+  width: 2560,
+};
+
+interface ProcessVariantCase {
+  game: GameId;
+  name: string;
+  processName: string;
+  source: CapturePreviewSource;
+}
+
+const processVariantCases: ProcessVariantCase[] = [
+  {
+    game: "poe1",
+    name: "Path of Exile 1 Steam",
+    processName: "PathOfExileSteam.exe",
+    source: {
+      displayId: null,
+      height: 1440,
+      id: "window:poe1-steam:1",
+      kind: "window",
+      game: "poe1",
+      name: "Path of Exile 1",
+      thumbnailDataUrl: null,
+      width: 2560,
+    },
+  },
+  {
+    game: "poe1",
+    name: "Path of Exile 1 standalone",
+    processName: "PathOfExile.exe",
+    source: {
+      displayId: null,
+      height: 1440,
+      id: "window:poe1-standalone:1",
+      kind: "window",
+      game: "poe1",
+      name: "Path of Exile 1",
+      thumbnailDataUrl: null,
+      width: 2560,
+    },
+  },
+  {
+    game: "poe2",
+    name: "Path of Exile 2 Steam",
+    processName: "PathOfExileSteam.exe",
+    source: {
+      displayId: null,
+      height: 1440,
+      id: "window:poe2-steam:1",
+      kind: "window",
+      game: "poe2",
+      name: "Path of Exile 2",
+      thumbnailDataUrl: null,
+      width: 2560,
+    },
+  },
+  {
+    game: "poe2",
+    name: "Path of Exile 2 standalone",
+    processName: "PathOfExile.exe",
+    source: {
+      displayId: null,
+      height: 1440,
+      id: "window:poe2-standalone:1",
+      kind: "window",
+      game: "poe2",
+      name: "Path of Exile 2",
+      thumbnailDataUrl: null,
+      width: 2560,
+    },
+  },
+];
+
+function createPoeProcessState(
+  input: Pick<ProcessVariantCase, "game" | "processName">,
+): PoeProcessState {
+  return {
+    game: input.game,
+    isRunning: true,
+    processName: input.processName,
+  };
+}
+
+async function openLivePreviewSourceSelect(sourceSelect: Locator) {
+  await sourceSelect.click();
+
+  return sourceSelect.locator("option").evaluateAll((options) =>
+    options.map((option) => ({
+      label: option.textContent?.trim() ?? "",
+      value: (option as HTMLOptionElement).value,
+    })),
+  );
+}
 
 test.afterEach(async ({ page }) => {
   await expectNoUnexpectedDashboardBridgeCalls(page);
@@ -73,6 +180,142 @@ test("prevents Live Preview refresh loops and covers source preview controls", a
   await expect(
     page.getByRole("button", { name: "Show Preview" }),
   ).toBeVisible();
+});
+
+test("updates appbar and live preview sources for PoE process variants", async ({
+  page,
+}) => {
+  await setupDashboardE2E(page);
+
+  const sourceSelect = page.getByRole("combobox", { name: /^Source$/ });
+  const poe1Button = page.getByRole("button", { name: /Path of Exile 1/ });
+  const poe2Button = page.getByRole("button", { name: /Path of Exile 2/ });
+
+  await setDashboardCaptureSources(page, [dashboardScreenSource]);
+  await emitDashboardPoeProcessStop(page);
+  await expect(poe1Button).toContainText("Offline");
+  await expect(poe2Button).toContainText("Offline");
+
+  for (const processVariant of processVariantCases) {
+    await setDashboardCaptureSources(page, [
+      dashboardScreenSource,
+      processVariant.source,
+    ]);
+    const callsBeforeStart = await getDashboardE2ECalls(page);
+    const requestCountBeforeStart =
+      callsBeforeStart.captureSourceRequests.length;
+
+    await emitDashboardPoeProcessStart(
+      page,
+      createPoeProcessState(processVariant),
+    );
+
+    await expect(
+      processVariant.game === "poe1" ? poe1Button : poe2Button,
+      `${processVariant.name} should mark the owning game as running`,
+    ).toContainText("Running");
+    await expect(
+      processVariant.game === "poe1" ? poe2Button : poe1Button,
+      `${processVariant.name} should not mark the other game as running`,
+    ).toContainText("Offline");
+    await expect
+      .poll(async () => {
+        const calls = await getDashboardE2ECalls(page);
+
+        return {
+          refreshed:
+            calls.captureSourceRequests.length > requestCountBeforeStart,
+          requestedForceRefresh: calls.captureSourceRequests.at(-1),
+        };
+      })
+      .toEqual({
+        refreshed: true,
+        requestedForceRefresh: true,
+      });
+    await expect
+      .poll(() => openLivePreviewSourceSelect(sourceSelect))
+      .toEqual([
+        {
+          label: dashboardScreenSource.name,
+          value: dashboardScreenSource.id,
+        },
+        {
+          label: processVariant.source.name,
+          value: processVariant.source.id,
+        },
+      ]);
+    await sourceSelect.selectOption(processVariant.source.id);
+    await expect(sourceSelect).toHaveValue(processVariant.source.id);
+
+    await setDashboardCaptureSources(page, [dashboardScreenSource]);
+    await emitDashboardPoeProcessStop(page);
+    await expect(poe1Button).toContainText("Offline");
+    await expect(poe2Button).toContainText("Offline");
+  }
+});
+
+test("retries live preview source refresh when the game window appears after process start", async ({
+  page,
+}) => {
+  await setupDashboardE2E(page);
+
+  const sourceSelect = page.getByRole("combobox", { name: /^Source$/ });
+  const poe2Button = page.getByRole("button", { name: /Path of Exile 2/ });
+  const poe2Source = processVariantCases.find(
+    (processVariant) => processVariant.name === "Path of Exile 2 Steam",
+  )?.source;
+  if (!poe2Source) {
+    throw new Error("PoE2 source fixture missing");
+  }
+
+  await setDashboardCaptureSources(page, [dashboardScreenSource]);
+  await emitDashboardPoeProcessStop(page);
+  await expect(poe2Button).toContainText("Offline");
+  const callsBeforeStart = await getDashboardE2ECalls(page);
+  const requestCountBeforeStart = callsBeforeStart.captureSourceRequests.length;
+  const responseCountBeforeStart =
+    callsBeforeStart.captureSourceResponses.length;
+
+  await scheduleDashboardCaptureSources(
+    page,
+    [dashboardScreenSource, poe2Source],
+    1_000,
+  );
+  await emitDashboardPoeProcessStart(
+    page,
+    createPoeProcessState({
+      game: "poe2",
+      processName: "PathOfExileSteam.exe",
+    }),
+  );
+
+  await expect(poe2Button).toContainText("Running");
+  await expect
+    .poll(async () => {
+      const calls = await getDashboardE2ECalls(page);
+
+      return calls.captureSourceResponses.slice(responseCountBeforeStart);
+    })
+    .toEqual([
+      [dashboardScreenSource.id],
+      [dashboardScreenSource.id, poe2Source.id],
+    ]);
+  const callsAfterRetry = await getDashboardE2ECalls(page);
+  expect(callsAfterRetry.captureSourceRequests).toHaveLength(
+    requestCountBeforeStart + 2,
+  );
+  await expect
+    .poll(() => openLivePreviewSourceSelect(sourceSelect))
+    .toEqual([
+      {
+        label: dashboardScreenSource.name,
+        value: dashboardScreenSource.id,
+      },
+      {
+        label: poe2Source.name,
+        value: poe2Source.id,
+      },
+    ]);
 });
 
 test("covers recorder mode, capture settings, and audio settings interactions", async ({

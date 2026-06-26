@@ -6,7 +6,11 @@ describe("GameStatusBadge utils", () => {
   it("matches process state against a specific game", () => {
     expect(
       isPoeProcessStateForGame(
-        { isRunning: true, processName: "PathOfExile2Steam.exe" },
+        {
+          game: "poe2",
+          isRunning: true,
+          processName: "PathOfExileSteam.exe",
+        },
         "poe2",
       ),
     ).toBe(true);

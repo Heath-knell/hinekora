@@ -1,5 +1,6 @@
 import { BrowserWindow, powerMonitor } from "electron";
 
+import { CapturePreviewChannel } from "~/main/modules/capture-preview/CapturePreview.channels";
 import { WindowName } from "~/main/modules/main-window/MainWindow.types";
 import { ManagedRecorderService } from "~/main/modules/managed-recorder";
 import { OverlayWindowsService } from "~/main/modules/overlay-windows";
@@ -21,6 +22,10 @@ const STOPPED_POE_PROCESS_STATE: PoeProcessState = {
   isRunning: false,
   processName: "",
 };
+
+interface PoeProcessRefreshOptions {
+  requestCapturePreviewRefresh?: boolean;
+}
 
 class PoeProcessService {
   private static instance: PoeProcessService | null = null;
@@ -63,7 +68,9 @@ class PoeProcessService {
     return this.currentState;
   }
 
-  async refreshState(): Promise<PoeProcessState> {
+  async refreshState(
+    options: PoeProcessRefreshOptions = {},
+  ): Promise<PoeProcessState> {
     if (this.systemSuspended) {
       return this.currentState;
     }
@@ -71,7 +78,10 @@ class PoeProcessService {
     try {
       const state = await this.poller.pollNow();
       if (this.hasProcessStateChanged(this.currentState, state)) {
-        this.handleStateChanged(PoeProcessChannel.GetState, state);
+        this.handleStateChanged(PoeProcessChannel.GetState, state, {
+          requestCapturePreviewRefresh:
+            options.requestCapturePreviewRefresh !== false,
+        });
       } else {
         this.syncGameRunningConsumers();
       }
@@ -109,6 +119,7 @@ class PoeProcessService {
       this.currentState = STOPPED_POE_PROCESS_STATE;
       this.syncGameRunningConsumers();
       this.sendToRenderer(PoeProcessChannel.Stop, STOPPED_POE_PROCESS_STATE);
+      this.requestCapturePreviewRefresh();
     });
 
     this.poller.on("data", (state: ProcessState) => {
@@ -151,6 +162,7 @@ class PoeProcessService {
       this.currentState = STOPPED_POE_PROCESS_STATE;
       this.syncGameRunningConsumers();
       this.sendToRenderer(PoeProcessChannel.Stop, STOPPED_POE_PROCESS_STATE);
+      this.requestCapturePreviewRefresh();
     });
 
     powerMonitor.on("resume", () => {
@@ -173,10 +185,14 @@ class PoeProcessService {
   private handleStateChanged(
     channel: PoeProcessChannel.Start | PoeProcessChannel.GetState,
     state: ProcessState,
+    options: PoeProcessRefreshOptions = {},
   ): void {
     this.currentState = state;
     this.syncGameRunningConsumers();
     this.sendToRenderer(channel, state);
+    if (options.requestCapturePreviewRefresh !== false) {
+      this.requestCapturePreviewRefresh();
+    }
   }
 
   private shouldHandlePollerEvent(): boolean {
@@ -197,6 +213,7 @@ class PoeProcessService {
   ): boolean {
     return (
       previous.isRunning !== current.isRunning ||
+      previous.game !== current.game ||
       previous.processName !== current.processName
     );
   }
@@ -213,14 +230,25 @@ class PoeProcessService {
       });
   }
 
-  private sendToRenderer(channel: PoeProcessChannel, data: unknown): void {
+  private requestCapturePreviewRefresh(): void {
+    this.sendToRenderer(CapturePreviewChannel.RefreshRequested);
+  }
+
+  private sendToRenderer(
+    channel: PoeProcessChannel | CapturePreviewChannel,
+    data?: unknown,
+  ): void {
     for (const window of BrowserWindow.getAllWindows()) {
       try {
         if (window.isDestroyed()) {
           continue;
         }
 
-        window.webContents.send(channel, data);
+        if (data === undefined) {
+          window.webContents.send(channel);
+        } else {
+          window.webContents.send(channel, data);
+        }
       } catch (error) {
         logWarn(POE_PROCESS_SCOPE, "Failed to send process state", {
           channel,

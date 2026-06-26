@@ -89,6 +89,7 @@ export const useBoundStore = create<BoundStore>()(
         startListeners: () => {
           const unsubscribers = [
             appMenuSlice.appMenu.startListening(),
+            capturePreviewSlice.capturePreview.startListening(),
             profilesSlice.profiles.startListening(),
             cropEditorSlice.cropEditor.startListening(),
             managedRecorderSlice.managedRecorder.startListening(),

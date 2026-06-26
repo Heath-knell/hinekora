@@ -2,7 +2,7 @@ import { desktopCapturer, screen } from "electron";
 
 import { WindowName } from "~/main/modules/main-window/MainWindow.types";
 import { PoeProcessService } from "~/main/modules/poe-process";
-import { isPoeProcessStateForGame } from "~/main/pollers";
+import { isPoeProcessStateForGame, type ProcessState } from "~/main/pollers";
 import { logWarn } from "~/main/utils/app-log";
 import {
   createDisplayDimensionsLookup,
@@ -31,6 +31,7 @@ const SOURCE_THUMBNAIL_CACHE_MS = 10_000;
 const SOURCE_THUMBNAIL_CACHE_MAX_ENTRIES = 16;
 const GAME_RUNNING_CACHE_MS = 1_500;
 const SLOW_SOURCE_LIST_MS = 250;
+const POE_GAMES = ["poe1", "poe2"] as const;
 
 interface CapturePreviewListSourcesOptions {
   forceRefresh?: boolean;
@@ -107,13 +108,18 @@ class CapturePreviewService {
         thumbnailSize: { width: 0, height: 0 },
       }),
       forceRefresh
-        ? poeProcessService.refreshState()
+        ? poeProcessService.refreshState({
+            requestCapturePreviewRefresh: false,
+          })
         : Promise.resolve(poeProcessService.getState()),
     ]);
 
     const sourceInputs = sources.slice(0, 64).map((source) => {
       const displayId = source.display_id || null;
-      const poeGame = detectPathOfExileWindowTitle(source.name);
+      const poeGame = detectCapturePreviewSourceGame(
+        source.name,
+        poeProcessState,
+      );
       const displayLabel = displayId
         ? (displayLabels.get(displayId) ?? null)
         : null;
@@ -126,6 +132,7 @@ class CapturePreviewService {
       return {
         id: source.id,
         name: source.name,
+        game: poeGame,
         displayId,
         displayLabel,
         width: dimensions?.width ?? null,
@@ -138,7 +145,7 @@ class CapturePreviewService {
         return true;
       }
 
-      const game = detectPathOfExileWindowTitle(source.name);
+      const game = source.game;
 
       return game !== null && isPoeProcessStateForGame(poeProcessState, game);
     });
@@ -252,7 +259,9 @@ class CapturePreviewService {
     const poeProcessService = PoeProcessService.getInstance();
     this.gameRunningRequest = (
       options.forceRefresh
-        ? poeProcessService.refreshState()
+        ? poeProcessService.refreshState({
+            requestCapturePreviewRefresh: false,
+          })
         : Promise.resolve(poeProcessService.getState())
     )
       .then(async (poeProcessState) => {
@@ -269,7 +278,10 @@ class CapturePreviewService {
         });
 
         for (const source of sources) {
-          const game = detectPathOfExileWindowTitle(source.name);
+          const game = detectCapturePreviewSourceGame(
+            source.name,
+            poeProcessState,
+          );
           if (game && isPoeProcessStateForGame(poeProcessState, game)) {
             runningGames.add(game);
           }
@@ -414,6 +426,46 @@ class CapturePreviewService {
       },
     );
   }
+}
+
+function detectCapturePreviewSourceGame(
+  sourceName: string,
+  poeProcessState: ProcessState,
+): GameId | null {
+  const titleGame = detectPathOfExileWindowTitle(sourceName);
+  if (titleGame) {
+    return titleGame;
+  }
+
+  if (
+    !poeProcessState.isRunning ||
+    !isMatchingPoeProcessSourceName(sourceName, poeProcessState.processName)
+  ) {
+    return null;
+  }
+
+  return (
+    POE_GAMES.find((game) => isPoeProcessStateForGame(poeProcessState, game)) ??
+    null
+  );
+}
+
+function isMatchingPoeProcessSourceName(
+  sourceName: string,
+  processName: string,
+): boolean {
+  const normalizedSourceName = normalizeProcessSourceName(sourceName);
+  const normalizedProcessName = normalizeProcessSourceName(processName);
+
+  return (
+    normalizedProcessName.length > 0 &&
+    (normalizedSourceName === normalizedProcessName ||
+      normalizedSourceName === `[${normalizedProcessName}]`)
+  );
+}
+
+function normalizeProcessSourceName(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 export { CapturePreviewService };

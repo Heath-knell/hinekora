@@ -19,6 +19,8 @@ describe("shared schemas", () => {
       appCloseBehavior: "exit",
       appLaunchOnStartup: false,
       appStartMinimized: false,
+      mainWindowBounds: null,
+      recorderOverlayBounds: null,
       installedGames: ["poe1"],
       recordingStoragePath: null,
       recordingOutputResolution: "native",
@@ -85,6 +87,30 @@ describe("shared schemas", () => {
       width: 2560,
       height: 1440,
       thumbnailDataUrl: "data:image/png;base64,abc",
+    });
+  });
+
+  it("accepts capture preview window game metadata", () => {
+    expect(
+      CapturePreviewSourceSchema.parse({
+        id: "window:poe:1",
+        name: "Path of Exile 2",
+        kind: "window",
+        game: "poe2",
+        displayId: null,
+        width: 2560,
+        height: 1440,
+        thumbnailDataUrl: null,
+      }),
+    ).toEqual({
+      id: "window:poe:1",
+      name: "Path of Exile 2",
+      kind: "window",
+      game: "poe2",
+      displayId: null,
+      width: 2560,
+      height: 1440,
+      thumbnailDataUrl: null,
     });
   });
 

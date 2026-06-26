@@ -1,4 +1,7 @@
+import type { GameId } from "~/types";
+
 interface PoeProcessState {
+  game?: GameId | null;
   isRunning: boolean;
   processName: string;
 }

@@ -44,7 +44,7 @@ describe("CapturePreview sources", () => {
         },
         {
           id: "window:poe2:3",
-          name: "Path of Exile 2",
+          name: "[PathOfExileSteam.exe]: Path of Exile 2",
           displayId: null,
           width: null,
           height: null,
@@ -52,7 +52,7 @@ describe("CapturePreview sources", () => {
         },
         {
           id: "window:poe2:4",
-          name: "Path of Exile 2",
+          name: "Path of Exile 2:POEWindowClass:PathOfExileSteam.exe",
           displayId: null,
           width: null,
           height: null,
@@ -114,6 +114,7 @@ describe("CapturePreview sources", () => {
         id: "window:poe1:2",
         name: "Path of Exile 1",
         kind: "window",
+        game: "poe1",
         displayId: null,
         width: null,
         height: null,
@@ -123,6 +124,7 @@ describe("CapturePreview sources", () => {
         id: "window:poe2:3",
         name: "Path of Exile 2",
         kind: "window",
+        game: "poe2",
         displayId: null,
         width: null,
         height: null,
@@ -131,9 +133,44 @@ describe("CapturePreview sources", () => {
     ]);
   });
 
-  it("detects only exact Path of Exile game window titles", () => {
+  it("uses caller-resolved game context for process-only source names", () => {
+    expect(
+      normalizeCapturePreviewSources([
+        {
+          id: "window:process:1",
+          name: "PathOfExileSteam.exe",
+          game: "poe2",
+          displayId: null,
+          width: 2560,
+          height: 1440,
+          thumbnailDataUrl: null,
+        },
+      ]),
+    ).toEqual([
+      {
+        id: "window:process:1",
+        name: "Path of Exile 2",
+        kind: "window",
+        game: "poe2",
+        displayId: null,
+        width: 2560,
+        height: 1440,
+        thumbnailDataUrl: null,
+      },
+    ]);
+  });
+
+  it("detects exact Path of Exile game window titles from Electron and OBS source names", () => {
     expect(detectPathOfExileWindowTitle("Path of Exile")).toBe("poe1");
     expect(detectPathOfExileWindowTitle("Path   of   Exile 2")).toBe("poe2");
+    expect(
+      detectPathOfExileWindowTitle("[PathOfExileSteam.exe]: Path of Exile 2"),
+    ).toBe("poe2");
+    expect(
+      detectPathOfExileWindowTitle(
+        "Path of Exile 2:POEWindowClass:PathOfExileSteam.exe",
+      ),
+    ).toBe("poe2");
     expect(detectPathOfExileWindowTitle("Path of Exile 2 - Chrome")).toBeNull();
     expect(detectPathOfExileWindowTitle("PathOfExileSteam.exe")).toBeNull();
   });

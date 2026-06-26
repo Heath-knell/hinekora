@@ -5,6 +5,7 @@ import type { CapturePreviewSource } from "~/types";
 interface CapturePreviewSourceInput {
   id: string;
   name: string;
+  game?: "poe1" | "poe2" | null;
   displayId: string | null;
   displayLabel?: string | null;
   width: number | null;
@@ -39,7 +40,7 @@ function normalizeCapturePreviewSources(
       ];
     }
 
-    const poeGame = detectPathOfExileWindowTitle(source.name);
+    const poeGame = source.game ?? detectPathOfExileWindowTitle(source.name);
     if (!poeGame) {
       return [];
     }
@@ -56,6 +57,7 @@ function normalizeCapturePreviewSources(
         id: source.id,
         name: label,
         kind: "window",
+        game: poeGame,
         displayId: null,
         width: source.width,
         height: source.height,

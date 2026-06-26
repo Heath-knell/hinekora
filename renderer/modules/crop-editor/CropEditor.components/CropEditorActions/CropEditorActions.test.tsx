@@ -120,6 +120,7 @@ describe("CropEditorActions", () => {
     storeMocks.usePoeProcessSelector.mockImplementation((selector) =>
       selector({
         state: {
+          game: "poe1",
           isRunning: true,
           processName: "PathOfExile.exe",
         },
@@ -206,6 +207,7 @@ describe("CropEditorActions", () => {
     storeMocks.usePoeProcessSelector.mockImplementation((selector) =>
       selector({
         state: {
+          game: "poe1",
           isRunning: true,
           processName: "PathOfExile.exe",
         },

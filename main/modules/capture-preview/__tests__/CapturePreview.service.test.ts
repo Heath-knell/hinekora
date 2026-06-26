@@ -38,11 +38,19 @@ vi.mock("electron", () => ({
 vi.mock("~/main/pollers", () => ({
   detectPoeProcessState: processMocks.detectPoeProcessState,
   isPoeProcessStateForGame: (
-    state: { isRunning: boolean; processName: string },
+    state: {
+      game?: "poe1" | "poe2" | null;
+      isRunning: boolean;
+      processName: string;
+    },
     game: "poe1" | "poe2",
   ) => {
     if (!state.isRunning) {
       return false;
+    }
+
+    if (state.game) {
+      return state.game === game;
     }
 
     const normalizedProcessName = state.processName.toLowerCase();
@@ -119,19 +127,21 @@ beforeEach(() => {
   electronMocks.getPrimaryDisplay.mockReturnValue(createDisplay(1, 1920, 1080));
   processMocks.detectPoeProcessState.mockImplementation(
     async (activeGame: "poe1" | "poe2" | null = null) => ({
+      game: activeGame ?? "poe2",
       isRunning: true,
       processName:
         activeGame === "poe1"
           ? "PathOfExile_x64Steam.exe"
-          : "PathOfExile2Steam.exe",
+          : "PathOfExileSteam.exe",
     }),
   );
   poeProcessMocks.getState.mockImplementation(() => ({
+    game: settingsStoreMocks.activeGame,
     isRunning: true,
     processName:
       settingsStoreMocks.activeGame === "poe1"
         ? "PathOfExile_x64Steam.exe"
-        : "PathOfExile2Steam.exe",
+        : "PathOfExileSteam.exe",
   }));
   poeProcessMocks.refreshState.mockImplementation(async () =>
     poeProcessMocks.getState(),
@@ -192,12 +202,12 @@ describe("CapturePreviewService", () => {
       }),
       createSource({
         id: "window:poe:3",
-        name: "Path of Exile 2",
+        name: "[PathOfExileSteam.exe]: Path of Exile 2",
         thumbnailDataUrl: null,
       }),
       createSource({
         id: "window:poe:4",
-        name: "Path of Exile 2",
+        name: "Path of Exile 2:POEWindowClass:PathOfExileSteam.exe",
         thumbnailDataUrl: null,
       }),
       createSource({
@@ -222,6 +232,7 @@ describe("CapturePreviewService", () => {
         id: "window:poe:3",
         name: "Path of Exile 2",
         kind: "window",
+        game: "poe2",
         displayId: null,
         width: 2880,
         height: 1620,
@@ -271,12 +282,18 @@ describe("CapturePreviewService", () => {
     ]);
   });
 
-  it("lists exact Path of Exile title matches when a game process is running", async () => {
+  it("lists Path of Exile window title matches when a game process is running", async () => {
     settingsStoreMocks.activeGame = "poe1";
     electronMocks.getAllDisplays.mockReturnValue([]);
     electronMocks.getSources.mockResolvedValue([
-      createSource({ id: "window:poe:1", name: "Path of Exile" }),
-      createSource({ id: "window:poe:2", name: "Path   of   Exile 2" }),
+      createSource({
+        id: "window:poe:1",
+        name: "[PathOfExileSteam.exe]: Path of Exile",
+      }),
+      createSource({
+        id: "window:poe:2",
+        name: "Path   of   Exile 2:POEWindowClass:PathOfExileSteam.exe",
+      }),
     ]);
     const service = new CapturePreviewService();
 
@@ -290,7 +307,7 @@ describe("CapturePreviewService", () => {
     expect(poeProcessMocks.getState).toHaveBeenCalled();
   });
 
-  it("rejects broad Path of Exile title matches", async () => {
+  it("uses the resolved process game for process-only capture source names", async () => {
     electronMocks.getAllDisplays.mockReturnValue([]);
     electronMocks.getSources.mockResolvedValue([
       createSource({
@@ -302,10 +319,36 @@ describe("CapturePreviewService", () => {
     ]);
     const service = new CapturePreviewService();
 
+    await expect(service.listSources()).resolves.toEqual([
+      {
+        id: "window:process:2",
+        name: "Path of Exile 2",
+        kind: "window",
+        game: "poe2",
+        displayId: null,
+        width: 1920,
+        height: 1080,
+        thumbnailDataUrl: null,
+      },
+    ]);
+  });
+
+  it("rejects broad Path of Exile title matches", async () => {
+    electronMocks.getAllDisplays.mockReturnValue([]);
+    electronMocks.getSources.mockResolvedValue([
+      createSource({
+        id: "window:chrome:1",
+        name: "Path of Exile 2 - Google Chrome",
+      }),
+      createSource({ id: "window:poe-short:2", name: "PoE 2" }),
+      createSource({ id: "window:other-process:3", name: "OtherGame.exe" }),
+    ]);
+    const service = new CapturePreviewService();
+
     await expect(service.listSources()).resolves.toEqual([]);
   });
 
-  it("filters exact Path of Exile title matches when no game process is running", async () => {
+  it("filters Path of Exile title matches when no game process is running", async () => {
     poeProcessMocks.getState.mockReturnValue({
       isRunning: false,
       processName: "",
@@ -313,7 +356,10 @@ describe("CapturePreviewService", () => {
     electronMocks.getAllDisplays.mockReturnValue([]);
     electronMocks.getSources.mockResolvedValue([
       createSource({ id: "screen:1:0", name: "Entire Screen" }),
-      createSource({ id: "window:steam:1", name: "Path of Exile 2" }),
+      createSource({
+        id: "window:steam:1",
+        name: "[PathOfExileSteam.exe]: Path of Exile 2",
+      }),
     ]);
     const service = new CapturePreviewService();
 
@@ -347,6 +393,9 @@ describe("CapturePreviewService", () => {
     await expect(service.listSources({ forceRefresh: true })).resolves.toEqual([
       expect.objectContaining({ id: "screen:2:0" }),
     ]);
+    expect(poeProcessMocks.refreshState).toHaveBeenCalledWith({
+      requestCapturePreviewRefresh: false,
+    });
     await expect(service.listSources()).resolves.toEqual([
       expect.objectContaining({ id: "screen:2:0" }),
     ]);
@@ -583,6 +632,9 @@ describe("CapturePreviewService", () => {
     await expect(
       service.isGameRunning("poe2", { forceRefresh: true }),
     ).resolves.toBe(false);
+    expect(poeProcessMocks.refreshState).toHaveBeenCalledWith({
+      requestCapturePreviewRefresh: false,
+    });
     expect(electronMocks.getSources).not.toHaveBeenCalled();
   });
 
@@ -649,6 +701,7 @@ describe("CapturePreviewService", () => {
     ).resolves.toEqual([
       {
         displayId: null,
+        game: "poe1",
         height: 1080,
         id: "window:poe:1",
         kind: "window",

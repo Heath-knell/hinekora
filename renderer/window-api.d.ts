@@ -106,6 +106,7 @@ declare global {
         listSources: (
           forceRefresh?: boolean,
         ) => Promise<CapturePreviewSource[]>;
+        onRefreshRequested: (callback: () => void) => () => void;
         sourceExists: (sourceId: string) => Promise<boolean>;
       };
       clientLog: {

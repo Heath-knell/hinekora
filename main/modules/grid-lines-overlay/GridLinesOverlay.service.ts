@@ -18,14 +18,12 @@ import {
 import type { CropRegionSelection } from "../overlay-windows/OverlayWindows.dto";
 
 const MIN_CROP_SIZE = 8;
-const CROP_SELECTION_FOCUS_RESTORE_DELAY_MS = 1_500;
 const GRID_LINES_OVERLAY_SCOPE = "grid-lines-overlay";
 const CROP_SELECTOR_OVERLAY_FOCUS_ID = "crop-selector-overlay";
 
 class GridLinesOverlayService {
   private cropSelectorWindow: BrowserWindow | null = null;
   private cropSelectionEscapeRegistered = false;
-  private cropSelectionFocusRestoreTimer: NodeJS.Timeout | null = null;
   private pendingCropSelection: {
     resolve: (selection: CropRegionSelection | null) => void;
   } | null = null;
@@ -63,7 +61,6 @@ class GridLinesOverlayService {
     );
     this.pendingCropSelection = null;
     this.closeWindow();
-    this.restorePoeFocusAfterSelection();
   }
 
   cancelCropRegionSelection(): void {
@@ -76,7 +73,6 @@ class GridLinesOverlayService {
     this.pendingCropSelection?.resolve(null);
     this.pendingCropSelection = null;
     this.unregisterCropSelectionShortcuts();
-    this.clearCropSelectionFocusRestoreTimer();
     this.coordinator.setOverlayFocusActive(
       CROP_SELECTOR_OVERLAY_FOCUS_ID,
       false,
@@ -88,28 +84,6 @@ class GridLinesOverlayService {
 
   setContentProtectionEnabled(enabled: boolean): void {
     applyGameOverlayContentProtection(this.cropSelectorWindow, enabled);
-  }
-
-  private restorePoeFocusAfterSelection(): void {
-    // The selector overlay can consume or delay the focus transition. Reassert
-    // once immediately, then once after the client-log poller can process the
-    // stale Lost focus line emitted when the selector opened.
-    this.coordinator.setPoeFocusActive(true);
-    this.clearCropSelectionFocusRestoreTimer();
-    this.cropSelectionFocusRestoreTimer = setTimeout(() => {
-      this.cropSelectionFocusRestoreTimer = null;
-      this.coordinator.setPoeFocusActive(true);
-    }, CROP_SELECTION_FOCUS_RESTORE_DELAY_MS);
-    this.cropSelectionFocusRestoreTimer.unref();
-  }
-
-  private clearCropSelectionFocusRestoreTimer(): void {
-    if (!this.cropSelectionFocusRestoreTimer) {
-      return;
-    }
-
-    clearTimeout(this.cropSelectionFocusRestoreTimer);
-    this.cropSelectionFocusRestoreTimer = null;
   }
 
   private async createWindow(): Promise<void> {
@@ -149,13 +123,6 @@ class GridLinesOverlayService {
       contentProtection: this.getContentProtectionEnabled(),
     });
     cropSelectorWindow.setFullScreenable(false);
-    cropSelectorWindow.on("blur", () => {
-      if (!this.pendingCropSelection) {
-        return;
-      }
-
-      this.cancelCropRegionSelection();
-    });
     cropSelectorWindow.on("closed", () => {
       unregisterIpcWindowRole(cropSelectorWebContents);
       logInfo(GRID_LINES_OVERLAY_SCOPE, "Crop selector overlay closed");

@@ -13,34 +13,23 @@ const POE_PROCESS_NAMES = [
   "PathOfExile.exe",
   "PathOfExile_x64Steam.exe",
   "PathOfExile_x64.exe",
-  "PathOfExile2Steam.exe",
-  "PathOfExile2.exe",
-  "PathOfExile2_x64Steam.exe",
-  "PathOfExile2_x64.exe",
 ] as const;
 
 const POE_PROCESS_POLL_INTERVAL_MS = 5_000;
 
-const POE_PROCESS_NAME_BY_WINDOW_GAME: Record<GameId, string> = {
-  poe1: "PathOfExile_x64Steam.exe",
-  poe2: "PathOfExile2Steam.exe",
-};
-
 function isPoeProcessStateForGame(state: ProcessState, game: GameId): boolean {
-  return (
-    state.isRunning && resolvePathOfExileProcessGame(state.processName) === game
-  );
-}
+  if (!state.isRunning) {
+    return false;
+  }
 
-function createPoeProcessStateForGame(game: GameId): ProcessState {
-  return {
-    isRunning: true,
-    processName: POE_PROCESS_NAME_BY_WINDOW_GAME[game],
-  };
+  return (
+    (state.game ?? resolvePathOfExileProcessGame(state.processName)) === game
+  );
 }
 
 interface RunningPoeProcessGame {
   game: GameId;
+  processName: string;
 }
 
 async function resolveRunningPoeProcessGames(
@@ -51,14 +40,14 @@ async function resolveRunningPoeProcessGames(
   for (const processName of processNames) {
     const game = resolvePathOfExileProcessGame(processName);
     if (game) {
-      runningGames.push({ game });
+      runningGames.push({ game, processName });
       continue;
     }
 
     for (const ambiguousGame of await resolveAmbiguousPoeProcessGames(
       processName,
     )) {
-      runningGames.push({ game: ambiguousGame });
+      runningGames.push({ game: ambiguousGame, processName });
     }
   }
 
@@ -95,16 +84,26 @@ async function detectPoeProcessState(
 
   const runningGames = await resolveRunningPoeProcessGames(processNames);
   const preferredGame = activeGame ?? fallbackGame;
-  if (
-    preferredGame &&
-    runningGames.some(({ game }) => game === preferredGame)
-  ) {
-    return createPoeProcessStateForGame(preferredGame);
+  if (preferredGame) {
+    const preferredRunningGame = runningGames.find(
+      ({ game }) => game === preferredGame,
+    );
+    if (preferredRunningGame) {
+      return {
+        game: preferredRunningGame.game,
+        isRunning: true,
+        processName: preferredRunningGame.processName,
+      };
+    }
   }
 
   const firstRunningGame = runningGames[0];
   if (firstRunningGame) {
-    return createPoeProcessStateForGame(firstRunningGame.game);
+    return {
+      game: firstRunningGame.game,
+      isRunning: true,
+      processName: firstRunningGame.processName,
+    };
   }
 
   return {
@@ -115,9 +114,7 @@ async function detectPoeProcessState(
 
 class PoeProcessPoller extends ProcessPoller {
   constructor(private readonly resolveFallbackGame?: () => GameId | null) {
-    super(POE_PROCESS_NAMES, POE_PROCESS_POLL_INTERVAL_MS, {
-      inactivePollsBeforeStop: 3,
-    });
+    super(POE_PROCESS_NAMES, POE_PROCESS_POLL_INTERVAL_MS);
   }
 
   protected override pollOnce(): Promise<ProcessState> {

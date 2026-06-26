@@ -28,7 +28,10 @@ const OVERLAY_WINDOWS_SCOPE = "overlay-windows";
 const ACTIVE_GAME_FOCUS_HANDOFF_ID = "active-game-focus-handoff";
 const ACTIVE_GAME_FOCUS_HANDOFF_GRACE_MS = 2_500;
 
-type ActiveGameFocusRestoreReason = "aura-locked" | "clip-preview-hidden";
+type ActiveGameFocusRestoreReason =
+  | "aura-locked"
+  | "clip-preview-hidden"
+  | "recorder-overlay-shown";
 type ActiveGameFocusHandoffEndReason =
   | "destroy"
   | "game-focused"
@@ -93,6 +96,7 @@ class OverlayWindowsService {
   }
 
   showRecorderOverlay(): Promise<void> {
+    this.startActiveGameFocusHandoff("recorder-overlay-shown");
     return this.recordingControlsOverlay.show();
   }
 
@@ -101,6 +105,10 @@ class OverlayWindowsService {
   }
 
   toggleRecorderOverlay(): Promise<void> {
+    if (!this.recordingControlsOverlay.isVisible()) {
+      this.startActiveGameFocusHandoff("recorder-overlay-shown");
+    }
+
     return this.recordingControlsOverlay.toggle();
   }
 
@@ -120,6 +128,8 @@ class OverlayWindowsService {
     if (active) {
       this.shouldAssumePoeFocusFromRunning = true;
       this.endActiveGameFocusHandoff("game-focused");
+    } else {
+      this.shouldAssumePoeFocusFromRunning = false;
     }
     this.coordinator.setPoeFocusActive(active);
   }

@@ -139,8 +139,8 @@ describe("ManagedRecorder utils", () => {
             name: "window",
             items: [
               {
-                name: "[PathOfExile2Steam.exe]: Path of Exile 2",
-                value: "Path of Exile 2:POEWindowClass:PathOfExile2Steam.exe",
+                name: "[PathOfExileSteam.exe]: Path of Exile 2",
+                value: "Path of Exile 2:POEWindowClass:PathOfExileSteam.exe",
               },
               {
                 name: "[PathOfExileSteam.exe]: Path of Exile",

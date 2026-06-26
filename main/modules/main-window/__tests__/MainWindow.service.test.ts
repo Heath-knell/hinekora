@@ -1,5 +1,3 @@
-import { join } from "node:path";
-
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { mockIpcMainHandlers } from "~/main/test/ipc";
@@ -15,18 +13,15 @@ const electronMocks = vi.hoisted(() => ({
   ) {
     return electronMocks.browserWindowFactory(options);
   }),
-  buildFromTemplate: vi.fn(
-    (template: Electron.MenuItemConstructorOptions[]) => template,
-  ),
-  getAppPath: vi.fn(() => "C:\\repo\\Hinekora"),
-  isPackaged: true,
   openExternal: vi.fn().mockResolvedValue(undefined),
   quit: vi.fn(),
   setApplicationMenu: vi.fn(),
-  trayFactory: vi.fn(),
-  Tray: vi.fn(function Tray(iconPath: string) {
-    return electronMocks.trayFactory(iconPath);
-  }),
+  getAllDisplays: vi.fn(() => [
+    {
+      workArea: { x: 0, y: 0, width: 1920, height: 1080 },
+    },
+  ]),
+  isPackaged: true,
 }));
 
 const updaterMocks = vi.hoisted(() => ({
@@ -39,12 +34,17 @@ const settingsStoreMocks = vi.hoisted(() => ({
   get: vi.fn(() => ({
     appCloseBehavior: "exit",
     appStartMinimized: false,
+    mainWindowBounds: null as Electron.Rectangle | null,
   })),
+  update: vi.fn(),
+}));
+const trayMocks = vi.hoisted(() => ({
+  createTray: vi.fn(),
+  destroyTray: vi.fn(),
 }));
 
 vi.mock("electron", () => ({
   app: {
-    getAppPath: electronMocks.getAppPath,
     get isPackaged() {
       return electronMocks.isPackaged;
     },
@@ -53,13 +53,14 @@ vi.mock("electron", () => ({
   },
   BrowserWindow: electronMocks.BrowserWindow,
   Menu: {
-    buildFromTemplate: electronMocks.buildFromTemplate,
     setApplicationMenu: electronMocks.setApplicationMenu,
+  },
+  screen: {
+    getAllDisplays: electronMocks.getAllDisplays,
   },
   shell: {
     openExternal: electronMocks.openExternal,
   },
-  Tray: electronMocks.Tray,
 }));
 
 vi.mock("~/main/modules/updater", () => ({
@@ -80,24 +81,15 @@ vi.mock("~/main/modules/settings-store", () => ({
   SettingsStoreService: {
     getInstance: () => ({
       get: settingsStoreMocks.get,
+      update: settingsStoreMocks.update,
     }),
   },
 }));
-
-class FakeTray {
-  contextMenu: Electron.MenuItemConstructorOptions[] | null = null;
-  clickListener: (() => void) | null = null;
-
-  on = vi.fn((event: string, listener: () => void) => {
-    if (event === "click") {
-      this.clickListener = listener;
-    }
-  });
-  setContextMenu = vi.fn((menu: Electron.MenuItemConstructorOptions[]) => {
-    this.contextMenu = menu;
-  });
-  setToolTip = vi.fn();
-}
+vi.mock("~/main/modules/tray", () => ({
+  TrayService: {
+    getInstance: () => trayMocks,
+  },
+}));
 
 class FakeWindow {
   destroyed = false;
@@ -111,6 +103,8 @@ class FakeWindow {
   blurListener: (() => void) | null = null;
   focusListener: (() => void) | null = null;
   readyListener: (() => void) | null = null;
+  movedListener: (() => void) | null = null;
+  resizedListener: (() => void) | null = null;
   windowOpenHandler: ((details: { url: string }) => { action: "deny" }) | null =
     null;
   beforeInputListener:
@@ -143,6 +137,7 @@ class FakeWindow {
     ),
   };
 
+  bounds: Electron.Rectangle = { x: 100, y: 100, width: 1200, height: 800 };
   close = vi.fn(() => {
     let prevented = false;
     this.closeListener?.({
@@ -160,6 +155,7 @@ class FakeWindow {
   hide = vi.fn(() => {
     this.hidden = true;
   });
+  getBounds = vi.fn(() => this.bounds);
   isDestroyed = vi.fn(() => this.destroyed);
   isMaximized = vi.fn(() => this.maximized);
   isMinimized = vi.fn(() => this.minimized);
@@ -177,6 +173,14 @@ class FakeWindow {
   restore = vi.fn(() => {
     this.minimized = false;
   });
+  removeListener = vi.fn((event: string, listener: () => void) => {
+    if (event === "moved" && this.movedListener === listener) {
+      this.movedListener = null;
+    }
+    if (event === "resized" && this.resizedListener === listener) {
+      this.resizedListener = null;
+    }
+  });
   on = vi.fn((event: string, listener: (...args: unknown[]) => void) => {
     if (event === "close") {
       this.closeListener = listener as (event: {
@@ -192,6 +196,12 @@ class FakeWindow {
     if (event === "blur") {
       this.blurListener = listener as () => void;
     }
+    if (event === "moved") {
+      this.movedListener = listener as () => void;
+    }
+    if (event === "resized") {
+      this.resizedListener = listener as () => void;
+    }
   });
   show = vi.fn(() => {
     this.shown = true;
@@ -204,21 +214,26 @@ class FakeWindow {
 afterEach(() => {
   electronMocks.appOn.mockReset();
   electronMocks.BrowserWindow.mockClear();
-  electronMocks.buildFromTemplate.mockClear();
   electronMocks.browserWindowFactory.mockReset();
-  electronMocks.getAppPath.mockReset();
-  electronMocks.getAppPath.mockReturnValue("C:\\repo\\Hinekora");
-  electronMocks.isPackaged = true;
   electronMocks.openExternal.mockClear();
   electronMocks.quit.mockClear();
   electronMocks.setApplicationMenu.mockClear();
-  electronMocks.Tray.mockClear();
-  electronMocks.trayFactory.mockReset();
+  electronMocks.getAllDisplays.mockReset();
+  electronMocks.getAllDisplays.mockReturnValue([
+    {
+      workArea: { x: 0, y: 0, width: 1920, height: 1080 },
+    },
+  ]);
+  electronMocks.isPackaged = true;
   settingsStoreMocks.get.mockReset();
   settingsStoreMocks.get.mockReturnValue({
     appCloseBehavior: "exit",
     appStartMinimized: false,
+    mainWindowBounds: null,
   });
+  settingsStoreMocks.update.mockReset();
+  trayMocks.createTray.mockClear();
+  trayMocks.destroyTray.mockClear();
   overlayMocks.setPoeFocusActive.mockClear();
   updaterMocks.initialize.mockClear();
   vi.unstubAllGlobals();
@@ -288,14 +303,185 @@ describe("MainWindowService", () => {
     expect(electronMocks.quit).toHaveBeenCalledTimes(1);
   });
 
-  it("hides to tray when close behavior is minimize to tray", async () => {
+  it("restores saved main window bounds when they overlap a current display", async () => {
     const fakeWindow = new FakeWindow();
-    const fakeTray = new FakeTray();
     electronMocks.browserWindowFactory.mockReturnValue(fakeWindow);
-    electronMocks.trayFactory.mockReturnValue(fakeTray);
+    settingsStoreMocks.get.mockReturnValue({
+      appCloseBehavior: "exit",
+      appStartMinimized: false,
+      mainWindowBounds: { x: 240, y: 120, width: 1400, height: 900 },
+    });
+    const service = new MainWindowService();
+
+    await service.createMainWindow();
+
+    expect(electronMocks.BrowserWindow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        x: 240,
+        y: 120,
+        width: 1400,
+        height: 900,
+      }),
+    );
+  });
+
+  it("falls back to default bounds when saved bounds are off-screen", async () => {
+    const fakeWindow = new FakeWindow();
+    electronMocks.browserWindowFactory.mockReturnValue(fakeWindow);
+    settingsStoreMocks.get.mockReturnValue({
+      appCloseBehavior: "exit",
+      appStartMinimized: false,
+      mainWindowBounds: { x: 5000, y: 5000, width: 1400, height: 900 },
+    });
+    const service = new MainWindowService();
+
+    await service.createMainWindow();
+
+    expect(electronMocks.BrowserWindow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        width: 1200,
+        height: 800,
+      }),
+    );
+    expect(electronMocks.BrowserWindow).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        x: expect.any(Number),
+        y: expect.any(Number),
+      }),
+    );
+  });
+
+  it("saves main window bounds on debounced move and resize events", async () => {
+    const fakeWindow = new FakeWindow();
+    electronMocks.browserWindowFactory.mockReturnValue(fakeWindow);
+    const service = new MainWindowService();
+
+    await service.createMainWindow();
+    fakeWindow.bounds = { x: 32, y: 48, width: 1280, height: 840 };
+
+    vi.useFakeTimers();
+    try {
+      fakeWindow.movedListener?.();
+      fakeWindow.bounds = { x: 48, y: 64, width: 1290, height: 850 };
+      fakeWindow.resizedListener?.();
+      vi.advanceTimersByTime(499);
+      expect(settingsStoreMocks.update).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(1);
+      expect(settingsStoreMocks.update).toHaveBeenLastCalledWith({
+        mainWindowBounds: { x: 48, y: 64, width: 1290, height: 850 },
+      });
+
+      settingsStoreMocks.update.mockClear();
+      fakeWindow.bounds = { x: 64, y: 96, width: 1300, height: 860 };
+      fakeWindow.resizedListener?.();
+      vi.advanceTimersByTime(500);
+
+      expect(settingsStoreMocks.update).toHaveBeenLastCalledWith({
+        mainWindowBounds: { x: 64, y: 96, width: 1300, height: 860 },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("clears pending bounds saves when the main window is closed", async () => {
+    const fakeWindow = new FakeWindow();
+    electronMocks.browserWindowFactory.mockReturnValue(fakeWindow);
+    const service = new MainWindowService();
+
+    await service.createMainWindow();
+
+    vi.useFakeTimers();
+    try {
+      fakeWindow.movedListener?.();
+      fakeWindow.closedListener?.();
+      vi.advanceTimersByTime(500);
+
+      expect(settingsStoreMocks.update).not.toHaveBeenCalled();
+      expect(fakeWindow.removeListener).toHaveBeenCalledWith(
+        "moved",
+        expect.any(Function),
+      );
+      expect(fakeWindow.removeListener).toHaveBeenCalledWith(
+        "resized",
+        expect.any(Function),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("tolerates bounds listener cleanup without a live window", () => {
+    const service = new MainWindowService();
+    const fakeWindow = new FakeWindow();
+    const internals = service as unknown as {
+      removeBoundsListeners(mainWindow: FakeWindow | null): void;
+    };
+
+    internals.removeBoundsListeners(null);
+
+    fakeWindow.destroyed = true;
+    internals.removeBoundsListeners(fakeWindow);
+
+    expect(fakeWindow.removeListener).not.toHaveBeenCalled();
+  });
+
+  it("saves bounds immediately before hiding to tray", async () => {
+    const fakeWindow = new FakeWindow();
+    fakeWindow.bounds = { x: 20, y: 30, width: 1250, height: 850 };
+    electronMocks.browserWindowFactory.mockReturnValue(fakeWindow);
     settingsStoreMocks.get.mockReturnValue({
       appCloseBehavior: "minimize-to-tray",
       appStartMinimized: false,
+      mainWindowBounds: null,
+    });
+    const service = new MainWindowService();
+
+    await service.createMainWindow();
+    fakeWindow.close();
+
+    expect(settingsStoreMocks.update).toHaveBeenLastCalledWith({
+      mainWindowBounds: { x: 20, y: 30, width: 1250, height: 850 },
+    });
+    expect(fakeWindow.hide).toHaveBeenCalled();
+  });
+
+  it("skips saving maximized main window bounds", async () => {
+    const fakeWindow = new FakeWindow();
+    fakeWindow.maximized = true;
+    electronMocks.browserWindowFactory.mockReturnValue(fakeWindow);
+    const service = new MainWindowService();
+
+    await service.createMainWindow();
+    fakeWindow.close();
+
+    expect(settingsStoreMocks.update).not.toHaveBeenCalled();
+  });
+
+  it("keeps closing when saving bounds fails", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const fakeWindow = new FakeWindow();
+    electronMocks.browserWindowFactory.mockReturnValue(fakeWindow);
+    settingsStoreMocks.update.mockImplementation(() => {
+      throw new Error("settings unavailable");
+    });
+    const service = new MainWindowService();
+
+    await service.createMainWindow();
+    fakeWindow.close();
+
+    expect(electronMocks.quit).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  it("hides to tray when close behavior is minimize to tray", async () => {
+    const fakeWindow = new FakeWindow();
+    electronMocks.browserWindowFactory.mockReturnValue(fakeWindow);
+    settingsStoreMocks.get.mockReturnValue({
+      appCloseBehavior: "minimize-to-tray",
+      appStartMinimized: false,
+      mainWindowBounds: null,
     });
     const service = new MainWindowService();
 
@@ -304,43 +490,51 @@ describe("MainWindowService", () => {
 
     expect(fakeWindow.hide).toHaveBeenCalled();
     expect(electronMocks.quit).not.toHaveBeenCalled();
-    expect(electronMocks.Tray).toHaveBeenCalledWith(
-      expect.stringContaining("logo"),
-    );
-    expect(fakeTray.setToolTip).toHaveBeenCalledWith("Hinekora");
-    expect(fakeTray.setContextMenu).toHaveBeenCalled();
+    expect(trayMocks.createTray).toHaveBeenCalled();
 
-    fakeTray.clickListener?.();
+    const trayActions = trayMocks.createTray.mock.calls.at(-1)?.[0];
+    trayActions?.showMainWindow();
     expect(fakeWindow.show).toHaveBeenCalled();
     expect(fakeWindow.focus).toHaveBeenCalled();
   });
 
-  it("supports tray menu actions and reuses an existing tray", async () => {
+  it("creates the tray with main window actions", async () => {
     const fakeWindow = new FakeWindow();
-    const fakeTray = new FakeTray();
     electronMocks.browserWindowFactory.mockReturnValue(fakeWindow);
-    electronMocks.trayFactory.mockReturnValue(fakeTray);
     const service = new MainWindowService();
-    const internals = service as unknown as {
-      ensureTray(): void;
-      showMainWindow(): void;
-    };
 
     await service.createMainWindow();
-    internals.ensureTray();
-    internals.ensureTray();
-    expect(electronMocks.Tray).toHaveBeenCalledTimes(1);
+    expect(trayMocks.createTray).toHaveBeenCalledTimes(1);
+
+    const trayActions = trayMocks.createTray.mock.calls[0]?.[0];
 
     fakeWindow.minimized = true;
-    internals.showMainWindow();
+    trayActions?.showMainWindow();
     expect(fakeWindow.restore).toHaveBeenCalled();
     expect(fakeWindow.show).toHaveBeenCalled();
     expect(fakeWindow.focus).toHaveBeenCalled();
 
-    (fakeTray.contextMenu?.[0]?.click as (() => void) | undefined)?.();
-    expect(fakeWindow.focus).toHaveBeenCalledTimes(2);
+    trayActions?.openDiscord();
+    expect(electronMocks.openExternal).toHaveBeenCalledWith(
+      "https://discord.gg/mrqmPYXHHT",
+    );
 
-    (fakeTray.contextMenu?.[1]?.click as (() => void) | undefined)?.();
+    trayActions?.openGitHub();
+    expect(electronMocks.openExternal).toHaveBeenCalledWith(
+      "https://github.com/navali-creations/hinekora",
+    );
+
+    fakeWindow.webContents.executeJavaScript.mockClear();
+    fakeWindow.show.mockClear();
+    fakeWindow.focus.mockClear();
+    await trayActions?.openHelp();
+    expect(fakeWindow.webContents.executeJavaScript).toHaveBeenCalledWith(
+      'globalThis.location.hash = "#/settings?tab=help"',
+    );
+    expect(fakeWindow.show).toHaveBeenCalled();
+    expect(fakeWindow.focus).toHaveBeenCalled();
+
+    trayActions?.quitApplication();
     expect(electronMocks.quit).toHaveBeenCalledTimes(1);
   });
 
@@ -376,12 +570,11 @@ describe("MainWindowService", () => {
 
   it("keeps the main window hidden on startup when start minimized is enabled", async () => {
     const fakeWindow = new FakeWindow();
-    const fakeTray = new FakeTray();
     electronMocks.browserWindowFactory.mockReturnValue(fakeWindow);
-    electronMocks.trayFactory.mockReturnValue(fakeTray);
     settingsStoreMocks.get.mockReturnValue({
       appCloseBehavior: "exit",
       appStartMinimized: true,
+      mainWindowBounds: null,
     });
     const service = new MainWindowService();
 
@@ -389,7 +582,7 @@ describe("MainWindowService", () => {
     fakeWindow.readyListener?.();
 
     expect(fakeWindow.show).not.toHaveBeenCalled();
-    expect(electronMocks.Tray).toHaveBeenCalled();
+    expect(trayMocks.createTray).toHaveBeenCalled();
   });
 
   it("starts minimized from the hidden launch argument and tolerates settings failures", () => {
@@ -422,48 +615,6 @@ describe("MainWindowService", () => {
 
     expect(service.getMainWindow()).toBeNull();
     expect(electronMocks.quit).toHaveBeenCalledTimes(1);
-  });
-
-  it("resolves tray icons for packaged and unpackaged platforms", () => {
-    const service = new MainWindowService();
-    const internals = service as unknown as {
-      resolveTrayIconPath(): string;
-    };
-    const originalPlatform = process.platform;
-    const originalResourcesPath = process.resourcesPath;
-
-    try {
-      Object.defineProperty(process, "platform", {
-        configurable: true,
-        value: "darwin",
-      });
-      Object.defineProperty(process, "resourcesPath", {
-        configurable: true,
-        value: "C:\\resources",
-      });
-      expect(internals.resolveTrayIconPath()).toContain(
-        join("logo", "macos", "16x16.png"),
-      );
-
-      Object.defineProperty(process, "platform", {
-        configurable: true,
-        value: "linux",
-      });
-      electronMocks.isPackaged = false;
-      expect(internals.resolveTrayIconPath()).toContain(
-        join("logo", "linux", "icons", "32x32.png"),
-      );
-    } finally {
-      Object.defineProperty(process, "platform", {
-        configurable: true,
-        value: originalPlatform,
-      });
-      Object.defineProperty(process, "resourcesPath", {
-        configurable: true,
-        value: originalResourcesPath,
-      });
-      electronMocks.isPackaged = true;
-    }
   });
 
   it("clears PoE focus when the main window receives focus", async () => {
@@ -502,6 +653,27 @@ describe("MainWindowService", () => {
     fakeWindow.closedListener?.();
 
     expect(electronMocks.quit).not.toHaveBeenCalled();
+    expect(trayMocks.destroyTray).toHaveBeenCalledTimes(1);
+  });
+
+  it("saves main window bounds once across repeated app before-quit events", async () => {
+    const fakeWindow = new FakeWindow();
+    fakeWindow.bounds = { x: 40, y: 60, width: 1280, height: 860 };
+    let beforeQuit = () => {};
+    electronMocks.browserWindowFactory.mockReturnValue(fakeWindow);
+    electronMocks.appOn.mockImplementation((_event, listener) => {
+      beforeQuit = listener;
+    });
+    const service = new MainWindowService();
+
+    await service.createMainWindow();
+    beforeQuit();
+    beforeQuit();
+
+    expect(settingsStoreMocks.update).toHaveBeenCalledTimes(1);
+    expect(settingsStoreMocks.update).toHaveBeenCalledWith({
+      mainWindowBounds: { x: 40, y: 60, width: 1280, height: 860 },
+    });
   });
 
   it("does not show a window destroyed before ready-to-show", async () => {
@@ -738,6 +910,19 @@ describe("MainWindowService", () => {
     fakeWindow.destroyed = true;
 
     await internals.navigateMainWindowToEditorClip(fakeWindow, "clip-1");
+
+    expect(fakeWindow.webContents.executeJavaScript).not.toHaveBeenCalled();
+  });
+
+  it("skips settings help navigation when the main window is destroyed", async () => {
+    const service = new MainWindowService();
+    const fakeWindow = new FakeWindow();
+    const internals = service as unknown as {
+      navigateMainWindowToSettingsHelp(mainWindow: FakeWindow): Promise<void>;
+    };
+    fakeWindow.destroyed = true;
+
+    await internals.navigateMainWindowToSettingsHelp(fakeWindow);
 
     expect(fakeWindow.webContents.executeJavaScript).not.toHaveBeenCalled();
   });

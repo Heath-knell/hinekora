@@ -24,6 +24,7 @@ export const CapturePreviewSourceSchema = z.object({
   id: z.string().min(1).max(512),
   name: z.string().min(1).max(512),
   kind: z.enum(["screen", "window"]),
+  game: GameIdSchema.nullable().optional(),
   displayId: z.string().max(128).nullable(),
   width: z.number().int().min(1).max(100_000).nullable().default(null),
   height: z.number().int().min(1).max(100_000).nullable().default(null),
@@ -196,6 +197,22 @@ export function normalizeRecordingEncoderChoice(
 export const AppCloseBehaviorSchema = z.enum(["exit", "minimize-to-tray"]);
 export type AppCloseBehavior = z.infer<typeof AppCloseBehaviorSchema>;
 
+export const MainWindowBoundsSchema = z.object({
+  x: z.number().int().min(-100_000).max(100_000),
+  y: z.number().int().min(-100_000).max(100_000),
+  width: z.number().int().min(1200).max(100_000),
+  height: z.number().int().min(800).max(100_000),
+});
+export type MainWindowBounds = z.infer<typeof MainWindowBoundsSchema>;
+
+export const RecorderOverlayBoundsSchema = z.object({
+  x: z.number().int().min(-100_000).max(100_000),
+  y: z.number().int().min(-100_000).max(100_000),
+  width: z.number().int().min(236).max(100_000),
+  height: z.number().int().min(42).max(100_000),
+});
+export type RecorderOverlayBounds = z.infer<typeof RecorderOverlayBoundsSchema>;
+
 export const AppSettingsSchema = z.object({
   setupCompleted: z.boolean().default(false),
   setupStep: AppSetupStepSchema.default(0),
@@ -203,6 +220,8 @@ export const AppSettingsSchema = z.object({
   appCloseBehavior: AppCloseBehaviorSchema.default("exit"),
   appLaunchOnStartup: z.boolean().default(false),
   appStartMinimized: z.boolean().default(false),
+  mainWindowBounds: MainWindowBoundsSchema.nullable().default(null),
+  recorderOverlayBounds: RecorderOverlayBoundsSchema.nullable().default(null),
   installedGames: z.array(GameIdSchema).min(1).max(2).default(["poe1"]),
   recordingStoragePath: z.string().max(2_048).nullable().default(null),
   recordingOutputResolution: z.string().min(1).max(32).default("native"),

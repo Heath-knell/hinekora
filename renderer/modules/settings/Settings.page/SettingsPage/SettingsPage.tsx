@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { PageContainer } from "~/renderer/components/PageContainer/PageContainer";
 import { PageContent } from "~/renderer/components/PageContent/PageContent";
@@ -28,11 +28,30 @@ const settingsCategories = [
   "Troubleshooting",
 ] as const;
 type SettingsCategory = (typeof settingsCategories)[number];
-const getSettingsCategorySlug = (category: SettingsCategory) =>
+const settingsCategoryBySlug = {
+  app: "App",
+  "data-storage": "Data & Storage",
+  game: "Game",
+  help: "Help",
+  privacy: "Privacy",
+  profiles: "Profiles",
+  troubleshooting: "Troubleshooting",
+} as const satisfies Record<string, SettingsCategory>;
+type SettingsCategorySlug = keyof typeof settingsCategoryBySlug;
+const getSettingsCategorySlug = (
+  category: SettingsCategory,
+): SettingsCategorySlug =>
   category
     .toLowerCase()
     .replace(/\s*&\s*/g, "-")
-    .replace(/\s+/g, "-");
+    .replace(/\s+/g, "-") as SettingsCategorySlug;
+function getSettingsCategoryFromSlug(slug: unknown): SettingsCategory | null {
+  if (typeof slug !== "string" || !(slug in settingsCategoryBySlug)) {
+    return null;
+  }
+
+  return settingsCategoryBySlug[slug as SettingsCategorySlug];
+}
 const settingsTabItems: TabsBoxItem<SettingsCategory>[] =
   settingsCategories.map((category) => {
     const categorySlug = getSettingsCategorySlug(category);
@@ -45,9 +64,26 @@ const settingsTabItems: TabsBoxItem<SettingsCategory>[] =
     };
   });
 
-function SettingsPage() {
+interface SettingsPageProps {
+  initialCategory?: SettingsCategory;
+  onCategoryChange?: (category: SettingsCategory) => void;
+}
+
+function SettingsPage({
+  initialCategory = "Game",
+  onCategoryChange,
+}: SettingsPageProps) {
   const [activeCategory, setActiveCategory] =
-    useState<SettingsCategory>("Game");
+    useState<SettingsCategory>(initialCategory);
+
+  useEffect(() => {
+    setActiveCategory(initialCategory);
+  }, [initialCategory]);
+
+  const handleCategoryChange = (category: SettingsCategory) => {
+    setActiveCategory(category);
+    onCategoryChange?.(category);
+  };
 
   return (
     <PageContainer>
@@ -64,7 +100,7 @@ function SettingsPage() {
           <TabsBoxTabs
             items={settingsTabItems}
             value={activeCategory}
-            onChange={setActiveCategory}
+            onChange={handleCategoryChange}
           />
           <div
             aria-labelledby={`settings-tab-${getSettingsCategorySlug(activeCategory)}`}
@@ -73,11 +109,11 @@ function SettingsPage() {
             role="tabpanel"
           >
             <div
-              className={clsx(
-                activeCategory === "Game"
-                  ? "grid gap-4"
-                  : "grid grid-cols-12 items-start gap-3",
-              )}
+              className={clsx({
+                "grid gap-4": activeCategory === "Game",
+                "grid grid-cols-12 items-start gap-3":
+                  activeCategory !== "Game",
+              })}
             >
               {activeCategory === "Game" && <GameLogSettingsCard />}
               {activeCategory === "App" && <AppSettingsCard />}
@@ -101,4 +137,5 @@ function SettingsPage() {
   );
 }
 
-export { SettingsPage };
+export type { SettingsCategory, SettingsCategorySlug };
+export { getSettingsCategoryFromSlug, getSettingsCategorySlug, SettingsPage };

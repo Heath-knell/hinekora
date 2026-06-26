@@ -9,8 +9,6 @@ import { createBoundStoreForTests } from "~/renderer/test/createBoundStoreForTes
 
 import { createPoeProcessSlice } from "./PoeProcess.slice";
 
-const refreshCapturePreview = vi.fn();
-
 function createTestStore() {
   return createBoundStoreForTests(
     (set, get, api) =>
@@ -20,10 +18,11 @@ function createTestStore() {
           error: null,
           hydrate: vi.fn(),
           isLoading: false,
-          refresh: refreshCapturePreview,
+          refresh: vi.fn(),
           select: vi.fn(),
           selectedSourceId: null,
           sources: [],
+          startListening: vi.fn(),
         },
       }) as unknown as BoundStore,
   );
@@ -51,10 +50,10 @@ describe("PoeProcess slice", () => {
     }
 
     getState.mockResolvedValue({
+      game: "poe2",
       isRunning: true,
-      processName: "PathOfExile2Steam.exe",
+      processName: "PathOfExileSteam.exe",
     });
-    refreshCapturePreview.mockResolvedValue(undefined);
 
     Object.defineProperty(window, "electron", {
       configurable: true,
@@ -88,30 +87,43 @@ describe("PoeProcess slice", () => {
     await store.getState().poeProcess.hydrate();
 
     expect(store.getState().poeProcess.state).toEqual({
+      game: "poe2",
       isRunning: true,
-      processName: "PathOfExile2Steam.exe",
+      processName: "PathOfExileSteam.exe",
     });
   });
 
-  it("refreshes capture sources only when process state changes", () => {
+  it("updates process state from main events", () => {
     const store = createTestStore();
     const unsubscribe = store.getState().poeProcess.startListening();
 
     listeners.state?.({
+      game: "poe2",
       isRunning: true,
-      processName: "PathOfExile2Steam.exe",
+      processName: "PathOfExileSteam.exe",
     });
     expect(store.getState().poeProcess.state).toEqual({
+      game: "poe2",
       isRunning: true,
-      processName: "PathOfExile2Steam.exe",
+      processName: "PathOfExileSteam.exe",
     });
-    expect(refreshCapturePreview).toHaveBeenCalledWith({ force: true });
 
     listeners.state?.({
+      game: "poe2",
       isRunning: true,
-      processName: "PathOfExile2Steam.exe",
+      processName: "PathOfExileSteam.exe",
     });
-    expect(refreshCapturePreview).toHaveBeenCalledTimes(1);
+
+    listeners.state?.({
+      game: "poe1",
+      isRunning: true,
+      processName: "PathOfExileSteam.exe",
+    });
+    expect(store.getState().poeProcess.state).toEqual({
+      game: "poe1",
+      isRunning: true,
+      processName: "PathOfExileSteam.exe",
+    });
 
     listeners.stop?.({
       isRunning: false,
@@ -121,7 +133,6 @@ describe("PoeProcess slice", () => {
       isRunning: false,
       processName: "",
     });
-    expect(refreshCapturePreview).toHaveBeenCalledTimes(2);
 
     listeners.error?.({ error: "process failed" });
     expect(store.getState().poeProcess.error).toBe("process failed");

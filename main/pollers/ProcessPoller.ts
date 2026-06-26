@@ -1,7 +1,9 @@
+import type { GameId } from "~/types";
 import { findRunningProcess } from "./isProcessRunning";
 import { Poller } from "./Poller";
 
 interface ProcessState {
+  game?: GameId | null;
   isRunning: boolean;
   processName: string;
 }
@@ -66,6 +68,7 @@ class ProcessPoller extends Poller<ProcessState> {
   ): boolean {
     return (
       previous?.isRunning !== current.isRunning ||
+      previous?.game !== current.game ||
       previous?.processName !== current.processName
     );
   }

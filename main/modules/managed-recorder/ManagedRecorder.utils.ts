@@ -531,30 +531,8 @@ function isMatchingPathOfExileWindowItem(
   game: "poe1" | "poe2",
 ): boolean {
   return [item.name, String(item.value)].some((value) => {
-    return detectPathOfExileWindowTitleFromObsProperty(value) === game;
+    return detectPathOfExileWindowTitle(value) === game;
   });
-}
-
-function detectPathOfExileWindowTitleFromObsProperty(
-  value: string,
-): "poe1" | "poe2" | null {
-  const normalized = value.trim().replace(/\s+/g, " ").toLowerCase();
-  const bracketTitle = /^\[[^\]]+\]:\s*(.+)$/.exec(normalized)?.[1] ?? null;
-  const candidates = [
-    normalized,
-    normalized.split(":")[0]!.trim(),
-    bracketTitle ?? "",
-    bracketTitle?.split(":")[0]?.trim() ?? "",
-  ];
-
-  for (const candidate of candidates) {
-    const game = detectPathOfExileWindowTitle(candidate);
-    if (game) {
-      return game;
-    }
-  }
-
-  return null;
 }
 
 function createCaptureTargetMatchTokens(target: CaptureTarget): string[] {

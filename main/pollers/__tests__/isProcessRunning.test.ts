@@ -110,12 +110,12 @@ describe("process detection", () => {
 
   it("lists and finds running Windows processes with one exact tasklist scan", async () => {
     const execFileRunner = createExecFileRunner(
-      '"steamwebhelper.exe","1"\r\n"PathOfExile2Steam.exe","2"',
+      '"steamwebhelper.exe","1"\r\n"Hinekora.exe","2"',
     );
 
     await expect(
       listRunningProcesses({ execFileRunner, platform: "win32" }),
-    ).resolves.toEqual(["steamwebhelper.exe", "PathOfExile2Steam.exe"]);
+    ).resolves.toEqual(["steamwebhelper.exe", "Hinekora.exe"]);
     expect(execFileRunner).toHaveBeenCalledWith(
       "tasklist",
       ["/FO", "CSV", "/NH"],
@@ -127,19 +127,19 @@ describe("process detection", () => {
       expect.any(Function),
     );
     await expect(
-      findRunningProcess(["PathOfExileSteam.exe", "PathOfExile2Steam.exe"], {
+      findRunningProcess(["PathOfExileSteam.exe", "Hinekora.exe"], {
         execFileRunner,
         platform: "win32",
       }),
-    ).resolves.toBe("PathOfExile2Steam.exe");
+    ).resolves.toBe("Hinekora.exe");
     await expect(
-      findRunningProcesses(["PathOfExileSteam.exe", "PathOfExile2Steam.exe"], {
+      findRunningProcesses(["PathOfExileSteam.exe", "Hinekora.exe"], {
         execFileRunner,
         platform: "win32",
       }),
-    ).resolves.toEqual(["PathOfExile2Steam.exe"]);
+    ).resolves.toEqual(["Hinekora.exe"]);
     await expect(
-      isProcessRunning("PathOfExile2Steam.exe", {
+      isProcessRunning("Hinekora.exe", {
         execFileRunner,
         platform: "win32",
       }),

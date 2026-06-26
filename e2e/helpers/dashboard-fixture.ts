@@ -34,6 +34,7 @@ interface DashboardE2ECalls {
   audioDeviceRequests: Array<ManagedRecorderListAudioDevicesOptions | null>;
   captureModeChanges: ManagedRecorderCaptureMode[];
   captureSourceRequests: boolean[];
+  captureSourceResponses: string[][];
   clientLogActiveGames: Array<{ game: "poe1" | "poe2" }>;
   duplicatePoeStateEmissions: number;
   getUserMediaConstraints: unknown[];
@@ -47,6 +48,12 @@ interface DashboardE2ECalls {
   stopBufferCount: number;
   stopRunRecordingCount: number;
   unexpectedBridgeCalls: string[];
+}
+
+interface DashboardE2EApi {
+  emitPoeProcessStart: (state: PoeProcessState) => void;
+  emitPoeProcessStop: (state?: PoeProcessState) => void;
+  setCaptureSources: (sources: CapturePreviewSource[]) => void;
 }
 
 interface DashboardE2EFixture {
@@ -99,6 +106,7 @@ function createDashboardE2EFixture(): DashboardE2EFixture {
       height: 1440,
       id: "window:poe2:1",
       kind: "window",
+      game: "poe2",
       name: "Path of Exile 2",
       thumbnailDataUrl: null,
       width: 2560,
@@ -177,8 +185,9 @@ function createDashboardE2EFixture(): DashboardE2EFixture {
     },
     now: dashboardE2ENow,
     poeProcessState: {
+      game: "poe2",
       isRunning: true,
-      processName: "PathOfExile2Steam.exe",
+      processName: "PathOfExileSteam.exe",
     },
     profile,
     recordingStorageUsage: {
@@ -231,10 +240,12 @@ async function setupDashboardE2E(page: Page) {
         [fixture.profile.id, clone(fixture.profile)],
       ]);
       const clientLogStatus = clone(fixture.clientLogStatus);
-      const poeProcessState = clone(fixture.poeProcessState);
+      let poeProcessState = clone(fixture.poeProcessState);
+      let captureSources = clone(fixture.sources);
       const listeners: {
         auraLock?: (locked: boolean) => void;
         captureMode?: (mode: ManagedRecorderCaptureMode) => void;
+        captureRefreshRequested?: () => void;
         poeError?: (error: { error: string }) => void;
         poeStart?: (state: PoeProcessState) => void;
         poeState?: (state: PoeProcessState) => void;
@@ -249,6 +260,7 @@ async function setupDashboardE2E(page: Page) {
         audioDeviceRequests: [],
         captureModeChanges: [],
         captureSourceRequests: [],
+        captureSourceResponses: [],
         clientLogActiveGames: [],
         duplicatePoeStateEmissions: 0,
         getUserMediaConstraints: [],
@@ -337,6 +349,9 @@ async function setupDashboardE2E(page: Page) {
           },
           listSources: async (forceRefresh?: boolean) => {
             calls.captureSourceRequests.push(forceRefresh === true);
+            calls.captureSourceResponses.push(
+              captureSources.map((source) => source.id),
+            );
             if (forceRefresh === true) {
               window.setTimeout(() => {
                 calls.duplicatePoeStateEmissions += 1;
@@ -344,10 +359,15 @@ async function setupDashboardE2E(page: Page) {
               }, 0);
             }
 
-            return clone(fixture.sources);
+            return clone(captureSources);
+          },
+          onRefreshRequested: (callback) => {
+            listeners.captureRefreshRequested = callback;
+
+            return unsubscribe;
           },
           sourceExists: async (sourceId: string) =>
-            fixture.sources.some((source) => source.id === sourceId),
+            captureSources.some((source) => source.id === sourceId),
         }),
         clientLog: createBridgeDomain<DashboardE2EElectron["clientLog"]>(
           "clientLog",
@@ -621,6 +641,30 @@ async function setupDashboardE2E(page: Page) {
           electron: DashboardE2EElectron;
         }
       ).electron = electron;
+      (
+        window as unknown as {
+          __HINEKORA_DASHBOARD_E2E_API__: DashboardE2EApi;
+        }
+      ).__HINEKORA_DASHBOARD_E2E_API__ = {
+        emitPoeProcessStart: (state) => {
+          poeProcessState = clone(state);
+          listeners.poeStart?.(clone(poeProcessState));
+          listeners.captureRefreshRequested?.();
+        },
+        emitPoeProcessStop: (state) => {
+          poeProcessState = clone(
+            state ?? {
+              isRunning: false,
+              processName: "",
+            },
+          );
+          listeners.poeStop?.(clone(poeProcessState));
+          listeners.captureRefreshRequested?.();
+        },
+        setCaptureSources: (sources) => {
+          captureSources = clone(sources);
+        },
+      };
     },
     {
       bridgeFactorySource: e2eBridgeDomainFactorySource,
@@ -645,6 +689,64 @@ async function getDashboardE2ECalls(page: Page): Promise<DashboardE2ECalls> {
   });
 }
 
+async function emitDashboardPoeProcessStart(
+  page: Page,
+  state: PoeProcessState,
+) {
+  await page.evaluate((nextState) => {
+    const e2eWindow = window as unknown as {
+      __HINEKORA_DASHBOARD_E2E_API__: DashboardE2EApi;
+    };
+
+    e2eWindow.__HINEKORA_DASHBOARD_E2E_API__.emitPoeProcessStart(nextState);
+  }, state);
+}
+
+async function emitDashboardPoeProcessStop(
+  page: Page,
+  state?: PoeProcessState,
+) {
+  await page.evaluate((nextState) => {
+    const e2eWindow = window as unknown as {
+      __HINEKORA_DASHBOARD_E2E_API__: DashboardE2EApi;
+    };
+
+    e2eWindow.__HINEKORA_DASHBOARD_E2E_API__.emitPoeProcessStop(nextState);
+  }, state);
+}
+
+async function setDashboardCaptureSources(
+  page: Page,
+  sources: CapturePreviewSource[],
+) {
+  await page.evaluate((nextSources) => {
+    const e2eWindow = window as unknown as {
+      __HINEKORA_DASHBOARD_E2E_API__: DashboardE2EApi;
+    };
+
+    e2eWindow.__HINEKORA_DASHBOARD_E2E_API__.setCaptureSources(nextSources);
+  }, sources);
+}
+
+async function scheduleDashboardCaptureSources(
+  page: Page,
+  sources: CapturePreviewSource[],
+  delayMs: number,
+) {
+  await page.evaluate(
+    ({ delay, nextSources }) => {
+      const e2eWindow = window as unknown as {
+        __HINEKORA_DASHBOARD_E2E_API__: DashboardE2EApi;
+      };
+
+      window.setTimeout(() => {
+        e2eWindow.__HINEKORA_DASHBOARD_E2E_API__.setCaptureSources(nextSources);
+      }, delay);
+    },
+    { delay: delayMs, nextSources: sources },
+  );
+}
+
 async function expectNoUnexpectedDashboardBridgeCalls(page: Page) {
   const unexpectedBridgeCalls = await page.evaluate(() => {
     const e2eWindow = window as unknown as {
@@ -658,7 +760,11 @@ async function expectNoUnexpectedDashboardBridgeCalls(page: Page) {
 }
 
 export {
+  emitDashboardPoeProcessStart,
+  emitDashboardPoeProcessStop,
   expectNoUnexpectedDashboardBridgeCalls,
   getDashboardE2ECalls,
+  scheduleDashboardCaptureSources,
+  setDashboardCaptureSources,
   setupDashboardE2E,
 };

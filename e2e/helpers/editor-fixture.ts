@@ -381,7 +381,9 @@ async function setupEditorE2E(page: Page) {
         ),
         capturePreview: createBridgeDomain<EditorE2EElectron["capturePreview"]>(
           "capturePreview",
-          {},
+          {
+            onRefreshRequested: () => unsubscribe,
+          },
         ),
         clientLog: createBridgeDomain<EditorE2EElectron["clientLog"]>(
           "clientLog",

@@ -134,14 +134,12 @@ describe("ManagedRecorder slice", () => {
 
     expect(store.getState().managedRecorder.status).toBe(statuses.buffer);
     expect(store.getState().managedRecorder.captureMode).toBe("session");
-    expect(store.getState().capturePreview.refresh).toHaveBeenCalledWith({
-      force: true,
-    });
+    expect(store.getState().capturePreview.refresh).not.toHaveBeenCalled();
     expect(unsubscribe).toHaveBeenCalled();
     expect(unsubscribeCaptureMode).toHaveBeenCalled();
   });
 
-  it("refreshes capture sources only when the game becomes running", () => {
+  it("leaves capture source refreshes to the process listener", () => {
     const store = createTestStore();
     store.getState().managedRecorder.startListening();
 
@@ -149,9 +147,6 @@ describe("ManagedRecorder slice", () => {
     statusChangedListener?.(createStatus({ gameRunning: true }));
     statusChangedListener?.(createStatus({ gameRunning: true }));
 
-    expect(store.getState().capturePreview.refresh).toHaveBeenCalledTimes(1);
-    expect(store.getState().capturePreview.refresh).toHaveBeenCalledWith({
-      force: true,
-    });
+    expect(store.getState().capturePreview.refresh).not.toHaveBeenCalled();
   });
 });
