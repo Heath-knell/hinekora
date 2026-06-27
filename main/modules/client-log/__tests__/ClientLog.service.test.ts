@@ -122,6 +122,47 @@ describe("ClientLogService", () => {
     expect(unwatchFile).toHaveBeenCalledWith(path);
   });
 
+  it("keeps character names synced from settings changes", () => {
+    const onDidChange = vi.fn(
+      (
+        _listener: (settings: ReturnType<typeof createDefaultSettings>) => void,
+      ) => vi.fn(),
+    );
+    vi.spyOn(SettingsStoreService, "getInstance").mockReturnValue({
+      get: () => ({
+        ...createDefaultSettings(),
+        activeGame: "poe1",
+        poe1CharacterName: "OldCharacter",
+      }),
+      onDidChange,
+    } as unknown as SettingsStoreService);
+    const service = new ClientLogService();
+    const internals = service as unknown as {
+      characterNames: Record<"poe1" | "poe2", string>;
+    };
+
+    service.initializeFromSettings();
+
+    expect(onDidChange).toHaveBeenCalledTimes(1);
+    expect(internals.characterNames.poe1).toBe("OldCharacter");
+
+    service.initializeFromSettings();
+
+    expect(onDidChange).toHaveBeenCalledTimes(1);
+
+    const emitSettingsChange = onDidChange.mock.calls[0]?.[0];
+    if (!emitSettingsChange) {
+      throw new Error("Expected settings change listener to be registered");
+    }
+
+    emitSettingsChange({
+      ...createDefaultSettings(),
+      poe1CharacterName: "NewCharacter",
+    });
+
+    expect(internals.characterNames.poe1).toBe("NewCharacter");
+  });
+
   it("leaves the watcher idle when initialized settings have no path", () => {
     vi.spyOn(SettingsStoreService, "getInstance").mockReturnValue({
       get: () => ({
@@ -965,7 +1006,22 @@ describe("ClientLogService", () => {
     expect(internals.getCurrentLogFileSize()).toBe(0);
 
     internals.fd = 1;
-    const readSync = vi.spyOn(fs, "readSync").mockImplementation(() => {
+    let readSync = vi.spyOn(fs, "readSync").mockReturnValue(0);
+
+    expect(internals.readLatestFocusStateFromRecentFileTail(path)).toBeNull();
+
+    readSync.mockRestore();
+    readSync = vi.spyOn(fs, "readSync").mockImplementation((...args) => {
+      const buffer = args[1] as Buffer;
+      buffer.write("x");
+
+      return 1;
+    });
+
+    expect(internals.readLatestFocusStateFromRecentFileTail(path)).toBeNull();
+
+    readSync.mockRestore();
+    readSync = vi.spyOn(fs, "readSync").mockImplementation(() => {
       throw new Error("read failed");
     });
 

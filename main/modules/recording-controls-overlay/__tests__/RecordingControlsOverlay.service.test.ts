@@ -505,6 +505,35 @@ describe("RecordingControlsOverlayService", () => {
     );
   });
 
+  it("logs overlay-suppressed when recorder overlay display is blocked", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const recorderWindow = createFakeWindow();
+    electronMocks.browserWindowFactory.mockReturnValue(recorderWindow);
+    const coordinator = new GameOverlayCoordinator();
+    let recorderAllowed = true;
+    const service = new RecordingControlsOverlayService(
+      coordinator,
+      undefined,
+      () => recorderAllowed,
+    );
+    coordinator.setGameRunningActive(true);
+    coordinator.setPoeFocusActive(true);
+
+    await service.show();
+    info.mockClear();
+    recorderAllowed = false;
+
+    await service.show();
+
+    expect(info).toHaveBeenCalledWith(
+      expect.stringContaining("Recorder overlay hidden"),
+      expect.objectContaining({
+        mode: "expanded",
+        reason: "overlay-suppressed",
+      }),
+    );
+  });
+
   it("handles requested focus-gate suspension without a live recorder window", async () => {
     const recorderWindow = createFakeWindow();
     electronMocks.browserWindowFactory.mockReturnValue(recorderWindow);

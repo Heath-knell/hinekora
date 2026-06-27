@@ -2077,10 +2077,7 @@ class ManagedRecorderService {
   }
 }
 
-export {
-  describeNoobsRuntimeLocation,
-  ManagedRecorderService,
-};
+export { describeNoobsRuntimeLocation, ManagedRecorderService };
 
 function describeNoobsRuntimeLocation(path: string): string {
   const normalized = normalize(path).replaceAll("\\", "/");

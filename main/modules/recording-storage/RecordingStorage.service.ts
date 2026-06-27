@@ -902,9 +902,7 @@ class RecordingStorageService {
           durationChanged
         ) {
           this.repository.updateFileState(file.path, {
-            durationSeconds:
-              recoveredDurationSeconds ??
-              (fileChanged ? null : existing.durationSeconds),
+            durationSeconds: recoveredDurationSeconds,
             exists: true,
             mtimeMs: file.mtimeMs,
             sizeBytes: file.size,

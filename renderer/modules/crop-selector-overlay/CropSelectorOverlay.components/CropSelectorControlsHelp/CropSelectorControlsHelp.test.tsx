@@ -33,8 +33,8 @@ describe("CropSelectorControlsHelp", () => {
     expect(container.textContent).toContain("ward");
     expect(container.querySelector(".kbd")).toBeInstanceOf(HTMLElement);
     expect(container.querySelectorAll("svg")).toHaveLength(3);
-    expect(container.querySelector("[aria-hidden='true']")?.className).toContain(
-      "text-primary",
-    );
+    expect(
+      container.querySelector("[aria-hidden='true']")?.className,
+    ).toContain("text-primary");
   });
 });

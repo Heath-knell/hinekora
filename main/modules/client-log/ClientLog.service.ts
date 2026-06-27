@@ -478,7 +478,13 @@ class ClientLogService extends EventEmitter {
         );
         const position = endPosition - bytesToRead;
         const buffer = Buffer.allocUnsafe(bytesToRead);
-        const bytesRead = fs.readSync(this.fd, buffer, 0, bytesToRead, position);
+        const bytesRead = fs.readSync(
+          this.fd,
+          buffer,
+          0,
+          bytesToRead,
+          position,
+        );
         if (bytesRead <= 0) {
           return null;
         }
