@@ -2,6 +2,7 @@ import { expect, type Page } from "@playwright/test";
 
 import type {
   CropRegionSelection,
+  CropRegionSelectionShape,
   SelectCropRegionOptions,
 } from "../../main/modules/overlay-windows/OverlayWindows.dto";
 import {
@@ -27,7 +28,7 @@ interface AuraOverlayE2EFixture {
   captureSources: CapturePreviewSource[];
   now: string;
   profile: Profile;
-  selection: CropRegionSelection;
+  selections: Record<CropRegionSelectionShape, CropRegionSelection>;
   settings: AppSettings;
 }
 
@@ -117,23 +118,47 @@ function createAuraOverlayE2EFixture(
     ],
     now: auraOverlayE2ENow,
     profile: createAuraOverlayE2EProfile(options),
-    selection: {
+    selections: {
       arc: {
-        controlX: 110,
-        controlY: 20,
-        endX: 200,
-        endY: 160,
-        startX: 20,
-        startY: 160,
-        thickness: 20,
+        arc: {
+          controlX: 110,
+          controlY: 20,
+          endX: 200,
+          endY: 160,
+          startX: 20,
+          startY: 160,
+          thickness: 20,
+        },
+        height: 180,
+        shape: "arc",
+        viewportHeight: 1080,
+        viewportWidth: 1920,
+        width: 220,
+        x: 100,
+        y: 120,
       },
-      height: 180,
-      shape: "arc",
-      viewportHeight: 1080,
-      viewportWidth: 1920,
-      width: 220,
-      x: 100,
-      y: 120,
+      points: {
+        height: 140,
+        points: [
+          { x: 24, y: 18 },
+          { x: 72, y: 72 },
+          { x: 24, y: 122 },
+        ],
+        shape: "points",
+        viewportHeight: 1080,
+        viewportWidth: 1920,
+        width: 96,
+        x: 320,
+        y: 260,
+      },
+      rect: {
+        height: 80,
+        viewportHeight: 1080,
+        viewportWidth: 1920,
+        width: 120,
+        x: 180,
+        y: 140,
+      },
     },
     settings: {
       ...createDefaultSettings(),
@@ -176,7 +201,7 @@ async function setupAuraOverlayE2E(
       const listeners: {
         auraAdd?: (request: {
           requestId: string;
-          shape?: "rect" | "arc";
+          shape?: "rect" | "arc" | "points";
         }) => void;
         auraLock?: (locked: boolean) => void;
         profilesChanged?: (profiles: Profile[]) => void;
@@ -235,7 +260,7 @@ async function setupAuraOverlayE2E(
           selectCropRegion: async (options) => {
             calls.selectCropRegionCalls.push(clone(options ?? {}));
 
-            return clone(fixture.selection);
+            return clone(fixture.selections[options?.shape ?? "rect"]);
           },
           setAuraLocked: async (locked) => {
             listeners.auraLock?.(locked);

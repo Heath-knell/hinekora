@@ -8,6 +8,7 @@ import {
 import styles from "../AuraOverlayPlacement/AuraOverlayPlacement.module.css";
 
 interface AuraOverlayResizeHandlesProps {
+  compact?: boolean;
   placementId: string;
   onPointerCancel: PointerEventHandler<HTMLElement>;
   onPointerDown: PointerEventHandler<HTMLElement>;
@@ -23,6 +24,7 @@ const auraResizeCornerClassNames: Record<AuraResizeCorner, string> = {
 };
 
 function AuraOverlayResizeHandles({
+  compact = false,
   placementId,
   onPointerCancel,
   onPointerDown,
@@ -36,6 +38,7 @@ function AuraOverlayResizeHandles({
           aria-hidden="true"
           className={clsx(
             styles.resizeHandle,
+            compact && styles.resizeHandleCompact,
             auraResizeCornerClassNames[corner],
           )}
           data-corner={corner}

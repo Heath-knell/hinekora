@@ -725,7 +725,10 @@ describe("AuraOverlayPage", () => {
       viewportHeight: 1080,
     });
     let handleAuraAddRequested:
-      | ((request: { requestId: string; shape?: "rect" | "arc" }) => void)
+      | ((request: {
+          requestId: string;
+          shape?: "rect" | "arc" | "points";
+        }) => void)
       | null = null;
     electronMocks.onAuraAddRequested.mockImplementation((callback) => {
       handleAuraAddRequested = callback;

@@ -122,11 +122,11 @@ function useAuraOverlayAddAuraSelection({
 }
 
 function readRouteAddAuraShape(): CropRegionSelectionShape {
-  return new URLSearchParams(window.location.hash.split("?")[1] ?? "").get(
-    "addAuraShape",
-  ) === "arc"
-    ? "arc"
-    : "rect";
+  const shape = new URLSearchParams(
+    window.location.hash.split("?")[1] ?? "",
+  ).get("addAuraShape");
+
+  return shape === "arc" || shape === "points" ? shape : "rect";
 }
 
 export { useAuraOverlayAddAuraSelection };

@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   createArcCropSelection,
+  createArcSelectionBoundaryPaths,
   createCropSelection,
+  createPointCropSelection,
+  createSvgPointPath,
   isUsableCropSelection,
+  readCropSelectorShape,
 } from "./CropSelectorOverlay.utils";
 
 describe("CropSelectorOverlay utils", () => {
@@ -48,5 +52,55 @@ describe("CropSelectorOverlay utils", () => {
         thickness: 20,
       },
     });
+  });
+
+  it("creates dashed boundary path geometry around an arc preview", () => {
+    expect(
+      createArcSelectionBoundaryPaths([
+        { x: 10, y: 20 },
+        { x: 30, y: 20 },
+      ]),
+    ).toEqual({
+      inner: "M 10 10 L 30 10",
+      outer: "M 10 30 L 30 30",
+    });
+  });
+
+  it("creates a pointer selection from clicked point centers", () => {
+    expect(
+      createPointCropSelection([
+        { x: 100, y: 160 },
+        { x: 130, y: 220 },
+      ]),
+    ).toEqual({
+      shape: "points",
+      x: 90,
+      y: 150,
+      width: 50,
+      height: 80,
+      points: [
+        { x: 10, y: 10 },
+        { x: 40, y: 70 },
+      ],
+    });
+  });
+
+  it("creates an SVG path from ordered points", () => {
+    expect(
+      createSvgPointPath([
+        { x: 10, y: 20 },
+        { x: 30, y: 40 },
+        { x: 50, y: 60 },
+      ]),
+    ).toBe("M 10 20 L 30 40 L 50 60");
+  });
+
+  it("reads pointer selector mode from the route hash", () => {
+    expect(readCropSelectorShape("#/crop-selector-overlay?shape=points")).toBe(
+      "points",
+    );
+    expect(readCropSelectorShape("#/crop-selector-overlay?shape=bad")).toBe(
+      "rect",
+    );
   });
 });

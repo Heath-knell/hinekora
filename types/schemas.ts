@@ -48,6 +48,30 @@ export const CropRegionArcSchema = z.object({
 });
 export type CropRegionArc = z.infer<typeof CropRegionArcSchema>;
 
+export const CropRegionPointSchema = z.object({
+  x: z.number().int().min(0).max(100_000),
+  y: z.number().int().min(0).max(100_000),
+});
+export type CropRegionPoint = z.infer<typeof CropRegionPointSchema>;
+
+export const AuraPointPlacementSettings = {
+  defaultGap: 20,
+  defaultSampleSize: 20,
+  maxGap: 1_000,
+  maxPoints: 6,
+  maxSampleSize: 1_000,
+  minGap: 0,
+  minSampleSize: 20,
+} as const;
+
+export const AuraPlacementScaleSettings = {
+  maxScale: 8,
+  minPersistedScale: 0.1,
+  minScale: 1,
+} as const;
+
+const minimumPersistedPointSampleSize = 1;
+
 export const CropRegionSchema = z
   .object({
     id: z.string().min(1).max(128),
@@ -56,8 +80,13 @@ export const CropRegionSchema = z
     y: z.number().int().min(0).max(100_000),
     width: z.number().int().min(1).max(100_000),
     height: z.number().int().min(1).max(100_000),
-    shape: z.enum(["rect", "arc"]).optional(),
+    shape: z.enum(["rect", "arc", "points"]).optional(),
     arc: CropRegionArcSchema.optional(),
+    points: z
+      .array(CropRegionPointSchema)
+      .min(1)
+      .max(AuraPointPlacementSettings.maxPoints)
+      .optional(),
     ...CoordinateReferenceSchema,
   })
   .superRefine((region, context) => {
@@ -67,6 +96,68 @@ export const CropRegionSchema = z
         message: "Arched crop regions require arc metadata.",
         path: ["arc"],
       });
+    }
+
+    if (region.shape === "arc" && region.arc) {
+      for (const check of [
+        {
+          max: region.width,
+          path: ["arc", "startX"],
+          value: region.arc.startX,
+        },
+        {
+          max: region.height,
+          path: ["arc", "startY"],
+          value: region.arc.startY,
+        },
+        { max: region.width, path: ["arc", "endX"], value: region.arc.endX },
+        { max: region.height, path: ["arc", "endY"], value: region.arc.endY },
+        {
+          max: region.width,
+          path: ["arc", "controlX"],
+          value: region.arc.controlX,
+        },
+        {
+          max: region.height,
+          path: ["arc", "controlY"],
+          value: region.arc.controlY,
+        },
+      ]) {
+        if (check.value > check.max) {
+          context.addIssue({
+            code: "custom",
+            message: "Arc coordinates must stay within crop bounds.",
+            path: check.path,
+          });
+        }
+      }
+    }
+
+    if (region.shape === "points" && !region.points) {
+      context.addIssue({
+        code: "custom",
+        message: "Pointer crop regions require point metadata.",
+        path: ["points"],
+      });
+    }
+
+    if (region.shape === "points" && region.points) {
+      for (const [index, point] of region.points.entries()) {
+        if (point.x > region.width) {
+          context.addIssue({
+            code: "custom",
+            message: "Pointer coordinates must stay within crop bounds.",
+            path: ["points", index, "x"],
+          });
+        }
+        if (point.y > region.height) {
+          context.addIssue({
+            code: "custom",
+            message: "Pointer coordinates must stay within crop bounds.",
+            path: ["points", index, "y"],
+          });
+        }
+      }
     }
   });
 export type CropRegion = z.infer<typeof CropRegionSchema>;
@@ -78,10 +169,29 @@ export const OverlayPlacementSchema = z.object({
   y: z.number().int().min(-100_000).max(100_000),
   width: z.number().int().min(1).max(100_000).optional(),
   height: z.number().int().min(1).max(100_000).optional(),
-  scale: z.number().min(0.1).max(8),
+  scale: z
+    .number()
+    .min(AuraPlacementScaleSettings.minPersistedScale)
+    .max(AuraPlacementScaleSettings.maxScale)
+    .transform((value) => Math.max(value, AuraPlacementScaleSettings.minScale)),
   opacity: z.number().min(0).max(1),
   arcVisibleThickness: z.number().int().min(1).max(100_000).optional(),
   arcStraightened: z.boolean().optional(),
+  pointGap: z
+    .number()
+    .int()
+    .min(AuraPointPlacementSettings.minGap)
+    .max(AuraPointPlacementSettings.maxGap)
+    .optional(),
+  pointSampleSize: z
+    .number()
+    .int()
+    .min(minimumPersistedPointSampleSize)
+    .max(AuraPointPlacementSettings.maxSampleSize)
+    .transform((value) =>
+      Math.max(value, AuraPointPlacementSettings.minSampleSize),
+    )
+    .optional(),
   mirrored: z.boolean().optional(),
   rotationDegrees: z
     .union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)])

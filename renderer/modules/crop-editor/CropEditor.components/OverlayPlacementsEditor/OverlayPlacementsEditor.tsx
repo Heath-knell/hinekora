@@ -10,6 +10,8 @@ import {
 } from "~/renderer/modules/crop-editor/CropEditor.utils/CropEditor.utils";
 import { useCropEditorShallow, useProfilesShallow } from "~/renderer/store";
 
+import { AuraPlacementScaleSettings } from "~/types";
+
 const placementFieldLabels: Record<PlacementNumberField, string> = {
   x: "left",
   y: "top",
@@ -58,7 +60,11 @@ function OverlayPlacementsEditor() {
 
     const normalized =
       field === "scale"
-        ? clamp(nextValue, 0.1, 8)
+        ? clamp(
+            nextValue,
+            AuraPlacementScaleSettings.minScale,
+            AuraPlacementScaleSettings.maxScale,
+          )
         : field === "opacity"
           ? clamp(nextValue, 0, 1)
           : clamp(Math.round(nextValue), -100_000, 100_000);
@@ -95,7 +101,11 @@ function OverlayPlacementsEditor() {
                 data-field={field}
                 data-placement-id={placement.id}
                 max={field === "opacity" ? 1 : undefined}
-                min={field === "scale" ? 0.1 : undefined}
+                min={
+                  field === "scale"
+                    ? AuraPlacementScaleSettings.minScale
+                    : undefined
+                }
                 step={field === "scale" || field === "opacity" ? 0.05 : 1}
                 type="number"
                 value={placement[field]}

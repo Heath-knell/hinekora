@@ -1,12 +1,7 @@
-import {
-  type SyntheticEvent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-} from "react";
+import { type SyntheticEvent, useCallback, useMemo, useRef } from "react";
 
 import type { CropRegion } from "~/types";
+import { useAuraVideoCanvasFrame } from "../../AuraOverlay.hooks/useAuraVideoCanvasFrame/useAuraVideoCanvasFrame";
 import type {
   AuraSize,
   AuraVideoSize,
@@ -17,12 +12,6 @@ import {
   drawStraightenedArcVideoFrame,
   shouldDrawStraightenedArcFrame,
 } from "./AuraStraightenedArcVideo.utils";
-
-type VideoFrameCallback = (now: number, metadata: unknown) => void;
-type RequestVideoFrameCallback = (callback: VideoFrameCallback) => number;
-type CancelVideoFrameCallback = (handle: number) => void;
-
-const fallbackFrameIntervalMs = 100;
 
 interface AuraStraightenedArcVideoProps {
   bindAuraVideo: (element: HTMLVideoElement | null) => void;
@@ -79,81 +68,13 @@ function AuraStraightenedArcVideo({
     [bindAuraVideo],
   );
 
-  useEffect(() => {
-    const drawCurrentFrame = () => {
-      const canvas = canvasRef.current;
-      const video = videoRef.current;
-      if (canvas && geometry && video) {
-        drawStraightenedArcVideoFrame({
-          canvas,
-          geometry,
-          video,
-        });
-      }
-    };
-
-    const video = videoRef.current;
-    const requestVideoFrameCallback = video
-      ? (
-          Reflect.get(video, "requestVideoFrameCallback") as
-            | RequestVideoFrameCallback
-            | undefined
-        )?.bind(video)
-      : null;
-    const cancelVideoFrameCallback = video
-      ? (
-          Reflect.get(video, "cancelVideoFrameCallback") as
-            | CancelVideoFrameCallback
-            | undefined
-        )?.bind(video)
-      : null;
-
-    if (requestVideoFrameCallback && cancelVideoFrameCallback) {
-      let callbackId = 0;
-      let isActive = true;
-      let lastDrawMs: number | null = null;
-      const drawVideoFrame: VideoFrameCallback = (nowMs) => {
-        if (!isActive) {
-          return;
-        }
-        if (shouldDrawStraightenedArcFrame(nowMs, lastDrawMs)) {
-          lastDrawMs = nowMs;
-          drawCurrentFrame();
-        }
-        if (isActive) {
-          callbackId = requestVideoFrameCallback(drawVideoFrame);
-        }
-      };
-
-      lastDrawMs = performance.now();
-      drawCurrentFrame();
-      callbackId = requestVideoFrameCallback(drawVideoFrame);
-
-      return () => {
-        isActive = false;
-        cancelVideoFrameCallback(callbackId);
-      };
-    }
-
-    let timeoutId = 0;
-    let isActive = true;
-    const drawTimedFrame = () => {
-      if (!isActive) {
-        return;
-      }
-      drawCurrentFrame();
-      if (isActive) {
-        timeoutId = window.setTimeout(drawTimedFrame, fallbackFrameIntervalMs);
-      }
-    };
-
-    drawTimedFrame();
-
-    return () => {
-      isActive = false;
-      window.clearTimeout(timeoutId);
-    };
-  }, [geometry]);
+  useAuraVideoCanvasFrame({
+    canvasRef,
+    drawFrame: drawStraightenedArcVideoFrame,
+    geometry,
+    shouldDrawFrame: shouldDrawStraightenedArcFrame,
+    videoRef,
+  });
 
   return (
     <div

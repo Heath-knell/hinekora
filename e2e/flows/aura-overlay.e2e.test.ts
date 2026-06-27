@@ -40,6 +40,44 @@ test("adds an arched aura through the overlay workflow", async ({ page }) => {
     });
 });
 
+test("adds a pointer aura through the overlay workflow", async ({ page }) => {
+  await setupAuraOverlayE2E(page);
+
+  await page.getByRole("button", { name: "Add pointer aura" }).click();
+
+  await expect
+    .poll(async () => {
+      const calls = await getAuraOverlayE2ECalls(page);
+
+      return calls.selectCropRegionCalls;
+    })
+    .toEqual([{ shape: "points" }]);
+  await expect
+    .poll(async () => {
+      const calls = await getAuraOverlayE2ECalls(page);
+      const update = calls.profileUpdates.at(-1);
+      const crop = update?.cropRegions?.at(-1);
+      const placement = update?.overlayPlacements?.at(-1);
+
+      return {
+        cropLabel: crop?.label,
+        cropShape: crop?.shape,
+        placementCount: update?.overlayPlacements?.length,
+        pointCount: crop?.points?.length,
+        pointGap: placement?.pointGap,
+        pointSampleSize: placement?.pointSampleSize,
+      };
+    })
+    .toEqual({
+      cropLabel: "Pointer aura 1",
+      cropShape: "points",
+      placementCount: 1,
+      pointCount: 3,
+      pointGap: 20,
+      pointSampleSize: 20,
+    });
+});
+
 test("edits an arched aura through the overlay workflow", async ({ page }) => {
   await setupAuraOverlayE2E(page, { withArchedAura: true });
 

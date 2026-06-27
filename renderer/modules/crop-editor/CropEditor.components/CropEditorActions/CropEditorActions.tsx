@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import type { ChangeEvent } from "react";
-import { FiPlus as Plus } from "react-icons/fi";
+import { FiMousePointer as MousePointer, FiPlus as Plus } from "react-icons/fi";
 import { TbMoon as Moon } from "react-icons/tb";
 
 import type { CropRegionSelectionShape } from "~/main/modules/overlay-windows/OverlayWindows.dto";
@@ -116,6 +116,10 @@ function CropEditorActions() {
     void handleAddAura("arc");
   };
 
+  const handleAddPointerAuraClick = () => {
+    void handleAddAura("points");
+  };
+
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
       <select
@@ -198,6 +202,23 @@ function CropEditorActions() {
         >
           <Moon size={16} />
           Add arched aura
+        </button>
+      </div>
+      <div
+        className={clsx(
+          "tooltip tooltip-left no-drag",
+          canAddNewAura && "before:hidden after:hidden",
+        )}
+        data-tip={canAddNewAura ? "" : addAuraTooltip}
+      >
+        <button
+          className="btn btn-primary btn-sm disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={!canAddNewAura}
+          type="button"
+          onClick={handleAddPointerAuraClick}
+        >
+          <MousePointer size={16} />
+          Add pointer aura
         </button>
       </div>
     </div>

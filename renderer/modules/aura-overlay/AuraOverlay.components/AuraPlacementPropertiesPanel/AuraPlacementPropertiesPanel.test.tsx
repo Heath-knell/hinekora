@@ -32,7 +32,7 @@ describe("AuraPlacementPropertiesPanel", () => {
     document.body.replaceChildren();
   });
 
-  it("commits number fields on blur instead of every input change", async () => {
+  it("commits number fields while typing with one history entry per focus session", async () => {
     const onChange = vi.fn();
     const container = document.createElement("div");
     document.body.append(container);
@@ -61,14 +61,54 @@ describe("AuraPlacementPropertiesPanel", () => {
       setInputValue(widthInput as HTMLInputElement, "150");
     });
 
-    expect(onChange).not.toHaveBeenCalled();
+    expect(onChange).toHaveBeenCalledWith("placement-1", {
+      displayWidth: 150,
+      recordHistory: true,
+    });
 
     await act(async () => {
-      widthInput?.blur();
+      setInputValue(widthInput as HTMLInputElement, "155");
     });
 
     expect(onChange).toHaveBeenCalledWith("placement-1", {
-      displayWidth: 150,
+      displayWidth: 155,
+      recordHistory: false,
+    });
+  });
+
+  it("keeps scale edits at one or higher", async () => {
+    const onChange = vi.fn();
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <AuraPlacementPropertiesPanel
+          displayHeight={80}
+          displayWidth={120}
+          placement={{ ...placement, scale: 2 }}
+          side="right"
+          visibleThickness={20}
+          onChange={onChange}
+        />,
+      );
+    });
+
+    const scaleInput = container.querySelector<HTMLInputElement>(
+      'input[name="scale"]',
+    );
+    expect(scaleInput).toBeInstanceOf(HTMLInputElement);
+
+    await act(async () => {
+      scaleInput?.focus();
+      setInputValue(scaleInput as HTMLInputElement, "0.5");
+    });
+
+    expect(scaleInput?.min).toBe("1");
+    expect(onChange).toHaveBeenCalledWith("placement-1", {
+      recordHistory: true,
+      scale: 1,
     });
   });
 

@@ -1,4 +1,4 @@
-export type CropRegionSelectionShape = "rect" | "arc";
+export type CropRegionSelectionShape = "rect" | "arc" | "points";
 
 export interface CropRegionArcSelection {
   startX: number;
@@ -10,6 +10,11 @@ export interface CropRegionArcSelection {
   thickness: number;
 }
 
+export interface CropRegionPointSelection {
+  x: number;
+  y: number;
+}
+
 export interface CropRegionSelection {
   shape?: CropRegionSelectionShape;
   x: number;
@@ -17,6 +22,7 @@ export interface CropRegionSelection {
   width: number;
   height: number;
   arc?: CropRegionArcSelection;
+  points?: CropRegionPointSelection[];
   viewportWidth?: number;
   viewportHeight?: number;
 }

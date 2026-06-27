@@ -4,6 +4,7 @@ import styles from "../AuraOverlayPlacement/AuraOverlayPlacement.module.css";
 
 interface AuraPlacementPropertiesActionsProps {
   arcStraightened: boolean;
+  canStraighten: boolean;
   mirrored: boolean;
   rotationDegrees: number;
   onMirrorChange: ChangeEventHandler<HTMLInputElement>;
@@ -13,6 +14,7 @@ interface AuraPlacementPropertiesActionsProps {
 
 function AuraPlacementPropertiesActions({
   arcStraightened,
+  canStraighten,
   mirrored,
   rotationDegrees,
   onMirrorChange,
@@ -25,14 +27,16 @@ function AuraPlacementPropertiesActions({
         <input checked={mirrored} type="checkbox" onChange={onMirrorChange} />
         Mirror
       </label>
-      <label className={styles.propertiesToggle}>
-        <input
-          checked={arcStraightened}
-          type="checkbox"
-          onChange={onStraightenChange}
-        />
-        Straighten
-      </label>
+      {canStraighten && (
+        <label className={styles.propertiesToggle}>
+          <input
+            checked={arcStraightened}
+            type="checkbox"
+            onChange={onStraightenChange}
+          />
+          Straighten
+        </label>
+      )}
       <button
         className={styles.propertiesButton}
         type="button"

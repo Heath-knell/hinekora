@@ -1,0 +1,29 @@
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: visible;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+}
+
+.pointLabel {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  width: 1.35rem;
+  height: 1.35rem;
+  place-items: center;
+  border: var(--border) solid var(--color-base-300);
+  border-radius: 50%;
+  color: var(--color-primary-content);
+  background: var(--color-primary);
+  box-shadow: 0 0 18px
+    color-mix(in oklch, var(--color-primary) 42%, transparent);
+  font-size: 0.75rem;
+  font-weight: 800;
+  line-height: 1;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}

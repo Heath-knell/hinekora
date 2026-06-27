@@ -1,11 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  createArcControlNormal,
-  createArcCurvePoints,
-} from "./AuraOverlay.utils";
+import { createArcCurvePoints } from "./createArcCurvePoints";
 
-describe("AuraOverlay shared arc utils", () => {
+describe("createArcCurvePoints", () => {
   it("creates circular arc points through the control point", () => {
     const points = createArcCurvePoints(
       { x: 100, y: 160 },
@@ -29,16 +26,5 @@ describe("AuraOverlay shared arc utils", () => {
       { x: 5, y: 0 },
       { x: 10, y: 0 },
     ]);
-  });
-
-  it("resolves the control normal toward the selected arc side", () => {
-    const normal = createArcControlNormal(
-      { x: 100, y: 160 },
-      { x: 220, y: 160 },
-      { x: 160, y: 100 },
-    );
-
-    expect(normal.x).toBeCloseTo(0);
-    expect(normal.y).toBeCloseTo(-1);
   });
 });

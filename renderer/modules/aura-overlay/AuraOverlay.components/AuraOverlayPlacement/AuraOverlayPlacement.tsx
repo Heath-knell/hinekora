@@ -1,6 +1,7 @@
 import clsx from "clsx";
 
 import {
+  createAuraArcBoundaryPaths,
   projectAuraOverlayPlacement,
   resolveAuraPlacementArcVisibleThickness,
   resolveAuraPlacementDisplaySize,
@@ -105,6 +106,17 @@ function AuraOverlayPlacement({
         y: (crop.arc.controlY / crop.height) * 100,
       }
     : null;
+  const arcBoundaryPaths =
+    canEditAuras &&
+    crop.shape === "arc" &&
+    !isStraightenedArc &&
+    effectiveVisibleArcThickness !== undefined
+      ? createAuraArcBoundaryPaths(
+          crop,
+          effectiveVisibleArcThickness,
+          placementSize,
+        )
+      : null;
 
   return (
     <div
@@ -120,6 +132,7 @@ function AuraOverlayPlacement({
       <button
         className={clsx(
           styles.box,
+          crop.shape === "arc" && styles.boxArc,
           auraOverlayLocked && styles.boxLocked,
           canEditAuras && isSelected && styles.boxSelected,
         )}
@@ -148,8 +161,25 @@ function AuraOverlayPlacement({
             onVideoSizeChange={onVideoSizeChange}
           />
         )}
+        {arcBoundaryPaths && (
+          <svg
+            aria-hidden="true"
+            className={styles.arcBoundaryOverlay}
+            viewBox={`0 0 ${placementSize.width} ${placementSize.height}`}
+          >
+            <path
+              className={styles.arcBoundaryPath}
+              d={arcBoundaryPaths.outer}
+            />
+            <path
+              className={styles.arcBoundaryPath}
+              d={arcBoundaryPaths.inner}
+            />
+          </svg>
+        )}
         {canEditAuras && (
           <AuraOverlayResizeHandles
+            compact={crop.shape === "points"}
             placementId={placement.id}
             onPointerCancel={onResizePointerCancel}
             onPointerDown={onResizePointerDown}
@@ -189,6 +219,7 @@ function AuraOverlayPlacement({
           displayHeight={displayHeight}
           displayWidth={displayWidth}
           placement={effectivePlacement}
+          pointControls={crop.shape === "points"}
           side={resolvePropertiesPanelSide(
             left,
             top,

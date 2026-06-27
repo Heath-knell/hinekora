@@ -180,6 +180,10 @@ function AuraOverlayPage() {
     startAddAuraSelection({ shape: "arc" });
   };
 
+  const handleAddPointerAuraClick = () => {
+    startAddAuraSelection({ shape: "points" });
+  };
+
   return (
     <main
       aria-label="Aura overlay"
@@ -239,6 +243,7 @@ function AuraOverlayPage() {
           canAddAura={!!profile}
           onAddAura={handleAddAuraClick}
           onAddArchedAura={handleAddArchedAuraClick}
+          onAddPointerAura={handleAddPointerAuraClick}
           onLockAuras={handleLockAurasClick}
         />
       )}

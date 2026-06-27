@@ -8,6 +8,7 @@ import {
   createAuraVideoStyle,
 } from "../../AuraOverlay.page/AuraOverlay.page.utils";
 import styles from "../AuraOverlayPlacement/AuraOverlayPlacement.module.css";
+import { AuraPointStackVideo } from "../AuraPointStackVideo/AuraPointStackVideo";
 import { AuraStraightenedArcVideo } from "../AuraStraightenedArcVideo/AuraStraightenedArcVideo";
 
 interface AuraOverlayPlacementVideoProps {
@@ -45,6 +46,21 @@ function AuraOverlayPlacementVideo({
         referenceViewport={referenceViewport}
         videoSize={videoSize}
         visibleThickness={visibleThickness}
+        onVideoSizeChange={onVideoSizeChange}
+      />
+    );
+  }
+
+  if (crop.shape === "points" && crop.points?.length) {
+    return (
+      <AuraPointStackVideo
+        bindAuraVideo={bindAuraVideo}
+        contentTransform={contentTransform}
+        crop={crop}
+        displaySize={displaySize}
+        placement={placement}
+        referenceViewport={referenceViewport}
+        videoSize={videoSize}
         onVideoSizeChange={onVideoSizeChange}
       />
     );

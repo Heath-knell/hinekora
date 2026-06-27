@@ -1,4 +1,6 @@
 import {
+  AuraPlacementScaleSettings,
+  AuraPointPlacementSettings,
   type CropRegion,
   createCoordinateReferenceDimensions,
   type OverlayPlacement,
@@ -17,6 +19,8 @@ interface AuraPlacementPropertiesUpdate {
   placement: OverlayPlacement;
 }
 
+const minimumDisplayDimension = 10;
+
 function createPlacementPropertiesUpdate(
   placement: OverlayPlacement,
   crop: CropRegion,
@@ -26,8 +30,16 @@ function createPlacementPropertiesUpdate(
 ): AuraPlacementPropertiesUpdate {
   const nextPlacement: OverlayPlacement = { ...placement };
   const nextCrop = crop;
+  if (crop.shape !== "arc") {
+    delete nextPlacement.arcStraightened;
+  }
+
   if (patch.scale !== undefined) {
-    nextPlacement.scale = clamp(Math.round(patch.scale * 100) / 100, 0.1, 8);
+    nextPlacement.scale = clamp(
+      Math.round(patch.scale * 100) / 100,
+      AuraPlacementScaleSettings.minScale,
+      AuraPlacementScaleSettings.maxScale,
+    );
   }
 
   if (patch.mirrored !== undefined) {
@@ -38,8 +50,24 @@ function createPlacementPropertiesUpdate(
     nextPlacement.rotationDegrees = patch.rotationDegrees;
   }
 
-  if (patch.arcStraightened !== undefined) {
+  if (isArchedCropRegion(crop) && patch.arcStraightened !== undefined) {
     nextPlacement.arcStraightened = patch.arcStraightened;
+  }
+
+  if (patch.pointSampleSize !== undefined) {
+    nextPlacement.pointSampleSize = clamp(
+      Math.round(patch.pointSampleSize),
+      AuraPointPlacementSettings.minSampleSize,
+      AuraPointPlacementSettings.maxSampleSize,
+    );
+  }
+
+  if (patch.pointGap !== undefined) {
+    nextPlacement.pointGap = clamp(
+      Math.round(patch.pointGap),
+      AuraPointPlacementSettings.minGap,
+      AuraPointPlacementSettings.maxGap,
+    );
   }
 
   if (patch.displayWidth !== undefined || patch.displayHeight !== undefined) {
@@ -63,14 +91,14 @@ function createPlacementPropertiesUpdate(
       Math.round(
         (patch.displayWidth ?? displaySize.width) / scale / projection.scale,
       ),
-      1,
+      minimumDisplayDimension,
       100_000,
     );
     nextPlacement.height = clamp(
       Math.round(
         (patch.displayHeight ?? displaySize.height) / scale / projection.scale,
       ),
-      1,
+      minimumDisplayDimension,
       100_000,
     );
   }

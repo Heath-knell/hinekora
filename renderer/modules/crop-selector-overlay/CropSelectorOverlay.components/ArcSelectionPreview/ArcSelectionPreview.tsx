@@ -1,20 +1,17 @@
 import type { CropSelectorPoint } from "~/renderer/modules/crop-selector-overlay/CropSelectorOverlay.utils/CropSelectorOverlay.utils";
-import { createCircularArcCurvePoints } from "~/renderer/modules/crop-selector-overlay/CropSelectorOverlay.utils/CropSelectorOverlay.utils";
+import {
+  createArcSelectionBoundaryPaths,
+  createCircularArcCurvePoints,
+  createSvgPointPath,
+} from "~/renderer/modules/crop-selector-overlay/CropSelectorOverlay.utils/CropSelectorOverlay.utils";
 
-import styles from "../../CropSelectorOverlay.page/CropSelectorOverlayPage.module.css";
+import sharedStyles from "../SelectionPreview/SelectionPreview.module.css";
+import styles from "./ArcSelectionPreview.module.css";
 
 interface ArcSelectionPreviewProps {
   arcEnd: CropSelectorPoint | null;
   arcStart: CropSelectorPoint | null;
   hoverPoint: CropSelectorPoint | null;
-}
-
-function createArcPath(points: CropSelectorPoint[]): string {
-  return points
-    .map((point, index) =>
-      index === 0 ? `M ${point.x} ${point.y}` : `L ${point.x} ${point.y}`,
-    )
-    .join(" ");
 }
 
 function createMidpoint(
@@ -41,14 +38,15 @@ function ArcSelectionPreview({
       ? createCircularArcCurvePoints(arcStart, arcEnd, arcControlPoint)
       : [];
   const arcPreviewPath =
-    arcPreviewPoints.length > 0 ? createArcPath(arcPreviewPoints) : null;
+    arcPreviewPoints.length > 0 ? createSvgPointPath(arcPreviewPoints) : null;
+  const arcBoundaryPaths = createArcSelectionBoundaryPaths(arcPreviewPoints);
 
   return (
     <>
-      <svg className={styles.arcOverlay} aria-hidden="true">
+      <svg className={sharedStyles.overlay} aria-hidden="true">
         {arcStart && hoverPoint && !arcEnd && (
           <line
-            className={styles.arcGuide}
+            className={styles.guide}
             x1={arcStart.x}
             y1={arcStart.y}
             x2={hoverPoint.x}
@@ -56,11 +54,17 @@ function ArcSelectionPreview({
           />
         )}
         {arcPreviewPath && (
-          <path className={styles.arcPreviewPath} d={arcPreviewPath} />
+          <path className={styles.previewPath} d={arcPreviewPath} />
+        )}
+        {arcBoundaryPaths && (
+          <>
+            <path className={styles.boundaryPath} d={arcBoundaryPaths.outer} />
+            <path className={styles.boundaryPath} d={arcBoundaryPaths.inner} />
+          </>
         )}
         {arcPreviewPoints.map((point, index) => (
           <circle
-            className={styles.arcPreviewDot}
+            className={styles.previewDot}
             cx={point.x}
             cy={point.y}
             key={`${index}-${point.x}-${point.y}`}
@@ -70,7 +74,7 @@ function ArcSelectionPreview({
       </svg>
       {arcStart && (
         <span
-          className={styles.arcPointLabel}
+          className={sharedStyles.pointLabel}
           style={{ left: `${arcStart.x}px`, top: `${arcStart.y}px` }}
         >
           A
@@ -78,7 +82,7 @@ function ArcSelectionPreview({
       )}
       {arcEnd && (
         <span
-          className={styles.arcPointLabel}
+          className={sharedStyles.pointLabel}
           style={{ left: `${arcEnd.x}px`, top: `${arcEnd.y}px` }}
         >
           B
@@ -86,7 +90,7 @@ function ArcSelectionPreview({
       )}
       {arcControlPoint && (
         <span
-          className={styles.arcPointLabel}
+          className={sharedStyles.pointLabel}
           style={{
             left: `${arcControlPoint.x}px`,
             top: `${arcControlPoint.y}px`,

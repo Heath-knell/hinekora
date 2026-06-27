@@ -1,6 +1,8 @@
 import {
+  AuraPointPlacementSettings,
   type CropRegion,
   type CropRegionArc,
+  type CropRegionPoint,
   createCoordinateReferenceDimensions,
   type OverlayPlacement,
   type Profile,
@@ -23,12 +25,13 @@ interface SelectionPlacementViewport {
 }
 
 interface AuraSourceSelection extends SelectionPlacementViewport {
-  shape?: "rect" | "arc";
+  shape?: "rect" | "arc" | "points";
   x: number;
   y: number;
   width: number;
   height: number;
   arc?: CropRegionArc;
+  points?: CropRegionPoint[];
 }
 
 type AuraProfile = Pick<Profile, "id" | "cropRegions" | "overlayPlacements">;
@@ -90,6 +93,12 @@ export function createPlacementForCrop(
     y,
     scale: 1,
     opacity: 1,
+    ...(crop.shape === "points"
+      ? {
+          pointGap: AuraPointPlacementSettings.defaultGap,
+          pointSampleSize: AuraPointPlacementSettings.defaultSampleSize,
+        }
+      : {}),
     ...(viewport ? createCoordinateReferenceDimensions(viewport) : {}),
   };
 }
@@ -104,13 +113,18 @@ export function createAuraProfileUpdateFromSelection(
     label:
       selection.shape === "arc"
         ? `Arched aura ${profile.cropRegions.length + 1}`
-        : `Aura ${profile.cropRegions.length + 1}`,
+        : selection.shape === "points"
+          ? `Pointer aura ${profile.cropRegions.length + 1}`
+          : `Aura ${profile.cropRegions.length + 1}`,
     x: selection.x,
     y: selection.y,
     width: selection.width,
     height: selection.height,
     ...(selection.shape === "arc" && selection.arc
       ? { shape: "arc" as const, arc: selection.arc }
+      : {}),
+    ...(selection.shape === "points" && selection.points
+      ? { shape: "points" as const, points: selection.points }
       : {}),
     ...(placementViewport
       ? createCoordinateReferenceDimensions(placementViewport)

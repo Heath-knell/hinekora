@@ -48,7 +48,9 @@ function useAuraOverlayPlacementProperties({
       referenceViewport,
     );
 
-    recordAuraHistory();
+    if (patch.recordHistory !== false) {
+      recordAuraHistory();
+    }
     void updateProfile({
       id: profile.id,
       cropRegions: profile.cropRegions.map((region) =>

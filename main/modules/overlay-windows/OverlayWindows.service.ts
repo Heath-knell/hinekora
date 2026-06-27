@@ -477,11 +477,11 @@ function parseOptionalCropRegionSelectionShape(
 
   assertString(shape, "shape", channel, {
     min: 3,
-    max: 4,
+    max: 6,
   });
 
-  if (shape !== "rect" && shape !== "arc") {
-    throw new Error("shape must be rect or arc");
+  if (shape !== "rect" && shape !== "arc" && shape !== "points") {
+    throw new Error("shape must be rect, arc, or points");
   }
 
   return shape;

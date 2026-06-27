@@ -11,11 +11,14 @@ import {
 import type { OverlayPlacement } from "~/types";
 import styles from "../AuraOverlayPlacement/AuraOverlayPlacement.module.css";
 import { AuraPlacementNumberField } from "../AuraPlacementNumberField/AuraPlacementNumberField";
+import { AuraPlacementPointPropertiesFields } from "../AuraPlacementPointPropertiesFields/AuraPlacementPointPropertiesFields";
 import { AuraPlacementPropertiesActions } from "../AuraPlacementPropertiesActions/AuraPlacementPropertiesActions";
 import {
   type AuraPlacementPropertiesPanelSide,
   type AuraPlacementPropertiesPatch,
+  auraPlacementBaseNumberFields,
   createCurrentNumericValues,
+  createNumberFieldPatch,
   createPropertiesDraft,
   type NumberFieldName,
   normalizeNumberInputValue,
@@ -27,6 +30,7 @@ interface AuraPlacementPropertiesPanelProps {
   displayHeight: number;
   displayWidth: number;
   placement: OverlayPlacement;
+  pointControls?: boolean;
   side: AuraPlacementPropertiesPanelSide;
   visibleThickness?: number;
   onChange: (placementId: string, patch: AuraPlacementPropertiesPatch) => void;
@@ -43,12 +47,14 @@ function AuraPlacementPropertiesPanel({
   displayHeight,
   displayWidth,
   placement,
+  pointControls = false,
   side,
   visibleThickness,
   onChange,
 }: AuraPlacementPropertiesPanelProps) {
   const thickness = visibleThickness ? Math.round(visibleThickness) : null;
   const activeFieldRef = useRef<NumberFieldName | null>(null);
+  const historyRecordedFieldRef = useRef<NumberFieldName | null>(null);
   const [draft, setDraft] = useState(() =>
     createPropertiesDraft(displayWidth, displayHeight, placement, thickness),
   );
@@ -74,6 +80,14 @@ function AuraPlacementPropertiesPanel({
       ...currentDraft,
       [fieldName]: nextValue,
     }));
+    const shouldRecordHistory = historyRecordedFieldRef.current !== fieldName;
+    const didCommit = commitNumberField(fieldName, nextValue, {
+      recordHistory: shouldRecordHistory,
+      resetDraftOnNoop: false,
+    });
+    if (didCommit && shouldRecordHistory) {
+      historyRecordedFieldRef.current = fieldName;
+    }
   };
 
   const handleNumberFocus = (event: FocusEvent<HTMLInputElement>) => {
@@ -83,6 +97,7 @@ function AuraPlacementPropertiesPanel({
     }
 
     activeFieldRef.current = fieldName;
+    historyRecordedFieldRef.current = null;
   };
 
   const handleNumberBlur = (event: FocusEvent<HTMLInputElement>) => {
@@ -91,8 +106,13 @@ function AuraPlacementPropertiesPanel({
       return;
     }
 
-    commitNumberField(fieldName);
+    const shouldRecordHistory = historyRecordedFieldRef.current !== fieldName;
+    commitNumberField(fieldName, draft[fieldName], {
+      recordHistory: shouldRecordHistory,
+      resetDraftOnNoop: true,
+    });
     activeFieldRef.current = null;
+    historyRecordedFieldRef.current = null;
   };
 
   const handleNumberKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -133,49 +153,44 @@ function AuraPlacementPropertiesPanel({
     });
   };
 
-  const commitNumberField = (fieldName: NumberFieldName) => {
+  const commitNumberField = (
+    fieldName: NumberFieldName,
+    value: string,
+    {
+      recordHistory,
+      resetDraftOnNoop,
+    }: { recordHistory: boolean; resetDraftOnNoop: boolean },
+  ): boolean => {
     const currentValue = createCurrentNumericValues(
       displayWidth,
       displayHeight,
       placement,
       thickness,
     )[fieldName];
-    const normalizedValue = normalizeNumberInputValue(
-      fieldName,
-      draft[fieldName],
-    );
+    const normalizedValue = normalizeNumberInputValue(fieldName, value);
     if (
       normalizedValue === null ||
       (currentValue !== null &&
         Math.abs(normalizedValue - currentValue) < Number.EPSILON)
     ) {
-      setDraft(
-        createPropertiesDraft(
-          displayWidth,
-          displayHeight,
-          placement,
-          thickness,
-        ),
-      );
-      return;
+      if (resetDraftOnNoop) {
+        setDraft(
+          createPropertiesDraft(
+            displayWidth,
+            displayHeight,
+            placement,
+            thickness,
+          ),
+        );
+      }
+      return false;
     }
 
-    if (fieldName === "width") {
-      onChange(placement.id, { displayWidth: normalizedValue });
-      return;
-    }
-
-    if (fieldName === "height") {
-      onChange(placement.id, { displayHeight: normalizedValue });
-      return;
-    }
-
-    if (fieldName === "scale") {
-      onChange(placement.id, { scale: normalizedValue });
-      return;
-    }
-
-    onChange(placement.id, { arcVisibleThickness: normalizedValue });
+    onChange(
+      placement.id,
+      createNumberFieldPatch(fieldName, normalizedValue, recordHistory),
+    );
+    return true;
   };
 
   return (
@@ -183,38 +198,17 @@ function AuraPlacementPropertiesPanel({
       aria-label="Aura placement properties"
       className={clsx(styles.propertiesPanel, panelSideClassNames[side])}
     >
-      <AuraPlacementNumberField
-        label="Width"
-        min="1"
-        name="width"
-        value={draft.width}
-        onChange={handleNumberChange}
-        onBlur={handleNumberBlur}
-        onFocus={handleNumberFocus}
-        onKeyDown={handleNumberKeyDown}
-      />
-      <AuraPlacementNumberField
-        label="Height"
-        min="1"
-        name="height"
-        value={draft.height}
-        onChange={handleNumberChange}
-        onBlur={handleNumberBlur}
-        onFocus={handleNumberFocus}
-        onKeyDown={handleNumberKeyDown}
-      />
-      <AuraPlacementNumberField
-        label="Scale"
-        max="8"
-        min="0.1"
-        name="scale"
-        step="0.1"
-        value={draft.scale}
-        onChange={handleNumberChange}
-        onBlur={handleNumberBlur}
-        onFocus={handleNumberFocus}
-        onKeyDown={handleNumberKeyDown}
-      />
+      {auraPlacementBaseNumberFields.map((field) => (
+        <AuraPlacementNumberField
+          key={field.name}
+          {...field}
+          value={draft[field.name]}
+          onChange={handleNumberChange}
+          onBlur={handleNumberBlur}
+          onFocus={handleNumberFocus}
+          onKeyDown={handleNumberKeyDown}
+        />
+      ))}
       {thickness !== null && (
         <AuraPlacementNumberField
           label="Thickness"
@@ -227,8 +221,18 @@ function AuraPlacementPropertiesPanel({
           onKeyDown={handleNumberKeyDown}
         />
       )}
+      {pointControls && (
+        <AuraPlacementPointPropertiesFields
+          draft={draft}
+          onChange={handleNumberChange}
+          onBlur={handleNumberBlur}
+          onFocus={handleNumberFocus}
+          onKeyDown={handleNumberKeyDown}
+        />
+      )}
       <AuraPlacementPropertiesActions
         arcStraightened={placement.arcStraightened === true}
+        canStraighten={thickness !== null}
         mirrored={placement.mirrored === true}
         rotationDegrees={placement.rotationDegrees ?? 0}
         onMirrorChange={handleMirrorChange}

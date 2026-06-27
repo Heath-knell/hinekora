@@ -18,8 +18,10 @@ import {
   unregisterIpcWindowRole,
 } from "~/main/utils/ipc-window-roles";
 
+import { AuraPointPlacementSettings } from "~/types";
 import type {
   CropRegionArcSelection,
+  CropRegionPointSelection,
   CropRegionSelection,
   CropRegionSelectionShape,
   SelectCropRegionOptions,
@@ -250,12 +252,29 @@ class GridLinesOverlayService implements GameOverlayParticipant {
     }
 
     if (record.shape === "arc") {
-      const arc = this.parseCropRegionArcSelection(record.arc);
+      const arc = this.parseCropRegionArcSelection(record.arc, width, height);
       if (!arc) {
         return null;
       }
 
       return { shape: "arc", x, y, width, height, arc };
+    }
+
+    if (record.shape === "points") {
+      const points = this.parseCropRegionPointSelection(
+        record.points,
+        width,
+        height,
+      );
+      if (!points) {
+        return null;
+      }
+
+      return { shape: "points", x, y, width, height, points };
+    }
+
+    if (record.shape !== undefined && record.shape !== "rect") {
+      return null;
     }
 
     return { x, y, width, height };
@@ -271,18 +290,20 @@ class GridLinesOverlayService implements GameOverlayParticipant {
 
   private parseCropRegionArcSelection(
     value: unknown,
+    width: number,
+    height: number,
   ): CropRegionArcSelection | null {
     if (typeof value !== "object" || value === null) {
       return null;
     }
 
     const record = value as Record<string, unknown>;
-    const startX = this.parseCoordinate(record.startX);
-    const startY = this.parseCoordinate(record.startY);
-    const endX = this.parseCoordinate(record.endX);
-    const endY = this.parseCoordinate(record.endY);
-    const controlX = this.parseCoordinate(record.controlX);
-    const controlY = this.parseCoordinate(record.controlY);
+    const startX = this.parseCoordinateWithinBounds(record.startX, width);
+    const startY = this.parseCoordinateWithinBounds(record.startY, height);
+    const endX = this.parseCoordinateWithinBounds(record.endX, width);
+    const endY = this.parseCoordinateWithinBounds(record.endY, height);
+    const controlX = this.parseCoordinateWithinBounds(record.controlX, width);
+    const controlY = this.parseCoordinateWithinBounds(record.controlY, height);
     const thickness = this.parseCoordinate(record.thickness);
 
     if (
@@ -299,6 +320,48 @@ class GridLinesOverlayService implements GameOverlayParticipant {
     }
 
     return { startX, startY, endX, endY, controlX, controlY, thickness };
+  }
+
+  private parseCropRegionPointSelection(
+    value: unknown,
+    width: number,
+    height: number,
+  ): CropRegionPointSelection[] | null {
+    if (
+      !Array.isArray(value) ||
+      value.length < 1 ||
+      value.length > AuraPointPlacementSettings.maxPoints
+    ) {
+      return null;
+    }
+
+    const points = value.map((item) => {
+      if (typeof item !== "object" || item === null) {
+        return null;
+      }
+
+      const record = item as Record<string, unknown>;
+      const x = this.parseCoordinateWithinBounds(record.x, width);
+      const y = this.parseCoordinateWithinBounds(record.y, height);
+
+      return x === null || y === null ? null : { x, y };
+    });
+
+    return points.every((point) => point !== null)
+      ? (points as CropRegionPointSelection[])
+      : null;
+  }
+
+  private parseCoordinateWithinBounds(
+    value: unknown,
+    max: number,
+  ): number | null {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      return null;
+    }
+
+    const coordinate = Math.round(value);
+    return coordinate >= 0 && coordinate <= max ? coordinate : null;
   }
 
   private withSelectionViewport(

@@ -1,0 +1,30 @@
+.guide {
+  stroke: color-mix(in oklch, var(--color-primary) 60%, transparent);
+  stroke-width: 2;
+  stroke-dasharray: 6 6;
+}
+
+.previewPath {
+  fill: none;
+  stroke: oklch(70.4% 0.14 182.503);
+  stroke-opacity: 0.5;
+  stroke-width: 20;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.boundaryPath {
+  fill: none;
+  stroke: color-mix(in oklch, oklch(70.4% 0.14 182.503) 88%, transparent);
+  stroke-width: 2;
+  stroke-dasharray: 8 6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(
+    0 0 8px color-mix(in oklch, oklch(70.4% 0.14 182.503) 34%, transparent)
+  );
+}
+
+.previewDot {
+  fill: color-mix(in oklch, var(--color-primary) 70%, transparent);
+}

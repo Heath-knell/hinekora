@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   AppSettingsSchema,
+  AuraPlacementScaleSettings,
+  AuraPointPlacementSettings,
   CapturePreviewSourceSchema,
   createCoordinateReferenceDimensions,
   createDefaultSettings,
@@ -180,6 +182,42 @@ describe("shared schemas", () => {
     });
   });
 
+  it("normalizes legacy aura placement scales to the minimum scale", () => {
+    const profile = {
+      id: "profile-1",
+      name: "Default",
+      game: "poe1",
+      targetFps: 30,
+      captureTarget: null,
+      cropRegions: [
+        {
+          id: "crop-1",
+          label: "Aura 1",
+          x: 10,
+          y: 20,
+          width: 100,
+          height: 40,
+        },
+      ],
+      overlayPlacements: [
+        {
+          id: "placement-1",
+          cropRegionId: "crop-1",
+          x: 30,
+          y: 40,
+          scale: AuraPlacementScaleSettings.minPersistedScale,
+          opacity: 1,
+        },
+      ],
+      createdAt: new Date(0).toISOString(),
+      updatedAt: new Date(0).toISOString(),
+    };
+
+    expect(ProfileSchema.parse(profile).overlayPlacements[0]?.scale).toBe(
+      AuraPlacementScaleSettings.minScale,
+    );
+  });
+
   it("accepts arched aura crop regions with bounded arc metadata", () => {
     const profile = {
       id: "profile-1",
@@ -211,14 +249,197 @@ describe("shared schemas", () => {
       createdAt: new Date(0).toISOString(),
       updatedAt: new Date(0).toISOString(),
     };
+    const cropRegion = profile.cropRegions[0]!;
 
     expect(ProfileSchema.parse(profile)).toEqual(profile);
     expect(() =>
       ProfileSchema.parse({
         ...profile,
-        cropRegions: [{ ...profile.cropRegions[0], arc: undefined }],
+        cropRegions: [{ ...cropRegion, arc: undefined }],
       }),
     ).toThrow("Arched crop regions require arc metadata.");
+    expect(() =>
+      ProfileSchema.parse({
+        ...profile,
+        cropRegions: [
+          {
+            ...cropRegion,
+            arc: {
+              ...cropRegion.arc,
+              endX: cropRegion.width + 1,
+            },
+          },
+        ],
+      }),
+    ).toThrow("Arc coordinates must stay within crop bounds.");
+    expect(() =>
+      ProfileSchema.parse({
+        ...profile,
+        cropRegions: [
+          {
+            ...cropRegion,
+            arc: {
+              ...cropRegion.arc,
+              controlY: cropRegion.height + 1,
+            },
+          },
+        ],
+      }),
+    ).toThrow("Arc coordinates must stay within crop bounds.");
+  });
+
+  it("accepts pointer aura crop regions with bounded point metadata", () => {
+    const profile = {
+      id: "profile-1",
+      name: "Default",
+      game: "poe1",
+      targetFps: 30,
+      captureTarget: null,
+      cropRegions: [
+        {
+          id: "crop-1",
+          label: "Pointer aura 1",
+          shape: "points",
+          x: 10,
+          y: 20,
+          width: 80,
+          height: 120,
+          points: [
+            { x: 5, y: 5 },
+            { x: 20, y: 60 },
+          ],
+        },
+      ],
+      overlayPlacements: [
+        {
+          id: "placement-1",
+          cropRegionId: "crop-1",
+          x: 30,
+          y: 40,
+          scale: 1,
+          opacity: 1,
+          pointGap: AuraPointPlacementSettings.defaultGap,
+          pointSampleSize: AuraPointPlacementSettings.defaultSampleSize,
+        },
+      ],
+      createdAt: new Date(0).toISOString(),
+      updatedAt: new Date(0).toISOString(),
+    };
+    const cropRegion = profile.cropRegions[0]!;
+
+    expect(ProfileSchema.parse(profile)).toEqual(profile);
+    expect(() =>
+      ProfileSchema.parse({
+        ...profile,
+        overlayPlacements: [
+          {
+            id: "placement-1",
+            cropRegionId: "crop-1",
+            x: 30,
+            y: 40,
+            scale: 1,
+            opacity: 1,
+            pointGap: AuraPointPlacementSettings.maxGap + 1,
+            pointSampleSize: AuraPointPlacementSettings.defaultSampleSize,
+          },
+        ],
+      }),
+    ).toThrow();
+    expect(() =>
+      ProfileSchema.parse({
+        ...profile,
+        overlayPlacements: [
+          {
+            id: "placement-1",
+            cropRegionId: "crop-1",
+            x: 30,
+            y: 40,
+            scale: 1,
+            opacity: 1,
+            pointGap: AuraPointPlacementSettings.defaultGap,
+            pointSampleSize: AuraPointPlacementSettings.maxSampleSize + 1,
+          },
+        ],
+      }),
+    ).toThrow();
+    expect(() =>
+      ProfileSchema.parse({
+        ...profile,
+        cropRegions: [{ ...cropRegion, points: undefined }],
+      }),
+    ).toThrow("Pointer crop regions require point metadata.");
+    expect(() =>
+      ProfileSchema.parse({
+        ...profile,
+        cropRegions: [
+          {
+            ...cropRegion,
+            points: [
+              {
+                x: cropRegion.width + 1,
+                y: 5,
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow("Pointer coordinates must stay within crop bounds.");
+    expect(() =>
+      ProfileSchema.parse({
+        ...profile,
+        cropRegions: [
+          {
+            ...cropRegion,
+            points: [
+              {
+                x: 5,
+                y: cropRegion.height + 1,
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow("Pointer coordinates must stay within crop bounds.");
+  });
+
+  it("normalizes legacy pointer aura sample sizes to the render minimum", () => {
+    const profile = {
+      id: "profile-1",
+      name: "Default",
+      game: "poe1",
+      targetFps: 30,
+      captureTarget: null,
+      cropRegions: [
+        {
+          id: "crop-1",
+          label: "Pointer aura 1",
+          shape: "points",
+          x: 10,
+          y: 20,
+          width: 80,
+          height: 120,
+          points: [{ x: 5, y: 5 }],
+        },
+      ],
+      overlayPlacements: [
+        {
+          id: "placement-1",
+          cropRegionId: "crop-1",
+          x: 30,
+          y: 40,
+          scale: 1,
+          opacity: 1,
+          pointGap: AuraPointPlacementSettings.defaultGap,
+          pointSampleSize: AuraPointPlacementSettings.minSampleSize - 10,
+        },
+      ],
+      createdAt: new Date(0).toISOString(),
+      updatedAt: new Date(0).toISOString(),
+    };
+
+    expect(
+      ProfileSchema.parse(profile).overlayPlacements[0]?.pointSampleSize,
+    ).toBe(AuraPointPlacementSettings.minSampleSize);
   });
 
   it("strips obsolete arched aura thickness scale from saved placements", () => {

@@ -13,7 +13,11 @@ import {
   registerIpcWindowRole,
 } from "~/main/utils/ipc-window-roles";
 
-import type { Profile, ReplayClip } from "~/types";
+import {
+  AuraPointPlacementSettings,
+  type Profile,
+  type ReplayClip,
+} from "~/types";
 import { GameOverlayCoordinator } from "../GameOverlayCoordinator";
 import {
   hideGameOverlayWindow,
@@ -864,7 +868,7 @@ describe("OverlayWindowsService", () => {
       }),
     ).toEqual({
       ok: false,
-      error: "shape must be rect or arc",
+      error: "shape must be rect, arc, or points",
     });
     expect(
       await handlers.get(OverlayWindowsChannel.SelectCropRegion)?.(
@@ -873,7 +877,7 @@ describe("OverlayWindowsService", () => {
       ),
     ).toEqual({
       ok: false,
-      error: "shape must be rect or arc",
+      error: "shape must be rect, arc, or points",
     });
     expect(
       await handlers.get(OverlayWindowsChannel.SetRecorderMode)?.(
@@ -1028,6 +1032,18 @@ describe("GridLinesOverlayService", () => {
     service.cancelCropRegionSelection();
     await expect(invalidSelection).resolves.toBeNull();
 
+    const unknownShapeSelection = service.selectCropRegion();
+    await flushTimers();
+    service.completeCropRegionSelection({
+      shape: "moon",
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 80,
+    });
+    service.cancelCropRegionSelection();
+    await expect(unknownShapeSelection).resolves.toBeNull();
+
     const missingArcSelection = service.selectCropRegion({ shape: "arc" });
     await flushTimers();
     service.completeCropRegionSelection({
@@ -1117,6 +1133,164 @@ describe("GridLinesOverlayService", () => {
         controlY: 10,
         thickness: 20,
       },
+    });
+  });
+
+  it("ignores arched crop selector selections outside crop bounds", async () => {
+    const cropWindow = createFakeWindow();
+    electronMocks.browserWindowFactory.mockReturnValue(cropWindow);
+    const service = new OverlayWindowsService();
+
+    const selection = service.selectCropRegion({ shape: "arc" });
+    await flushTimers();
+
+    for (const arc of [
+      {
+        startX: 141,
+        startY: 70,
+        endX: 130,
+        endY: 70,
+        controlX: 70,
+        controlY: 10,
+        thickness: 20,
+      },
+      {
+        startX: 10,
+        startY: -1,
+        endX: 130,
+        endY: 70,
+        controlX: 70,
+        controlY: 10,
+        thickness: 20,
+      },
+      {
+        startX: 10,
+        startY: 70,
+        endX: 130,
+        endY: 70,
+        controlX: 70,
+        controlY: 81,
+        thickness: 20,
+      },
+    ]) {
+      service.completeCropRegionSelection({
+        shape: "arc",
+        x: 90,
+        y: 90,
+        width: 140,
+        height: 80,
+        arc,
+      });
+    }
+
+    service.completeCropRegionSelection({
+      shape: "arc",
+      x: 90,
+      y: 90,
+      width: 140,
+      height: 80,
+      arc: {
+        startX: 10,
+        startY: 70,
+        endX: 130,
+        endY: 70,
+        controlX: 70,
+        controlY: 10,
+        thickness: 20,
+      },
+    });
+
+    await expect(selection).resolves.toMatchObject({
+      shape: "arc",
+      arc: {
+        controlX: 70,
+        controlY: 10,
+      },
+    });
+  });
+
+  it("loads and resolves pointer crop selector selections", async () => {
+    const cropWindow = createFakeWindow();
+    electronMocks.browserWindowFactory.mockReturnValue(cropWindow);
+    const service = new OverlayWindowsService();
+
+    const selection = service.selectCropRegion({ shape: "points" });
+    await flushTimers();
+
+    expect(cropWindow.loadFile).toHaveBeenCalledWith(expect.any(String), {
+      hash: `/${WindowName.CropSelectorOverlay}?shape=points`,
+    });
+
+    service.completeCropRegionSelection({
+      shape: "points",
+      x: 90,
+      y: 90,
+      width: 40,
+      height: 80,
+      points: [
+        { x: 5, y: 5 },
+        { x: 30, y: 70 },
+      ],
+    });
+
+    await expect(selection).resolves.toMatchObject({
+      shape: "points",
+      x: 90,
+      y: 90,
+      width: 40,
+      height: 80,
+      points: [
+        { x: 5, y: 5 },
+        { x: 30, y: 70 },
+      ],
+    });
+  });
+
+  it("ignores invalid pointer crop selector selections", async () => {
+    const cropWindow = createFakeWindow();
+    electronMocks.browserWindowFactory.mockReturnValue(cropWindow);
+    const service = new OverlayWindowsService();
+
+    const selection = service.selectCropRegion({ shape: "points" });
+    await flushTimers();
+
+    const tooManyPoints = Array.from(
+      { length: AuraPointPlacementSettings.maxPoints + 1 },
+      (_, index) => ({ x: index, y: index }),
+    );
+    for (const points of [
+      undefined,
+      [],
+      tooManyPoints,
+      [null],
+      [{ x: "bad", y: 1 }],
+      [{ x: 1, y: "bad" }],
+      [{ x: -1, y: 5 }],
+      [{ x: 41, y: 5 }],
+      [{ x: 5, y: 81 }],
+    ]) {
+      service.completeCropRegionSelection({
+        shape: "points",
+        x: 90,
+        y: 90,
+        width: 40,
+        height: 80,
+        points,
+      });
+    }
+
+    service.completeCropRegionSelection({
+      shape: "points",
+      x: 90,
+      y: 90,
+      width: 40,
+      height: 80,
+      points: [{ x: 5, y: 5 }],
+    });
+
+    await expect(selection).resolves.toMatchObject({
+      shape: "points",
+      points: [{ x: 5, y: 5 }],
     });
   });
 

@@ -2,6 +2,7 @@ import type { ChangeEvent } from "react";
 import {
   FiLoader as Loader2,
   FiMinimize2 as Minimize,
+  FiMousePointer as MousePointer,
   FiPlay as Play,
   FiPlusSquare as PlusSquare,
   FiSquare as Square,
@@ -83,6 +84,14 @@ function ExpandedRecorderControlsOverlay({
   const handleAddArchedAura = () =>
     openRecorderAuraOverlay({
       addAuraShape: "arc",
+      gameRunning,
+      isRecorderBusy,
+      profileId: selectedProfile?.id ?? null,
+      startAddingAura: true,
+    });
+  const handleAddPointerAura = () =>
+    openRecorderAuraOverlay({
+      addAuraShape: "points",
       gameRunning,
       isRecorderBusy,
       profileId: selectedProfile?.id ?? null,
@@ -189,6 +198,20 @@ function ExpandedRecorderControlsOverlay({
           aria-label="Add arched aura"
         >
           <Moon size={19} />
+        </button>
+        <button
+          className={`${styles.iconButton} btn btn-primary btn-square`}
+          type="button"
+          disabled={!canUnlockAuras}
+          onClick={handleAddPointerAura}
+          title={
+            !gameRunning
+              ? "Start the selected game before adding pointer auras"
+              : "Add pointer aura"
+          }
+          aria-label="Add pointer aura"
+        >
+          <MousePointer size={18} />
         </button>
         <span className={styles.divider} aria-hidden="true" />
         <select
