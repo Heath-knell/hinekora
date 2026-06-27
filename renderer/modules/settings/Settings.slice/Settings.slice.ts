@@ -6,6 +6,20 @@ import type {
 
 import type { AppSettings } from "~/types";
 
+const privateSettingsUpdateKeys = new Set<keyof AppSettings>([
+  "poe1CharacterName",
+  "poe2CharacterName",
+]);
+
+function shouldTrackSettingsUpdate(input: Partial<AppSettings>): boolean {
+  const updateKeys = Object.keys(input) as Array<keyof AppSettings>;
+
+  return (
+    updateKeys.length > 0 &&
+    updateKeys.some((key) => !privateSettingsUpdateKeys.has(key))
+  );
+}
+
 export const createSettingsSlice: BoundStoreStateCreator<SettingsSlice> = (
   set,
 ) => ({
@@ -22,7 +36,11 @@ export const createSettingsSlice: BoundStoreStateCreator<SettingsSlice> = (
       set((state) => {
         state.settings.value = value;
       });
-      trackEvent("settings-updated");
+      if (shouldTrackSettingsUpdate(input)) {
+        trackEvent("settings-updated");
+      }
     },
   },
 });
+
+export { shouldTrackSettingsUpdate };

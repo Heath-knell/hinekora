@@ -40,13 +40,19 @@ describe("SettingsStoreService", () => {
           activeGame: "poe2",
           activeLeague: "Mercenaries",
           deathClipSeconds: 12,
+          groupPlayDeathAlertDismissed: true,
           onboardingDismissedBeacons: ["game-selector"],
+          poe1CharacterName: "Ailucannon",
+          poe2CharacterName: "Ailumonk",
         }),
       ).toMatchObject({
         activeGame: "poe2",
         activeLeague: "Mercenaries",
         deathClipSeconds: 12,
+        groupPlayDeathAlertDismissed: true,
         onboardingDismissedBeacons: ["game-selector"],
+        poe1CharacterName: "Ailucannon",
+        poe2CharacterName: "Ailumonk",
       });
       expect(() => service.update({ deathClipSeconds: 999 })).toThrow();
     } finally {

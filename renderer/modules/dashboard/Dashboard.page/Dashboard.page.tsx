@@ -1,6 +1,7 @@
 import { PageContainer } from "~/renderer/components/PageContainer/PageContainer";
 import { PageContent } from "~/renderer/components/PageContent/PageContent";
 import { CapturePreviewPanel } from "~/renderer/modules/capture-preview/CapturePreview.components/CapturePreviewPanel/CapturePreviewPanel";
+import { GroupPlayDeathAlert } from "~/renderer/modules/dashboard/Dashboard.components/GroupPlayDeathAlert/GroupPlayDeathAlert";
 import { CaptureModePageHeader } from "~/renderer/modules/managed-recorder/ManagedRecorder.components/CaptureModePageHeader/CaptureModePageHeader";
 import { ManagedRecorderPanel } from "~/renderer/modules/managed-recorder/ManagedRecorder.components/ManagedRecorderPanel/ManagedRecorderPanel";
 
@@ -11,6 +12,7 @@ function DashboardPage() {
         title="Dashboard"
         subtitle="Live capture preview and capture controls for the active game."
       />
+      <GroupPlayDeathAlert />
       <PageContent className="grid grid-cols-12 items-start gap-3 [grid-auto-flow:dense]">
         <CapturePreviewPanel />
         <ManagedRecorderPanel />

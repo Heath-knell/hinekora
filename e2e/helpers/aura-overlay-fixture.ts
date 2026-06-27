@@ -33,6 +33,7 @@ interface AuraOverlayE2EFixture {
 }
 
 interface AuraOverlayE2EOptions {
+  overlapHelpWithArchedAura?: boolean;
   withArchedAura?: boolean;
 }
 
@@ -76,8 +77,8 @@ function createAuraOverlayE2EProfile(options: AuraOverlayE2EOptions): Profile {
             referenceHeight: 1080,
             referenceWidth: 1920,
             scale: 1,
-            x: 850,
-            y: 450,
+            x: options.overlapHelpWithArchedAura === true ? 460 : 850,
+            y: options.overlapHelpWithArchedAura === true ? 250 : 450,
           },
         ]
       : [];

@@ -66,6 +66,12 @@ async function renderCropSelectorPage(
   return { container, overlay: overlay as HTMLElement, root };
 }
 
+function readPointLabels(container: HTMLElement): string[] {
+  return [...container.querySelectorAll('span[class*="pointLabel"]')].map(
+    (label) => label.textContent ?? "",
+  );
+}
+
 describe("CropSelectorOverlayPage", () => {
   let root: Root | null = null;
 
@@ -108,7 +114,7 @@ describe("CropSelectorOverlayPage", () => {
         }),
       );
     });
-    expect(container.textContent).not.toContain("A");
+    expect(readPointLabels(container)).not.toContain("A");
 
     await act(async () => {
       overlay.dispatchEvent(
@@ -119,7 +125,7 @@ describe("CropSelectorOverlayPage", () => {
         }),
       );
     });
-    expect(container.textContent).toContain("A");
+    expect(readPointLabels(container)).toContain("A");
 
     await act(async () => {
       overlay.dispatchEvent(
@@ -130,7 +136,7 @@ describe("CropSelectorOverlayPage", () => {
         }),
       );
     });
-    expect(container.textContent).toContain("B");
+    expect(readPointLabels(container)).toContain("B");
 
     await act(async () => {
       overlay.dispatchEvent(
@@ -166,6 +172,21 @@ describe("CropSelectorOverlayPage", () => {
       x: 90,
       y: 90,
     });
+  });
+
+  it("shows grid selector controls for the active selection type", async () => {
+    const rendered = await renderCropSelectorPage("points");
+    root = rendered.root;
+    const { container } = rendered;
+
+    expect(container.textContent).toContain("Grid selector");
+    expect(container.textContent).toContain("Active mode:");
+    expect(container.textContent).toContain("Pointer aura");
+    expect(container.textContent).toContain("Right click");
+    expect(container.textContent).toContain("Press");
+    expect(container.textContent).toContain("Esc");
+    expect(container.textContent).toContain("grid selector");
+    expect(container.querySelector(".kbd")).toBeInstanceOf(HTMLElement);
   });
 
   it("resets an arched selection with right click without closing the overlay", async () => {

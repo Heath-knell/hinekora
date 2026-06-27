@@ -9,6 +9,7 @@ import {
   logInfo,
   logWarn,
 } from "~/main/utils/app-log";
+import { isAsarVirtualPath } from "~/main/utils/asar-path";
 import { safeErrorMessage } from "~/main/utils/ipc-validation";
 
 import type { EditorExportResolution } from "./Editor.dto";
@@ -487,30 +488,7 @@ function resolveNoobsBinaryPath(
   const configuredPath = configured ? resolve(configured) : null;
   const resourcesPath =
     typeof process.resourcesPath === "string" ? process.resourcesPath : null;
-  const candidates = [
-    configuredPath && binaryName === "ffmpeg" ? configuredPath : null,
-    configuredPath && binaryName === "ffprobe"
-      ? resolve(dirname(configuredPath), executableName)
-      : null,
-    resolve(currentDir, "../../node_modules/noobs/dist/bin", executableName),
-    resolve(
-      process.cwd(),
-      "node_modules",
-      "noobs",
-      "dist",
-      "bin",
-      executableName,
-    ),
-    resourcesPath
-      ? resolve(
-          resourcesPath,
-          "node_modules",
-          "noobs",
-          "dist",
-          "bin",
-          executableName,
-        )
-      : null,
+  const packagedCandidates = [
     resourcesPath
       ? resolve(
           resourcesPath,
@@ -522,7 +500,36 @@ function resolveNoobsBinaryPath(
           executableName,
         )
       : null,
-  ].filter((candidate): candidate is string => candidate !== null);
+    resourcesPath
+      ? resolve(
+          resourcesPath,
+          "node_modules",
+          "noobs",
+          "dist",
+          "bin",
+          executableName,
+        )
+      : null,
+  ];
+  const candidates = [
+    configuredPath && binaryName === "ffmpeg" ? configuredPath : null,
+    configuredPath && binaryName === "ffprobe"
+      ? resolve(dirname(configuredPath), executableName)
+      : null,
+    ...packagedCandidates,
+    resolve(currentDir, "../../node_modules/noobs/dist/bin", executableName),
+    resolve(
+      process.cwd(),
+      "node_modules",
+      "noobs",
+      "dist",
+      "bin",
+      executableName,
+    ),
+  ].filter(
+    (candidate): candidate is string =>
+      candidate !== null && !isAsarVirtualPath(candidate),
+  );
 
   return candidates.find((candidate) => existsSync(candidate)) ?? null;
   /* v8 ignore stop */

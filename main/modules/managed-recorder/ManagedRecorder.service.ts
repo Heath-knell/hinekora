@@ -23,6 +23,7 @@ import {
   logInfoSync,
   logWarn,
 } from "~/main/utils/app-log";
+import { isAsarVirtualPath } from "~/main/utils/asar-path";
 import {
   assertOptionalBoolean,
   handleValidationError,
@@ -2078,18 +2079,8 @@ class ManagedRecorderService {
 
 export {
   describeNoobsRuntimeLocation,
-  isAsarVirtualPath,
   ManagedRecorderService,
 };
-
-function isAsarVirtualPath(path: string): boolean {
-  const normalized = normalize(path).replaceAll("\\", "/");
-
-  return (
-    normalized.includes("/app.asar/") &&
-    !normalized.includes("/app.asar.unpacked/")
-  );
-}
 
 function describeNoobsRuntimeLocation(path: string): string {
   const normalized = normalize(path).replaceAll("\\", "/");

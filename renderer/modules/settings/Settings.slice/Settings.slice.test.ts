@@ -3,15 +3,28 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BoundStore } from "~/renderer/store/store.types";
 import { createBoundStoreForTests } from "~/renderer/test/createBoundStoreForTests";
 
-import type { AppSettings } from "~/types";
-import { createSettingsSlice } from "./Settings.slice";
+import { type AppSettings, createDefaultSettings } from "~/types";
 
-const settings = {
+const analyticsMocks = vi.hoisted(() => ({
+  trackEvent: vi.fn(),
+}));
+
+vi.mock("~/renderer/modules/umami", () => ({
+  trackEvent: analyticsMocks.trackEvent,
+}));
+
+import {
+  createSettingsSlice,
+  shouldTrackSettingsUpdate,
+} from "./Settings.slice";
+
+const settings: AppSettings = {
+  ...createDefaultSettings(),
   activeGame: "poe2",
   activeLeague: "Standard",
   installedGames: ["poe2"],
   lastSeenAppVersion: null,
-} as unknown as AppSettings;
+};
 
 function createTestStore() {
   return createBoundStoreForTests(
@@ -49,5 +62,32 @@ describe("Settings slice", () => {
     expect(getSettings).toHaveBeenCalled();
     expect(updateSettings).toHaveBeenCalledWith({ activeLeague: "Hardcore" });
     expect(store.getState().settings.value?.activeLeague).toBe("Hardcore");
+    expect(analyticsMocks.trackEvent).toHaveBeenCalledWith("settings-updated");
+  });
+
+  it("does not track character-name-only settings updates", async () => {
+    updateSettings.mockResolvedValue({
+      ...settings,
+      poe1CharacterName: "Ailucannon",
+    });
+    const store = createTestStore();
+
+    await store.getState().settings.update({
+      poe1CharacterName: "Ailucannon",
+    });
+
+    expect(updateSettings).toHaveBeenCalledWith({
+      poe1CharacterName: "Ailucannon",
+    });
+    expect(analyticsMocks.trackEvent).not.toHaveBeenCalled();
+    expect(shouldTrackSettingsUpdate({ poe2CharacterName: "Ailumonk" })).toBe(
+      false,
+    );
+    expect(
+      shouldTrackSettingsUpdate({
+        activeLeague: "Hardcore",
+        poe1CharacterName: "Ailucannon",
+      }),
+    ).toBe(true);
   });
 });

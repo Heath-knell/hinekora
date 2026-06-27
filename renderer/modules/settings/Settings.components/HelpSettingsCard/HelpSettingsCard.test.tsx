@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { allOnboardingBeaconIds } from "~/renderer/modules/onboarding/onboarding-config/onboarding-labels";
 
+import { type AppSettings, createDefaultSettings } from "~/types";
+
 const analyticsMocks = vi.hoisted(() => ({
   trackEvent: vi.fn(),
 }));
@@ -15,6 +17,8 @@ const storeMocks = vi.hoisted(() => ({
   refreshBeaconHost: vi.fn(),
   resetAll: vi.fn(),
   resetOne: vi.fn(),
+  settingsValue: null as AppSettings | null,
+  updateSettings: vi.fn(),
 }));
 
 vi.mock("~/renderer/modules/umami", () => ({
@@ -39,6 +43,11 @@ vi.mock("~/renderer/store", () => ({
   useOnboardingState: () => ({
     dismissedBeacons: storeMocks.dismissedBeacons,
   }),
+  useSettingsShallow: (selector: unknown) =>
+    (selector as (settings: unknown) => unknown)({
+      value: storeMocks.settingsValue,
+      update: storeMocks.updateSettings,
+    }),
 }));
 
 import { HelpSettingsCard } from "./HelpSettingsCard";
@@ -74,6 +83,11 @@ describe("HelpSettingsCard", () => {
     storeMocks.resetAll.mockImplementation(async () => {
       storeMocks.dismissedBeacons = [];
     });
+    storeMocks.settingsValue = {
+      ...createDefaultSettings(),
+      groupPlayDeathAlertDismissed: true,
+    };
+    storeMocks.updateSettings.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -145,6 +159,30 @@ describe("HelpSettingsCard", () => {
         visible: false,
         didDismiss: true,
         didReset: false,
+      },
+    );
+  });
+
+  it("restores dismissed dashboard alerts from help settings", async () => {
+    await renderHelpSettings();
+    const showAgainButton = Array.from(
+      container.querySelectorAll("button"),
+    ).find((button) => button.textContent?.includes("Show Again"));
+
+    expect(container.textContent).toContain("Dismissible alerts");
+    expect(container.textContent).toContain("Dismissed");
+
+    await act(async () => {
+      showAgainButton?.click();
+    });
+
+    expect(storeMocks.updateSettings).toHaveBeenCalledWith({
+      groupPlayDeathAlertDismissed: false,
+    });
+    expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
+      "dismissible-alert-restored",
+      {
+        alertId: "group-play-death",
       },
     );
   });

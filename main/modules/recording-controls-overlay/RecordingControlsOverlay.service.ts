@@ -39,7 +39,10 @@ type RecorderOverlayCloseReason =
   | "destroy"
   | "system-suspend"
   | "window-closed";
-type RecorderOverlayHiddenReason = "focus-gate" | "hide-requested";
+type RecorderOverlayHiddenReason =
+  | "focus-gate"
+  | "hide-requested"
+  | "overlay-suppressed";
 type RecorderOverlayShownReason = "focus-gate-restored" | "request";
 interface RecorderOverlayBoundsListeners {
   movedHandler: () => void;
@@ -62,6 +65,7 @@ class RecordingControlsOverlayService {
   constructor(
     private readonly coordinator: GameOverlayCoordinator,
     private readonly getContentProtectionEnabled = () => false,
+    private readonly canShowRecorderOverlay = () => true,
   ) {
     this.coordinator.register(this);
   }
@@ -189,13 +193,15 @@ class RecordingControlsOverlayService {
     }
   }
 
-  suspendRequestedOverlay(): void {
+  suspendRequestedOverlay(
+    reason: RecorderOverlayHiddenReason = "focus-gate",
+  ): void {
     if (this.recorderOverlayRequested) {
       const wasVisible = this.isVisible();
       const nativeWasVisible = this.recorderWindow?.isVisible() ?? false;
       this.coordinator.suspendGameOverlayWindow(this.recorderWindow);
       if (nativeWasVisible && !this.recorderOverlaySuspended) {
-        this.logHidden("focus-gate");
+        this.logHidden(reason);
       }
       this.recorderOverlaySuspended =
         nativeWasVisible || this.recorderOverlaySuspended;
@@ -342,11 +348,12 @@ class RecordingControlsOverlayService {
     window: BrowserWindow,
     reason: RecorderOverlayShownReason,
   ): void {
-    if (!this.coordinator.canShowGameOverlays()) {
+    const recorderAllowed = this.canShowRecorderOverlay();
+    if (!recorderAllowed || !this.coordinator.canShowGameOverlays()) {
       const wasVisible = window.isVisible();
       this.coordinator.suspendGameOverlayWindow(window);
       if (wasVisible && !this.recorderOverlaySuspended) {
-        this.logHidden("focus-gate");
+        this.logHidden(recorderAllowed ? "focus-gate" : "overlay-suppressed");
       }
       this.recorderOverlaySuspended =
         wasVisible || this.recorderOverlaySuspended;

@@ -5,6 +5,7 @@ import { immer } from "zustand/middleware/immer";
 
 import { createAppMenuSlice } from "~/renderer/modules/app-menu/AppMenu.slice/AppMenu.slice";
 import { createAppSetupSlice } from "~/renderer/modules/app-setup";
+import { createAuraOverlaySlice } from "~/renderer/modules/aura-overlay/AuraOverlay.slice/AuraOverlay.slice";
 import { createCapturePreviewSlice } from "~/renderer/modules/capture-preview/CapturePreview.slice/CapturePreview.slice";
 import { createChangelogSlice } from "~/renderer/modules/changelog/Changelog.slice/Changelog.slice";
 import { createClientLogSlice } from "~/renderer/modules/client-log/ClientLog.slice/ClientLog.slice";
@@ -38,6 +39,7 @@ export const useBoundStore = create<BoundStore>()(
   withDevtools(
     immer((...args) => {
       const appMenuSlice = createAppMenuSlice(...args);
+      const auraOverlaySlice = createAuraOverlaySlice(...args);
       const appSetupSlice = createAppSetupSlice(...args);
       const profilesSlice = createProfilesSlice(...args);
       const cropEditorSlice = createCropEditorSlice(...args);
@@ -57,6 +59,7 @@ export const useBoundStore = create<BoundStore>()(
 
       return {
         ...appMenuSlice,
+        ...auraOverlaySlice,
         ...appSetupSlice,
         ...profilesSlice,
         ...cropEditorSlice,

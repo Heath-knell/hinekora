@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { mockIpcMainHandlers } from "~/main/test/ipc";
+import { ATTRIBUTIONS } from "~/types/attributions";
 
 import { MainWindowChannel } from "../MainWindow.channels";
 import { MainWindowService } from "../MainWindow.service";
@@ -279,10 +280,24 @@ describe("MainWindowService", () => {
     expect(electronMocks.openExternal).toHaveBeenCalledWith(
       "https://github.com/navali-creations/hinekora",
     );
+    const warcraftRecorderAttribution = ATTRIBUTIONS.find(
+      (attribution) => attribution.name === "Warcraft Recorder",
+    );
+    expect(warcraftRecorderAttribution).toBeDefined();
+    const warcraftRecorderUrl = warcraftRecorderAttribution?.url ?? "";
+
+    expect(
+      fakeWindow.windowOpenHandler?.({
+        url: warcraftRecorderUrl,
+      }),
+    ).toEqual({ action: "deny" });
+    expect(electronMocks.openExternal).toHaveBeenCalledWith(
+      warcraftRecorderUrl,
+    );
     expect(
       fakeWindow.windowOpenHandler?.({ url: "file:///C:/Users/seb/a.html" }),
     ).toEqual({ action: "deny" });
-    expect(electronMocks.openExternal).toHaveBeenCalledTimes(1);
+    expect(electronMocks.openExternal).toHaveBeenCalledTimes(2);
 
     fakeWindow.close();
     expect(electronMocks.quit).toHaveBeenCalledTimes(1);

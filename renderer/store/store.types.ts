@@ -17,6 +17,7 @@ import type {
   ReplayClipLibraryQuery,
 } from "~/main/modules/replay-clips";
 import type { AppMenuSlice } from "~/renderer/modules/app-menu/AppMenu.slice/AppMenu.slice";
+import type { AuraOverlaySlice } from "~/renderer/modules/aura-overlay/AuraOverlay.slice/AuraOverlay.slice";
 import type { ChangelogSlice } from "~/renderer/modules/changelog/Changelog.slice/Changelog.slice";
 import type { CropEditorSlice } from "~/renderer/modules/crop-editor/CropEditor.slice/CropEditor.slice";
 import type { EditorSlice } from "~/renderer/modules/editor/Editor.slice/Editor.slice.types";
@@ -194,6 +195,7 @@ export interface RecordingStorageSlice {
 }
 
 export type BoundStore = AppMenuSlice &
+  AuraOverlaySlice &
   AppSetupSlice &
   ProfilesSlice &
   CropEditorSlice &

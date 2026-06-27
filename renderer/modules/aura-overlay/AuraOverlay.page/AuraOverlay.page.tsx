@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { OverlayExitNotice } from "~/renderer/components/OverlayExitNotice/OverlayExitNotice";
 import { AuraEditingNotice } from "~/renderer/modules/aura-overlay/AuraOverlay.components/AuraEditingNotice/AuraEditingNotice";
 import { AuraLockHandoffNotice } from "~/renderer/modules/aura-overlay/AuraOverlay.components/AuraLockHandoffNotice/AuraLockHandoffNotice";
 import { AuraOverlayPlacement } from "~/renderer/modules/aura-overlay/AuraOverlay.components/AuraOverlayPlacement/AuraOverlayPlacement";
@@ -163,7 +164,7 @@ function AuraOverlayPage() {
     void lockAuraOverlay();
   };
 
-  const { addingAura, startAddAuraSelection } = useAuraOverlayAddAuraSelection({
+  const { startAddAuraSelection } = useAuraOverlayAddAuraSelection({
     lockAuraOverlay,
     profile,
     recordAuraHistory,
@@ -238,14 +239,16 @@ function AuraOverlayPage() {
         onSelectPlacement={selectPlacement}
       />
       {canEditAuras && (
-        <AuraEditingNotice
-          addingAura={addingAura}
-          canAddAura={!!profile}
-          onAddAura={handleAddAuraClick}
-          onAddArchedAura={handleAddArchedAuraClick}
-          onAddPointerAura={handleAddPointerAuraClick}
-          onLockAuras={handleLockAurasClick}
-        />
+        <>
+          <OverlayExitNotice overlayName="aura overlay" />
+          <AuraEditingNotice
+            canAddAura={!!profile}
+            onAddAura={handleAddAuraClick}
+            onAddArchedAura={handleAddArchedAuraClick}
+            onAddPointerAura={handleAddPointerAuraClick}
+            onLockAuras={handleLockAurasClick}
+          />
+        </>
       )}
       {showLockHandoffHint && auraOverlayLocked && <AuraLockHandoffNotice />}
     </main>

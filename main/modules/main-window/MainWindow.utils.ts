@@ -15,6 +15,13 @@ function isAllowedExternalUrl(value: string): boolean {
       return true;
     }
 
+    if (
+      hostname === "warcraftrecorder.com" ||
+      hostname === "www.warcraftrecorder.com"
+    ) {
+      return true;
+    }
+
     return (
       hostname === "discord.gg" &&
       url.pathname.replace(/\/$/, "") === "/mrqmPYXHHT"

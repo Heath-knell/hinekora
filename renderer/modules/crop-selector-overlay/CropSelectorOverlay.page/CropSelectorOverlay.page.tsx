@@ -1,7 +1,10 @@
 import { useEffect } from "react";
 
+import { OverlayExitNotice } from "~/renderer/components/OverlayExitNotice/OverlayExitNotice";
+
 import { ArcSelectionPreview } from "../CropSelectorOverlay.components/ArcSelectionPreview/ArcSelectionPreview";
 import { CropSelectionBox } from "../CropSelectorOverlay.components/CropSelectionBox/CropSelectionBox";
+import { CropSelectorControlsHelp } from "../CropSelectorOverlay.components/CropSelectorControlsHelp/CropSelectorControlsHelp";
 import { PointSelectionPreview } from "../CropSelectorOverlay.components/PointSelectionPreview/PointSelectionPreview";
 import { useCropSelectorSelection } from "../CropSelectorOverlay.hooks/useCropSelectorSelection/useCropSelectorSelection";
 import styles from "./CropSelectorOverlayPage.module.css";
@@ -56,6 +59,8 @@ function CropSelectorOverlayPage() {
         />
       )}
       {selection && <CropSelectionBox selection={selection} />}
+      <OverlayExitNotice overlayName="grid selector" />
+      <CropSelectorControlsHelp shape={shape} />
     </main>
   );
 }

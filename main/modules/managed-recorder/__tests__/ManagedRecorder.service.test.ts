@@ -23,6 +23,7 @@ import { ProfilesService } from "~/main/modules/profiles";
 import { RecordingStorageService } from "~/main/modules/recording-storage";
 import { SettingsStoreService } from "~/main/modules/settings-store";
 import { mockIpcMainHandlers } from "~/main/test/ipc";
+import { isAsarVirtualPath } from "~/main/utils/asar-path";
 
 import {
   createDefaultProfile,
@@ -32,7 +33,6 @@ import {
 import { ManagedRecorderChannel } from "../ManagedRecorder.channels";
 import {
   describeNoobsRuntimeLocation,
-  isAsarVirtualPath,
   ManagedRecorderService,
 } from "../ManagedRecorder.service";
 

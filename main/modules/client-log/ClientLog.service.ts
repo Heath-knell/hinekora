@@ -42,7 +42,8 @@ const CLIENT_LOG_WATCH_INTERVAL_MS = 1_000;
 const CLIENT_LOG_READ_CHUNK_BYTES = 64 * 1024;
 const CLIENT_LOG_MAX_PARTIAL_LINE_CHARS = 64 * 1024;
 const CLIENT_LOG_FOCUS_STATE_TAIL_BYTES = 8 * 1024;
-const CLIENT_LOG_STARTUP_FOCUS_STATE_TAIL_BYTES = 32 * 1024;
+const CLIENT_LOG_FOCUS_STATE_SCAN_CHUNK_BYTES = 8 * 1024;
+const CLIENT_LOG_STARTUP_FOCUS_STATE_MAX_BYTES = 512 * 1024;
 
 class ClientLogService extends EventEmitter {
   private static instance: ClientLogService | null = null;
@@ -58,6 +59,11 @@ class ClientLogService extends EventEmitter {
   private partialLine = "";
   private isProcessing = false;
   private lastUnavailableLogAt = 0;
+  private characterNames: Record<GameId, string> = {
+    poe1: "",
+    poe2: "",
+  };
+  private settingsUnsubscribe: (() => void) | null = null;
 
   static getInstance(): ClientLogService {
     if (!ClientLogService.instance) {
@@ -73,8 +79,12 @@ class ClientLogService extends EventEmitter {
   }
 
   initializeFromSettings(): void {
-    const settings = SettingsStoreService.getInstance().get();
+    const settingsStore = SettingsStoreService.getInstance();
+    const settings = settingsStore.get();
     const path = this.resolveClientLogPath(settings, settings.activeGame);
+
+    this.syncCharacterNames(settings);
+    this.watchSettingsChanges(settingsStore);
 
     this.status = {
       ...this.status,
@@ -118,12 +128,13 @@ class ClientLogService extends EventEmitter {
 
   setPath(input: ClientLogPathInput): ClientLogStatus {
     const settings = SettingsStoreService.getInstance();
-    settings.update({
+    const updatedSettings = settings.update({
       activeGame: input.game,
       ...(input.game === "poe1"
         ? { poe1ClientTxtPath: input.path }
         : { poe2ClientTxtPath: input.path }),
     });
+    this.syncCharacterNames(updatedSettings);
 
     this.watchFile(input.path, input.game);
     logInfo(CLIENT_LOG_SCOPE, "Client log path updated", {
@@ -150,11 +161,13 @@ class ClientLogService extends EventEmitter {
         currentSettings.activeGame === input.game &&
         this.isCurrentActiveGameStatus(input.game, currentPath)
       ) {
+        this.syncCharacterNames(currentSettings);
         return this.status;
       }
     }
 
     const settings = settingsStore.update({ activeGame: input.game });
+    this.syncCharacterNames(settings);
     const path = this.resolveClientLogPath(settings, input.game);
 
     if (this.isCurrentActiveGameStatus(input.game, path)) {
@@ -207,6 +220,27 @@ class ClientLogService extends EventEmitter {
     return game === "poe1"
       ? settings.poe1ClientTxtPath
       : settings.poe2ClientTxtPath;
+  }
+
+  private syncCharacterNames(settings: AppSettings): void {
+    this.characterNames = {
+      poe1: settings.poe1CharacterName.trim(),
+      poe2: settings.poe2CharacterName.trim(),
+    };
+  }
+
+  private watchSettingsChanges(settingsStore: SettingsStoreService): void {
+    if (this.settingsUnsubscribe !== null) {
+      return;
+    }
+
+    if (typeof settingsStore.onDidChange !== "function") {
+      return;
+    }
+
+    this.settingsUnsubscribe = settingsStore.onDidChange((settings) => {
+      this.syncCharacterNames(settings);
+    });
   }
 
   watchFile(filePath: string, game: GameId): void {
@@ -373,7 +407,9 @@ class ClientLogService extends EventEmitter {
       return;
     }
 
-    const parsedEvents = parseClientLogEvents(textToParse);
+    const parsedEvents = parseClientLogEvents(textToParse, {
+      characterName: this.characterNames[game],
+    });
     for (const focusEvent of parsedEvents.focusEvents) {
       logInfo(
         CLIENT_LOG_SCOPE,
@@ -429,13 +465,46 @@ class ClientLogService extends EventEmitter {
       return null;
     }
 
-    const bytesToRead = Math.min(fileSize, maxBytesToRead);
-    const buffer = Buffer.alloc(bytesToRead);
-    const position = fileSize - bytesToRead;
-
     try {
-      const bytesRead = fs.readSync(this.fd, buffer, 0, bytesToRead, position);
-      return findLatestFocusState(buffer.toString("utf-8", 0, bytesRead));
+      const maxBytes = Math.min(fileSize, maxBytesToRead);
+      let scannedBytes = 0;
+      let endPosition = fileSize;
+      let leadingPartialLine = "";
+
+      while (scannedBytes < maxBytes) {
+        const bytesToRead = Math.min(
+          CLIENT_LOG_FOCUS_STATE_SCAN_CHUNK_BYTES,
+          maxBytes - scannedBytes,
+        );
+        const position = endPosition - bytesToRead;
+        const buffer = Buffer.allocUnsafe(bytesToRead);
+        const bytesRead = fs.readSync(this.fd, buffer, 0, bytesToRead, position);
+        if (bytesRead <= 0) {
+          return null;
+        }
+
+        scannedBytes += bytesRead;
+        endPosition = position;
+        const textToParse =
+          buffer.toString("utf-8", 0, bytesRead) + leadingPartialLine;
+
+        const focusState = findLatestFocusState(textToParse);
+        if (focusState !== null) {
+          return focusState;
+        }
+
+        const firstLineBreakIndex = textToParse.indexOf("\n");
+        leadingPartialLine =
+          firstLineBreakIndex === -1
+            ? textToParse
+            : textToParse.slice(0, firstLineBreakIndex);
+
+        if (bytesRead < bytesToRead) {
+          return null;
+        }
+      }
+
+      return null;
     } catch (error) {
       logWarn(CLIENT_LOG_SCOPE, "Client log focus state read failed", {
         error: safeErrorMessage(error),
@@ -461,7 +530,7 @@ class ClientLogService extends EventEmitter {
     const recentFocusState = this.readLatestFocusStateFromRecentFileTail(
       filePath,
       this.lastKnownSize,
-      CLIENT_LOG_STARTUP_FOCUS_STATE_TAIL_BYTES,
+      CLIENT_LOG_STARTUP_FOCUS_STATE_MAX_BYTES,
     );
     if (recentFocusState !== null) {
       this.setPoeFocusActive(recentFocusState);

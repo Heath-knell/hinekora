@@ -33,7 +33,7 @@
   --color-info-content: oklch(14.7% 0.004 49.25);
   --color-success: #96826c;
   --color-success-content: #080909;
-  --color-warning: #96826c;
+  --color-warning: oklch(83.7% 0.128 66.29);
   --color-warning-content: #080909;
   --color-error: oklch(44.4% 0.177 26.899);
   --color-error-content: #f0e4d2;
@@ -63,7 +63,7 @@
   --color-info-content: oklch(14.7% 0.004 49.25);
   --color-success: #96826c;
   --color-success-content: #080909;
-  --color-warning: #96826c;
+  --color-warning: oklch(83.7% 0.128 66.29);
   --color-warning-content: #080909;
   --color-error: oklch(44.4% 0.177 26.899);
   --color-error-content: #f0e4d2;

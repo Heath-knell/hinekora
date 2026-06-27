@@ -215,6 +215,71 @@ describe("probeEditorAudioStream", () => {
     expect(progress).toHaveBeenLastCalledWith(1);
   });
 
+  it("skips asar virtual packaged ffmpeg paths", async () => {
+    vi.resetModules();
+    const directory = mkdtempSync(join(tmpdir(), "hinekora-editor-ffmpeg-"));
+    const executableName =
+      process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
+    const resourcesPath = join(directory, "resources");
+    const virtualPath = join(
+      resourcesPath,
+      "app.asar",
+      "node_modules",
+      "noobs",
+      "dist",
+      "bin",
+      executableName,
+    );
+    const unpackedPath = join(
+      resourcesPath,
+      "app.asar.unpacked",
+      "node_modules",
+      "noobs",
+      "dist",
+      "bin",
+      executableName,
+    );
+    const previousFfmpegPath = process.env.HINEKORA_FFMPEG_PATH;
+    const previousResourcesPath = process.resourcesPath;
+    const existsSync = vi.fn(
+      (path: string) => path === virtualPath || path === unpackedPath,
+    );
+    vi.doMock("node:fs", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("node:fs")>();
+
+      return {
+        ...actual,
+        existsSync,
+      };
+    });
+
+    try {
+      process.env.HINEKORA_FFMPEG_PATH = virtualPath;
+      Object.defineProperty(process, "resourcesPath", {
+        configurable: true,
+        value: resourcesPath,
+      });
+      const { resolveEditorFfmpegPath } = await import("../Editor.ffmpeg");
+
+      expect(resolveEditorFfmpegPath()).toBe(unpackedPath);
+      expect(existsSync).toHaveBeenCalledWith(unpackedPath);
+      expect(existsSync).not.toHaveBeenCalledWith(virtualPath);
+    } finally {
+      if (previousFfmpegPath === undefined) {
+        delete process.env.HINEKORA_FFMPEG_PATH;
+      } else {
+        process.env.HINEKORA_FFMPEG_PATH = previousFfmpegPath;
+      }
+      Object.defineProperty(process, "resourcesPath", {
+        configurable: true,
+        value: previousResourcesPath,
+      });
+      vi.doUnmock("node:fs");
+      vi.resetModules();
+      rmSync(directory, { force: true, recursive: true });
+    }
+  });
+
   it("probes unique audio paths with bounded concurrency", async () => {
     const calls: string[] = [];
     const releaseByPath = new Map<string, () => void>();

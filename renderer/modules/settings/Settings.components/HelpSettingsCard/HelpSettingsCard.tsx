@@ -12,6 +12,7 @@ import { trackEvent } from "~/renderer/modules/umami";
 import { useOnboardingActions, useOnboardingState } from "~/renderer/store";
 
 import { BeaconManagementList } from "./BeaconManagementList/BeaconManagementList";
+import { DismissibleAlertsSettingsSection } from "./DismissibleAlertsSettingsSection/DismissibleAlertsSettingsSection";
 
 const DISMISS_ALL_BADGE_DURATION_MS = 2_000;
 const DISCORD_URL = "https://discord.gg/mrqmPYXHHT";
@@ -155,6 +156,8 @@ function HelpSettingsCard() {
           </a>
         </div>
       </div>
+
+      <DismissibleAlertsSettingsSection />
 
       <div className="space-y-4">
         <div className="flex items-start justify-between gap-4">

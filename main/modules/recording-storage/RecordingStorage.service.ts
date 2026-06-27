@@ -97,10 +97,15 @@ interface ExistingFileStats {
   sizeBytes: number;
 }
 
+interface RecordingFileDurationState extends ExistingFileStats {
+  path: string;
+}
+
 class RecordingStorageService {
   private static instance: RecordingStorageService | null = null;
 
   private readonly durationProbeFailureLoggedPaths = new Set<string>();
+  private readonly durationVerifiedFileStateByPath = new Map<string, string>();
   private recordingLibrarySyncCache: RecordingLibrarySyncCache | null = null;
   private readonly replayClipsRepository: ReplayClipsRepository;
   private readonly repository: RecordingStorageRepository;
@@ -252,13 +257,26 @@ class RecordingStorageService {
   registerRunRecording(input: RunRecordingCreateInput): RunRecordingMetadata {
     const resolvedPath = resolve(input.path);
     const fileStats = this.getExistingFileStats(resolvedPath);
+    const mediaDurationSeconds =
+      input.durationSeconds === undefined && fileStats.sizeBytes > 0
+        ? this.readRecordingFileDuration(resolvedPath)
+        : null;
+    const durationSeconds = input.durationSeconds ?? mediaDurationSeconds;
     const recording = this.repository.upsertRunRecording({
       ...input,
       path: resolvedPath,
+      durationSeconds,
       exists: fileStats.sizeBytes > 0,
       mtimeMs: fileStats.mtimeMs,
       sizeBytes: fileStats.sizeBytes,
     });
+    if (mediaDurationSeconds !== null) {
+      this.markRecordingDurationVerified({
+        path: resolvedPath,
+        mtimeMs: fileStats.mtimeMs,
+        sizeBytes: fileStats.sizeBytes,
+      });
+    }
     this.invalidateRecordingLibrarySyncCache();
     logInfo(RECORDING_STORAGE_LOG_SCOPE, "Run recording registered", {
       game: recording.sourceGame,
@@ -837,17 +855,56 @@ class RecordingStorageService {
           !existing.exists ||
           existing.sizeBytes !== file.size ||
           existing.mtimeMs !== file.mtimeMs;
-        const recoveredDurationSeconds =
-          existing.durationSeconds === null || fileChanged
-            ? this.readRecordingFileDuration(file.path)
-            : null;
+        const fileState = {
+          path: file.path,
+          mtimeMs: file.mtimeMs,
+          sizeBytes: file.size,
+        };
+        const shouldProbeDuration =
+          fileChanged ||
+          existing.durationSeconds === null ||
+          (isRoundedSecondDuration(existing.durationSeconds) &&
+            !this.isRecordingDurationVerified(fileState));
+        const recoveredDurationSeconds = shouldProbeDuration
+          ? this.readRecordingFileDuration(file.path, {
+              logFailure: fileChanged || existing.durationSeconds === null,
+              logSuccess: fileChanged || existing.durationSeconds === null,
+            })
+          : null;
+        if (recoveredDurationSeconds !== null) {
+          this.markRecordingDurationVerified(fileState);
+        }
+        const durationChanged =
+          recoveredDurationSeconds !== null &&
+          !areRecordingDurationsEqual(
+            existing.durationSeconds,
+            recoveredDurationSeconds,
+          );
+        if (
+          !fileChanged &&
+          existing.durationSeconds !== null &&
+          durationChanged
+        ) {
+          logInfo(
+            RECORDING_STORAGE_LOG_SCOPE,
+            "Run recording duration refreshed from media metadata",
+            {
+              durationSeconds: recoveredDurationSeconds,
+              previousDurationSeconds: existing.durationSeconds,
+              ...createSafePathLogFields(file.path, "recording"),
+            },
+          );
+        }
         if (
           fileChanged ||
           (existing.durationSeconds === null &&
-            recoveredDurationSeconds !== null)
+            recoveredDurationSeconds !== null) ||
+          durationChanged
         ) {
           this.repository.updateFileState(file.path, {
-            durationSeconds: recoveredDurationSeconds,
+            durationSeconds:
+              recoveredDurationSeconds ??
+              (fileChanged ? null : existing.durationSeconds),
             exists: true,
             mtimeMs: file.mtimeMs,
             sizeBytes: file.size,
@@ -858,6 +915,13 @@ class RecordingStorageService {
 
       const fallbackDate = new Date(file.mtimeMs).toISOString();
       const durationSeconds = this.readRecordingFileDuration(file.path);
+      if (durationSeconds !== null) {
+        this.markRecordingDurationVerified({
+          path: file.path,
+          mtimeMs: file.mtimeMs,
+          sizeBytes: file.size,
+        });
+      }
       this.repository.upsertRunRecording({
         id: this.createFallbackRecordingId(file.path),
         path: file.path,
@@ -915,20 +979,30 @@ class RecordingStorageService {
     );
   }
 
-  private readRecordingFileDuration(path: string): number | null {
+  private readRecordingFileDuration(
+    path: string,
+    options: { logFailure?: boolean; logSuccess?: boolean } = {},
+  ): number | null {
+    const logFailure = options.logFailure ?? true;
+    const logSuccess = options.logSuccess ?? true;
     const durationSeconds = readMp4DurationSeconds(path);
     if (durationSeconds !== null) {
-      logInfo(
-        RECORDING_STORAGE_LOG_SCOPE,
-        "Run recording duration recovered from media metadata",
-        {
-          durationSeconds,
-          ...createSafePathLogFields(path, "recording"),
-        },
-      );
+      if (logSuccess) {
+        logInfo(
+          RECORDING_STORAGE_LOG_SCOPE,
+          "Run recording duration recovered from media metadata",
+          {
+            durationSeconds,
+            ...createSafePathLogFields(path, "recording"),
+          },
+        );
+      }
     } else {
       const resolvedPath = resolve(path);
-      if (!this.durationProbeFailureLoggedPaths.has(resolvedPath)) {
+      if (
+        logFailure &&
+        !this.durationProbeFailureLoggedPaths.has(resolvedPath)
+      ) {
         this.durationProbeFailureLoggedPaths.add(resolvedPath);
         logWarn(
           RECORDING_STORAGE_LOG_SCOPE,
@@ -939,6 +1013,33 @@ class RecordingStorageService {
     }
 
     return durationSeconds;
+  }
+
+  private isRecordingDurationVerified(
+    file: RecordingFileDurationState,
+  ): boolean {
+    const resolvedPath = resolve(file.path);
+
+    return (
+      this.durationVerifiedFileStateByPath.get(resolvedPath) ===
+      this.createRecordingDurationStateKey({ ...file, path: resolvedPath })
+    );
+  }
+
+  private markRecordingDurationVerified(
+    file: RecordingFileDurationState,
+  ): void {
+    const resolvedPath = resolve(file.path);
+    this.durationVerifiedFileStateByPath.set(
+      resolvedPath,
+      this.createRecordingDurationStateKey({ ...file, path: resolvedPath }),
+    );
+  }
+
+  private createRecordingDurationStateKey(
+    file: RecordingFileDurationState,
+  ): string {
+    return `${file.path}\0${file.sizeBytes}\0${file.mtimeMs}`;
   }
 
   private getExistingFileStats(path: string): ExistingFileStats {
@@ -973,3 +1074,22 @@ class RecordingStorageService {
 
 export type { RecordingStorageCleanupOptions, RecordingStorageCleanupResult };
 export { RecordingStorageService };
+
+function areRecordingDurationsEqual(
+  first: number | null,
+  second: number | null,
+): boolean {
+  if (first === null || second === null) {
+    return first === second;
+  }
+
+  return Math.abs(first - second) < 0.001;
+}
+
+function isRoundedSecondDuration(durationSeconds: number | null): boolean {
+  return (
+    typeof durationSeconds === "number" &&
+    Number.isFinite(durationSeconds) &&
+    Math.abs(durationSeconds - Math.round(durationSeconds)) < 0.001
+  );
+}

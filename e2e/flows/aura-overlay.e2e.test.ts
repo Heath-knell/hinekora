@@ -111,3 +111,38 @@ test("edits an arched aura through the overlay workflow", async ({ page }) => {
     })
     .toBe(32);
 });
+
+test("shows aura controls help above selected aura controls", async ({
+  page,
+}) => {
+  await setupAuraOverlayE2E(page, {
+    overlapHelpWithArchedAura: true,
+    withArchedAura: true,
+  });
+
+  await page
+    .getByRole("navigation", { name: "Aura placements" })
+    .getByRole("button", { name: "Arched aura 1" })
+    .click();
+  await page.getByLabel("Show aura controls help").click();
+
+  const helpPanel = page.getByLabel("Aura overlay controls");
+  await expect(helpPanel).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Aura placement properties" }),
+  ).toBeVisible();
+
+  await expect
+    .poll(async () =>
+      helpPanel.evaluate((panel) => {
+        const bounds = panel.getBoundingClientRect();
+        const elementAtPanelCenter = document.elementFromPoint(
+          bounds.left + bounds.width / 2,
+          bounds.top + bounds.height / 2,
+        );
+
+        return panel.contains(elementAtPanelCenter);
+      }),
+    )
+    .toBe(true);
+});

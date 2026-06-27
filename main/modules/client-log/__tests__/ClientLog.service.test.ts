@@ -364,6 +364,39 @@ describe("ClientLogService", () => {
     service.stopWatchFile();
   });
 
+  it("scans bounded startup chunks until a recent focus marker is found", async () => {
+    const path = join(directory, "Client.txt");
+    const fillerLines = Array.from(
+      { length: 700 },
+      (_, index) =>
+        `2026/06/27 03:37:${String(index % 60).padStart(2, "0")} 231433953 3ef231e0 [INFO Client 20088] #chat: ${"x".repeat(80)}`,
+    );
+    writeFileSync(
+      path,
+      [
+        "2026/06/27 02:49:43 228540031 528852be [INFO Client 20088] [WINDOW] Lost focus",
+        ...fillerLines,
+      ].join("\n"),
+    );
+    electronMocks.getAllWindows.mockReturnValue([]);
+    const readSync = vi.spyOn(fs, "readSync");
+    const service = new ClientLogService();
+
+    service.watchFile(path, "poe1");
+    await flushPromises();
+
+    const readLengths = (readSync.mock.calls as unknown[][]).map(
+      (call) => call[3],
+    );
+    expect(
+      readLengths.every(
+        (length) => typeof length === "number" && length <= 8 * 1024,
+      ),
+    ).toBe(true);
+    expect(setPoeFocusActive).toHaveBeenCalledWith(false);
+    service.stopWatchFile();
+  });
+
   it("reconciles PoE focus from the latest client log tail", async () => {
     const initialText = "existing\n";
     const path = join(directory, "Client.txt");
@@ -514,7 +547,7 @@ describe("ClientLogService", () => {
       path,
       [
         "2026/05/26 02:21:56 124375531 54eea165 [INFO Client 49752] [WINDOW] Gained focus",
-        "x".repeat(32 * 1024 + 1),
+        "x".repeat(512 * 1024 + 1),
       ].join("\n"),
     );
     electronMocks.getAllWindows.mockReturnValue([]);
@@ -776,6 +809,45 @@ describe("ClientLogService", () => {
       }),
     ]);
     expect(handleDeathEvent).toHaveBeenCalledWith(deaths[0]);
+  });
+
+  it("dispatches only configured character death lines when a character name is set", async () => {
+    const path = join(directory, "Client.txt");
+    writeFileSync(path, "");
+    const handleDeathEvent = vi.fn().mockResolvedValue(null);
+    vi.spyOn(ReplayClipsService, "getInstance").mockReturnValue({
+      handleDeathEvent,
+    } as unknown as ReplayClipsService);
+    const service = new ClientLogService();
+    const deaths: unknown[] = [];
+    service.on("death", (event) => deaths.push(event));
+    const internals = service as unknown as {
+      characterNames: Record<"poe1" | "poe2", string>;
+      openFileDescriptor(path: string): void;
+      processNewBytes(path: string, size: number, game: "poe1"): Promise<void>;
+    };
+
+    internals.characterNames = {
+      poe1: "MainCharacter",
+      poe2: "",
+    };
+    internals.openFileDescriptor(path);
+    const text = [
+      "2026/06/12 12:00:00 123 [INFO Client] : Teammate has been slain.",
+      "2026/06/12 12:00:01 123 [INFO Client] : MainCharacter has been slain.",
+      "",
+    ].join("\n");
+    writeFileSync(path, text);
+    await internals.processNewBytes(path, Buffer.byteLength(text), "poe1");
+    service.stopWatchFile();
+
+    expect(deaths).toEqual([
+      expect.objectContaining({
+        game: "poe1",
+        line: "2026/06/12 12:00:01 123 [INFO Client] : MainCharacter has been slain.",
+      }),
+    ]);
+    expect(handleDeathEvent).toHaveBeenCalledTimes(1);
   });
 
   it("stores partial log lines until a complete line arrives", async () => {

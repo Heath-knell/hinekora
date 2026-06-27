@@ -170,6 +170,68 @@ describe("RecordingStorageService", () => {
     );
   });
 
+  it("does not repeatedly probe unchanged exact-second recording durations", () => {
+    const filePath = join(root, "2026-06-23 15-08-58.mp4");
+    writeFileSync(filePath, createMp4WithDuration(16_000));
+    const fileStats = statSync(filePath);
+    repository.upsertRunRecording({
+      path: filePath,
+      sourceGame: "poe2",
+      sourceLeague: "Standard",
+      startedAt: "2026-06-23T15:08:58.000Z",
+      stoppedAt: "2026-06-23T15:09:14.000Z",
+      exists: true,
+      mtimeMs: fileStats.mtimeMs,
+      sizeBytes: fileStats.size,
+    });
+    const durationProbe = vi.spyOn(
+      service as unknown as {
+        readRecordingFileDuration: (
+          path: string,
+          options?: { logFailure?: boolean; logSuccess?: boolean },
+        ) => number | null;
+      },
+      "readRecordingFileDuration",
+    );
+
+    vi.useFakeTimers({ now: new Date("2026-06-23T16:00:00.000Z") });
+    expect(service.listRecordings()).toEqual([
+      expect.objectContaining({
+        durationSeconds: 16,
+        path: resolve(filePath),
+      }),
+    ]);
+
+    vi.setSystemTime(new Date("2026-06-23T16:00:03.000Z"));
+    expect(service.listRecordings()).toEqual([
+      expect.objectContaining({
+        durationSeconds: 16,
+        path: resolve(filePath),
+      }),
+    ]);
+    expect(durationProbe).toHaveBeenCalledTimes(1);
+  });
+
+  it("registers run recordings with MP4 duration metadata", () => {
+    const filePath = join(root, "2026-06-23 15-08-58.mp4");
+    writeFileSync(filePath, createMp4WithDuration(13_520));
+
+    const recording = service.registerRunRecording({
+      path: filePath,
+      sourceGame: "poe2",
+      sourceLeague: "Standard",
+      startedAt: "2026-06-23T15:08:58.000Z",
+      stoppedAt: "2026-06-23T15:09:14.000Z",
+    });
+
+    expect(repository.getItemById(recording.id)).toEqual(
+      expect.objectContaining({
+        durationSeconds: 13.52,
+        path: resolve(filePath),
+      }),
+    );
+  });
+
   it("returns recording details with stable ids and app media URLs", () => {
     const filePath = join(root, "2026-06-12_10-30-00.mp4");
     const missingPath = join(root, "2026-06-12_11-00-00.mp4");
@@ -286,6 +348,41 @@ describe("RecordingStorageService", () => {
     expect(service.listRecordings()).toEqual([
       expect.objectContaining({
         durationSeconds: 42.5,
+        path: resolve(filePath),
+      }),
+    ]);
+  });
+
+  it("refreshes legacy rounded recording durations from MP4 metadata", () => {
+    const filePath = join(root, "2026-06-23 15-08-58.mp4");
+    writeFileSync(filePath, createMp4WithDuration(13_520));
+    const stats = statSync(filePath);
+    repository.upsertRunRecording({
+      path: filePath,
+      sourceGame: "poe2",
+      sourceLeague: "Standard",
+      startedAt: "2026-06-23T15:08:58.000Z",
+      stoppedAt: "2026-06-23T15:09:14.000Z",
+      exists: true,
+      mtimeMs: stats.mtimeMs,
+      sizeBytes: stats.size,
+    });
+    expect(repository.listRunRecordingItems()).toEqual([
+      expect.objectContaining({
+        durationSeconds: 16,
+        path: resolve(filePath),
+      }),
+    ]);
+
+    expect(service.listRecordings()).toEqual([
+      expect.objectContaining({
+        durationSeconds: 13.52,
+        path: resolve(filePath),
+      }),
+    ]);
+    expect(repository.listRunRecordingItems()).toEqual([
+      expect.objectContaining({
+        durationSeconds: 13.52,
         path: resolve(filePath),
       }),
     ]);

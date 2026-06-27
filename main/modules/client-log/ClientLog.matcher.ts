@@ -12,6 +12,10 @@ interface ClientLogFocusEvent {
   line: string;
 }
 
+interface ClientLogParseOptions {
+  characterName?: string | null;
+}
+
 interface ParsedClientLogEvents {
   deathLines: string[];
   focusEvents: ClientLogFocusEvent[];
@@ -27,9 +31,34 @@ function isIgnoredChatMessage(message: string): boolean {
   return IGNORED_CHAT_PREFIXES.has(message[0] ?? "");
 }
 
-function parseClientLogEvents(text: string): ParsedClientLogEvents {
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function matchesConfiguredCharacterDeath(
+  message: string,
+  characterName: string,
+): boolean {
+  const trimmedCharacterName = characterName.trim();
+  if (!trimmedCharacterName) {
+    return true;
+  }
+
+  const characterPattern = new RegExp(
+    `(?:^|:\\s*)${escapeRegExp(trimmedCharacterName)}\\s+(?:has been slain|was slain)\\.?$`,
+    "i",
+  );
+
+  return characterPattern.test(message);
+}
+
+function parseClientLogEvents(
+  text: string,
+  options: ClientLogParseOptions = {},
+): ParsedClientLogEvents {
   const deathLines: string[] = [];
   const focusEvents: ClientLogFocusEvent[] = [];
+  const characterName = options.characterName?.trim() ?? "";
 
   for (const rawLine of text.split(/\r?\n/)) {
     const line = rawLine.trim();
@@ -50,7 +79,8 @@ function parseClientLogEvents(text: string): ParsedClientLogEvents {
 
     if (
       !isIgnoredChatMessage(message) &&
-      DEFAULT_DEATH_PATTERNS.some((pattern) => pattern.test(line))
+      DEFAULT_DEATH_PATTERNS.some((pattern) => pattern.test(line)) &&
+      matchesConfiguredCharacterDeath(message, characterName)
     ) {
       deathLines.push(line);
     }
@@ -59,8 +89,11 @@ function parseClientLogEvents(text: string): ParsedClientLogEvents {
   return { deathLines, focusEvents };
 }
 
-function findDeathLines(text: string): string[] {
-  return parseClientLogEvents(text).deathLines;
+function findDeathLines(
+  text: string,
+  options: ClientLogParseOptions = {},
+): string[] {
+  return parseClientLogEvents(text, options).deathLines;
 }
 
 function findFocusEvents(text: string): ClientLogFocusEvent[] {
@@ -94,7 +127,11 @@ function hashDeathLine(line: string): string {
   return createHash("sha256").update(line).digest("hex").slice(0, 32);
 }
 
-export type { ClientLogFocusEvent, ParsedClientLogEvents };
+export type {
+  ClientLogFocusEvent,
+  ClientLogParseOptions,
+  ParsedClientLogEvents,
+};
 export {
   findDeathLines,
   findFocusEvents,

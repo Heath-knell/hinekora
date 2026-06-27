@@ -29,6 +29,8 @@ import type {
 const OVERLAY_WINDOWS_SCOPE = "overlay-windows";
 const ACTIVE_GAME_FOCUS_HANDOFF_ID = "active-game-focus-handoff";
 const ACTIVE_GAME_FOCUS_HANDOFF_GRACE_MS = 2_500;
+const RECORDER_SUPPRESSION_AURA_OVERLAY = "aura-overlay";
+const RECORDER_SUPPRESSION_CROP_SELECTOR = "crop-selector";
 
 type ActiveGameFocusRestoreReason =
   | "aura-locked"
@@ -51,10 +53,12 @@ class OverlayWindowsService {
     this.overlayCaptureProtectionEnabled;
   private settingsChangeUnsubscribe: (() => void) | null = null;
   private readonly coordinator = new GameOverlayCoordinator();
+  private readonly recorderOverlaySuppressionIds = new Set<string>();
   private readonly recordingControlsOverlay =
     new RecordingControlsOverlayService(
       this.coordinator,
       this.getOverlayCaptureProtectionEnabled,
+      () => !this.isRecorderOverlaySuppressed(),
     );
   private readonly deathClipsOverlay = new DeathClipsOverlayService(
     this.coordinator,
@@ -72,6 +76,11 @@ class OverlayWindowsService {
   private readonly auraManagerOverlays = new AuraManagerOverlaysService(
     this.coordinator,
     this.getOverlayCaptureProtectionEnabled,
+    (active) =>
+      this.setRecorderOverlaySuppressed(
+        RECORDER_SUPPRESSION_AURA_OVERLAY,
+        active,
+      ),
   );
   private gameRunningActive = false;
   private persistentAuraOverlayRequested = false;
@@ -228,9 +237,14 @@ class OverlayWindowsService {
     options: SelectCropRegionOptions = {},
   ): Promise<CropRegionSelection | null> {
     this.auraManagerOverlays.setInputPassthrough(true);
+    this.setRecorderOverlaySuppressed(RECORDER_SUPPRESSION_CROP_SELECTOR, true);
 
     return this.gridLinesOverlay.selectCropRegion(options).finally(() => {
       this.auraManagerOverlays.setInputPassthrough(false);
+      this.setRecorderOverlaySuppressed(
+        RECORDER_SUPPRESSION_CROP_SELECTOR,
+        false,
+      );
     });
   }
 
@@ -397,6 +411,35 @@ class OverlayWindowsService {
     this.deathClipsOverlay.setContentProtectionEnabled(enabled);
     this.gridLinesOverlay.setContentProtectionEnabled(enabled);
     this.auraManagerOverlays.setContentProtectionEnabled(enabled);
+  }
+
+  private isRecorderOverlaySuppressed(): boolean {
+    return this.recorderOverlaySuppressionIds.size > 0;
+  }
+
+  private setRecorderOverlaySuppressed(
+    suppressionId: string,
+    active: boolean,
+  ): void {
+    const wasSuppressed = this.isRecorderOverlaySuppressed();
+    if (active) {
+      this.recorderOverlaySuppressionIds.add(suppressionId);
+    } else {
+      this.recorderOverlaySuppressionIds.delete(suppressionId);
+    }
+
+    if (wasSuppressed === this.isRecorderOverlaySuppressed()) {
+      return;
+    }
+
+    if (this.isRecorderOverlaySuppressed()) {
+      this.recordingControlsOverlay.suspendRequestedOverlay(
+        "overlay-suppressed",
+      );
+      return;
+    }
+
+    void this.recordingControlsOverlay.restoreRequestedOverlay();
   }
 }
 

@@ -16,6 +16,10 @@ export const useAppMenuShallow = <T>(
   selector: (appMenu: BoundStore["appMenu"]) => T,
 ) => useBoundStore(useShallow((state) => selector(state.appMenu)));
 
+export const useAuraOverlayShallow = <T>(
+  selector: (auraOverlay: BoundStore["auraOverlay"]) => T,
+) => useBoundStore(useShallow((state) => selector(state.auraOverlay)));
+
 export const useAppSetupShallow = <T>(
   selector: (appSetup: BoundStore["appSetup"]) => T,
 ) => useBoundStore(useShallow((state) => selector(state.appSetup)));

@@ -6,6 +6,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Profile } from "~/types";
 
 const storeMocks = vi.hoisted(() => ({
+  addAuraRequest: null as {
+    requestId: string;
+    shape?: "rect" | "arc" | "points";
+  } | null,
+  addingAuraShape: null as "rect" | "arc" | "points" | null,
+  setAddAuraRequest: vi.fn(
+    (
+      request: {
+        requestId: string;
+        shape?: "rect" | "arc" | "points";
+      } | null,
+    ) => {
+      storeMocks.addAuraRequest = request;
+    },
+  ),
+  setAddingAuraShape: vi.fn((shape: "rect" | "arc" | "points" | null) => {
+    storeMocks.addingAuraShape = shape;
+  }),
+  useAuraOverlayShallow: vi.fn(),
   updateProfile: vi.fn(),
   useCapturePreviewShallow: vi.fn(),
   useProfilesShallow: vi.fn(),
@@ -21,6 +40,7 @@ const electronMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("~/renderer/store", () => ({
+  useAuraOverlayShallow: storeMocks.useAuraOverlayShallow,
   useCapturePreviewShallow: storeMocks.useCapturePreviewShallow,
   useProfilesShallow: storeMocks.useProfilesShallow,
 }));
@@ -112,6 +132,16 @@ describe("AuraOverlayPage", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    storeMocks.addAuraRequest = null;
+    storeMocks.addingAuraShape = null;
+    storeMocks.setAddAuraRequest.mockClear();
+    storeMocks.setAddAuraRequest.mockImplementation((request) => {
+      storeMocks.addAuraRequest = request;
+    });
+    storeMocks.setAddingAuraShape.mockClear();
+    storeMocks.setAddingAuraShape.mockImplementation((shape) => {
+      storeMocks.addingAuraShape = shape;
+    });
     window.location.hash = "#/aura-overlay?profileId=profile-1";
     electronMocks.isAuraLocked.mockResolvedValue(true);
     electronMocks.onAuraLockChanged.mockReturnValue(vi.fn());
@@ -131,6 +161,14 @@ describe("AuraOverlayPage", () => {
       selector({
         selectedSourceId: "screen:1",
         sources: [{ id: "screen:1", width: 1920, height: 1080 }],
+      }),
+    );
+    storeMocks.useAuraOverlayShallow.mockImplementation((selector) =>
+      selector({
+        addAuraRequest: storeMocks.addAuraRequest,
+        setAddAuraRequest: storeMocks.setAddAuraRequest,
+        addingAuraShape: storeMocks.addingAuraShape,
+        setAddingAuraShape: storeMocks.setAddingAuraShape,
       }),
     );
     Object.defineProperty(window, "electron", {
@@ -193,6 +231,27 @@ describe("AuraOverlayPage", () => {
     expect(html).toContain('data-placement-id="placement-1"');
     expect(html).not.toContain("Life");
     expect(html).not.toContain("data-corner");
+    expect(html).not.toContain("Aura controls");
+  });
+
+  it("shows the aura controls reference while editing", async () => {
+    electronMocks.isAuraLocked.mockResolvedValue(false);
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createTestRoot(container);
+
+    await act(async () => {
+      root.render(<AuraOverlayPage />);
+      await flushPromises();
+    });
+
+    expect(container.textContent).toContain("Aura controls");
+    expect(container.textContent).toContain("Press");
+    expect(container.textContent).toContain("Esc");
+    expect(container.textContent).toContain("aura overlay");
+    expect(container.textContent).toContain("Ctrl");
+    expect(container.textContent).toContain("Default aura");
+    expect(container.textContent).toContain("Pointer aura");
   });
 
   it("projects legacy aura placements into the centered ultrawide safe area", async () => {
@@ -657,6 +716,65 @@ describe("AuraOverlayPage", () => {
     expect(electronMocks.showAura).not.toHaveBeenCalled();
   });
 
+  it("only marks the active add aura shape as selecting", async () => {
+    electronMocks.isAuraLocked.mockResolvedValue(false);
+    let resolveSelection: ((selection: null) => void) | null = null;
+    electronMocks.selectCropRegion.mockImplementation(
+      () =>
+        new Promise<null>((resolve) => {
+          resolveSelection = resolve;
+        }),
+    );
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createTestRoot(container);
+
+    await act(async () => {
+      root.render(<AuraOverlayPage />);
+      await flushPromises();
+    });
+
+    const archedButton = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Add arched aura",
+    );
+    expect(archedButton).toBeInstanceOf(HTMLButtonElement);
+
+    await act(async () => {
+      archedButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+      root.render(<AuraOverlayPage />);
+      await flushPromises();
+    });
+
+    const buttons = [...container.querySelectorAll("button")];
+    const selectingButtons = buttons.filter(
+      (button) => button.textContent === "Selecting...",
+    );
+    const addNewButton = buttons.find(
+      (button) => button.textContent === "Add new aura",
+    );
+    const addPointerButton = buttons.find(
+      (button) => button.textContent === "Add pointer aura",
+    );
+    const lockButton = buttons.find(
+      (button) => button.textContent === "Lock auras",
+    );
+
+    expect(selectingButtons).toHaveLength(1);
+    expect(addNewButton).toBeInstanceOf(HTMLButtonElement);
+    expect(addPointerButton).toBeInstanceOf(HTMLButtonElement);
+    expect(lockButton).toBeInstanceOf(HTMLButtonElement);
+    expect((selectingButtons[0] as HTMLButtonElement).disabled).toBe(true);
+    expect((addNewButton as HTMLButtonElement).disabled).toBe(true);
+    expect((addPointerButton as HTMLButtonElement).disabled).toBe(true);
+    expect((lockButton as HTMLButtonElement).disabled).toBe(true);
+
+    await act(async () => {
+      resolveSelection?.(null);
+      await flushPromises();
+    });
+  });
+
   it("starts add aura selection from the route request", async () => {
     window.location.hash =
       "#/aura-overlay?profileId=profile-1&startAddingAura=1&addAuraRequestId=1";
@@ -750,12 +868,16 @@ describe("AuraOverlayPage", () => {
     await act(async () => {
       handleAuraAddRequested?.({ requestId: "request-1", shape: "rect" });
       await flushPromises();
+      root.render(<AuraOverlayPage />);
+      await flushPromises();
     });
 
     expect(electronMocks.selectCropRegion).toHaveBeenCalledTimes(1);
     expect(electronMocks.selectCropRegion).toHaveBeenCalledWith({
       shape: "rect",
     });
+    expect(storeMocks.setAddAuraRequest).toHaveBeenLastCalledWith(null);
+    expect(storeMocks.addAuraRequest).toBeNull();
     expect(storeMocks.updateProfile).toHaveBeenCalledWith({
       id: "profile-1",
       cropRegions: [
@@ -786,6 +908,22 @@ describe("AuraOverlayPage", () => {
       ],
     });
     expect(electronMocks.showAura).not.toHaveBeenCalled();
+
+    await act(async () => {
+      root.unmount();
+    });
+    roots = roots.filter((item) => item !== root);
+
+    const secondContainer = document.createElement("div");
+    document.body.append(secondContainer);
+    const secondRoot = createTestRoot(secondContainer);
+
+    await act(async () => {
+      secondRoot.render(<AuraOverlayPage />);
+      await flushPromises();
+    });
+
+    expect(electronMocks.selectCropRegion).toHaveBeenCalledTimes(1);
   });
 
   it("locks auras when a route-started add aura selection is canceled", async () => {

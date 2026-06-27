@@ -55,6 +55,24 @@ describe("ClientLog matcher", () => {
     ]);
   });
 
+  it("filters death lines to the configured character name", () => {
+    const text = [
+      "2026/06/13 01:05:13 137436343 3ef23347 [INFO Client 41260] : AILUCANNON has been slain.",
+      "2026/06/13 01:05:14 137436344 3ef23347 [INFO Client 41260] : Teammate has been slain.",
+      "2026/06/13 01:05:15 137436345 3ef23347 [INFO Client 41260] : AILUCANNON was slain.",
+      "2026/06/13 01:05:16 137436346 3ef23347 [INFO Client 41260] : AILUCANNON has been slain by a monster.",
+    ].join("\n");
+
+    expect(findDeathLines(text, { characterName: "ailucannon" })).toEqual([
+      "2026/06/13 01:05:13 137436343 3ef23347 [INFO Client 41260] : AILUCANNON has been slain.",
+      "2026/06/13 01:05:15 137436345 3ef23347 [INFO Client 41260] : AILUCANNON was slain.",
+    ]);
+    expect(findDeathLines(text, { characterName: "OtherCharacter" })).toEqual(
+      [],
+    );
+    expect(findDeathLines(text, { characterName: "" })).toHaveLength(4);
+  });
+
   it("matches client window focus events", () => {
     const text = [
       "2026/05/26 02:21:56 124375531 54eea165 [INFO Client 49752] [WINDOW] Gained focus",

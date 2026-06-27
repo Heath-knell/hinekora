@@ -3,27 +3,14 @@ import { FiExternalLink } from "react-icons/fi";
 import { PageContainer } from "~/renderer/components/PageContainer/PageContainer";
 import { PageContent } from "~/renderer/components/PageContent/PageContent";
 import { PageHeader } from "~/renderer/components/PageHeader/PageHeader";
-
-const ATTRIBUTIONS = [
-  {
-    name: "noobs",
-    description: "OBS integration used for Rewind and recording control.",
-    url: "https://github.com/navali-creations/noobs",
-  },
-  {
-    name: "Path of Exile",
-    description:
-      "Game title and related terms are property of Grinding Gear Games.",
-    url: "https://www.pathofexile.com/",
-  },
-] as const;
+import { ATTRIBUTIONS } from "~/types/attributions";
 
 function AttributionsPage() {
   return (
     <PageContainer>
       <PageHeader
         title="Attributions"
-        subtitle="Credit to the third-party projects and services used by Hinekora."
+        subtitle="Special thanks to the projects and people whose work made Hinekora possible or served as inspiration."
       />
       <PageContent>
         <div className="px-2 pb-8">

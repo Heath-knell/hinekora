@@ -1415,6 +1415,107 @@ describe("GridLinesOverlayService", () => {
     expect(auraWindow.setOpacity).toHaveBeenCalledWith(0);
   });
 
+  it("suppresses the recorder overlay while the crop selector is active", async () => {
+    const recorderWindow = createFakeWindow();
+    const cropWindow = createFakeWindow();
+    const mainWindow = createFakeWindow({ url: "app://-/dashboard" });
+    electronMocks.browserWindowFactory
+      .mockReturnValueOnce(recorderWindow)
+      .mockReturnValueOnce(cropWindow);
+    electronMocks.getAllWindows.mockReturnValue([
+      mainWindow as unknown as Electron.BrowserWindow,
+    ]);
+    const service = new OverlayWindowsService();
+
+    service.setGameRunningActive(true);
+    service.setPoeFocusActive(true);
+    await service.showRecorderOverlay();
+    expect(service.isRecorderOverlayVisible()).toBe(true);
+
+    mainWindow.webContents.send.mockClear();
+    recorderWindow.showInactive.mockClear();
+
+    const selection = service.selectCropRegion();
+    await flushTimers();
+
+    expect(service.isRecorderOverlayVisible()).toBe(false);
+    expect(recorderWindow.setOpacity).toHaveBeenCalledWith(0);
+    expect(mainWindow.webContents.send).toHaveBeenCalledWith(
+      OverlayWindowsChannel.RecorderVisibilityChanged,
+      false,
+    );
+
+    mainWindow.webContents.send.mockClear();
+    recorderWindow.setOpacity.mockClear();
+    service.cancelCropRegionSelection();
+    await expect(selection).resolves.toBeNull();
+    await flushTimers();
+
+    expect(service.isRecorderOverlayVisible()).toBe(true);
+    expect(recorderWindow.setOpacity).toHaveBeenLastCalledWith(1);
+    expect(mainWindow.webContents.send).toHaveBeenCalledWith(
+      OverlayWindowsChannel.RecorderVisibilityChanged,
+      true,
+    );
+  });
+
+  it("suppresses the recorder overlay only while the aura overlay is unlocked", async () => {
+    const recorderWindow = createFakeWindow();
+    const auraWindow = createFakeWindow({
+      bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+      url: `app://-/${WindowName.AuraOverlay}`,
+    });
+    const mainWindow = createFakeWindow({ url: "app://-/dashboard" });
+    electronMocks.browserWindowFactory
+      .mockReturnValueOnce(recorderWindow)
+      .mockReturnValueOnce(auraWindow);
+    electronMocks.getAllWindows.mockReturnValue([
+      mainWindow as unknown as Electron.BrowserWindow,
+    ]);
+    const service = new OverlayWindowsService();
+
+    service.setGameRunningActive(true);
+    service.setPoeFocusActive(true);
+    await service.showRecorderOverlay();
+    vi.spyOn(ProfilesService, "getInstance").mockReturnValue({
+      list: () => [createProfile()],
+    } as unknown as ProfilesService);
+
+    mainWindow.webContents.send.mockClear();
+    recorderWindow.showInactive.mockClear();
+
+    await service.showAuraOverlay("profile-1");
+
+    expect(auraWindow.showInactive).toHaveBeenCalled();
+    expect(service.isRecorderOverlayVisible()).toBe(true);
+    expect(recorderWindow.setOpacity).not.toHaveBeenCalledWith(0);
+    expect(mainWindow.webContents.send).not.toHaveBeenCalledWith(
+      OverlayWindowsChannel.RecorderVisibilityChanged,
+      false,
+    );
+
+    service.setAuraOverlayLocked(false);
+
+    expect(service.isRecorderOverlayVisible()).toBe(false);
+    expect(recorderWindow.setOpacity).toHaveBeenCalledWith(0);
+    expect(mainWindow.webContents.send).toHaveBeenCalledWith(
+      OverlayWindowsChannel.RecorderVisibilityChanged,
+      false,
+    );
+
+    mainWindow.webContents.send.mockClear();
+    recorderWindow.setOpacity.mockClear();
+    service.setAuraOverlayLocked(true);
+    await flushTimers();
+
+    expect(service.isRecorderOverlayVisible()).toBe(true);
+    expect(recorderWindow.setOpacity).toHaveBeenLastCalledWith(1);
+    expect(mainWindow.webContents.send).toHaveBeenCalledWith(
+      OverlayWindowsChannel.RecorderVisibilityChanged,
+      true,
+    );
+  });
+
   it("starts an active-game handoff before releasing crop selector focus", async () => {
     const cropWindow = createFakeWindow();
     electronMocks.browserWindowFactory.mockReturnValue(cropWindow);

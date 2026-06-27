@@ -1,10 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
-import type {
-  AuraAddRequest,
-  CropRegionSelectionShape,
-} from "~/main/modules/overlay-windows/OverlayWindows.dto";
+import type { CropRegionSelectionShape } from "~/main/modules/overlay-windows/OverlayWindows.dto";
 import { createAuraProfileUpdateFromSelection } from "~/renderer/modules/crop-editor/CropEditor.utils/CropEditor.utils";
+import { useAuraOverlayShallow } from "~/renderer/store";
 import type { ProfilesSlice } from "~/renderer/store/store.types";
 
 import type { Profile } from "~/types";
@@ -33,17 +31,14 @@ function useAuraOverlayAddAuraSelection({
   routeStartAddingAura,
   updateProfile,
 }: UseAuraOverlayAddAuraSelectionInput) {
-  const [addAuraRequest, setAddAuraRequest] = useState<AuraAddRequest | null>(
-    null,
-  );
-  const [addingAura, setAddingAura] = useState(false);
   const handledAddAuraRequestRef = useRef<string | null>(null);
   const addingAuraRef = useRef(false);
-
-  useEffect(
-    () => window.electron.overlayWindows.onAuraAddRequested(setAddAuraRequest),
-    [],
-  );
+  const { addAuraRequest, setAddAuraRequest, setAddingAuraShape } =
+    useAuraOverlayShallow((auraOverlay) => ({
+      addAuraRequest: auraOverlay.addAuraRequest,
+      setAddAuraRequest: auraOverlay.setAddAuraRequest,
+      setAddingAuraShape: auraOverlay.setAddingAuraShape,
+    }));
 
   const startAddAuraSelection = useCallback(
     (options?: StartAddAuraSelectionOptions) => {
@@ -54,7 +49,7 @@ function useAuraOverlayAddAuraSelection({
       const lockOnCancel = options?.lockOnCancel === true;
       const shape = options?.shape ?? "rect";
       addingAuraRef.current = true;
-      setAddingAura(true);
+      setAddingAuraShape(shape);
       void window.electron.overlayWindows
         .selectCropRegion({ shape })
         .then(async (selection) => {
@@ -80,12 +75,23 @@ function useAuraOverlayAddAuraSelection({
         })
         .finally(() => {
           addingAuraRef.current = false;
-          setAddingAura(false);
+          setAddingAuraShape(null);
         });
 
       return true;
     },
-    [lockAuraOverlay, profile, recordAuraHistory, updateProfile],
+    [
+      lockAuraOverlay,
+      profile,
+      recordAuraHistory,
+      setAddingAuraShape,
+      updateProfile,
+    ],
+  );
+
+  useEffect(
+    () => window.electron.overlayWindows.onAuraAddRequested(setAddAuraRequest),
+    [setAddAuraRequest],
   );
 
   useEffect(() => {
@@ -106,17 +112,20 @@ function useAuraOverlayAddAuraSelection({
 
     if (startAddAuraSelection({ lockOnCancel: true, shape })) {
       handledAddAuraRequestRef.current = requestId;
+      if (!routeStartAddingAura) {
+        setAddAuraRequest(null);
+      }
     }
   }, [
     addAuraRequest,
     profile,
     routeAddAuraRequestId,
     routeStartAddingAura,
+    setAddAuraRequest,
     startAddAuraSelection,
   ]);
 
   return {
-    addingAura,
     startAddAuraSelection,
   };
 }

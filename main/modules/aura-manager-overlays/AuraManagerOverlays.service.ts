@@ -53,6 +53,7 @@ class AuraManagerOverlaysService {
   constructor(
     private readonly coordinator: GameOverlayCoordinator,
     private readonly getContentProtectionEnabled = () => false,
+    private readonly onEditingActiveChange = (_active: boolean) => {},
   ) {
     this.coordinator.register(this);
   }
@@ -110,6 +111,7 @@ class AuraManagerOverlaysService {
     }
     this.applyWindowInteractivity();
     this.publishLockState();
+    this.publishEditingActiveState();
   }
 
   isLocked(): boolean {
@@ -240,6 +242,7 @@ class AuraManagerOverlaysService {
     window.on("closed", () => {
       this.auraOverlayFocused = false;
       this.coordinator.setOverlayFocusActive(AURA_OVERLAY_FOCUS_ID, false);
+      this.onEditingActiveChange(false);
       unregisterIpcWindowRole(auraWebContents);
       if (this.auraWindow === window) {
         if (this.lockClosedOverlay()) {
@@ -344,6 +347,7 @@ class AuraManagerOverlaysService {
     if (!wasVisible) {
       logInfo(AURA_OVERLAY_SCOPE, "Aura overlay opened");
     }
+    this.publishEditingActiveState();
     this.applyWindowInteractivity();
   }
 
@@ -410,6 +414,7 @@ class AuraManagerOverlaysService {
     this.auraWindowProfileId = undefined;
     this.auraOverlayFocused = false;
     this.coordinator.setOverlayFocusActive(AURA_OVERLAY_FOCUS_ID, false);
+    this.onEditingActiveChange(false);
     if (window && !window.isDestroyed()) {
       logInfo(AURA_OVERLAY_SCOPE, "Aura overlay closed", { reason });
     }
@@ -428,6 +433,14 @@ class AuraManagerOverlaysService {
   private forgetRequestedOverlay(): void {
     this.auraOverlayRequested = false;
     this.auraOverlayProfileId = undefined;
+  }
+
+  private publishEditingActiveState(): void {
+    this.onEditingActiveChange(
+      !!this.auraWindow &&
+        !this.auraWindow.isDestroyed() &&
+        !this.auraOverlayLocked,
+    );
   }
 
   private resolveProfile(profileId?: string): Profile | null {
