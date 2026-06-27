@@ -2,6 +2,8 @@ import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { normalizeGitHubImageTags } from "./MarkdownRenderer.utils";
+
 const components: Components = {
   h1: (props) => (
     <h1 className="mb-2 mt-4 text-lg font-bold text-base-content" {...props} />
@@ -140,7 +142,7 @@ function MarkdownRenderer({
   return (
     <div className={className}>
       <ReactMarkdown components={mergedComponents} remarkPlugins={[remarkGfm]}>
-        {children}
+        {normalizeGitHubImageTags(children)}
       </ReactMarkdown>
     </div>
   );
