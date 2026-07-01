@@ -14,7 +14,9 @@ type EditorHistoryActions = Pick<
 >;
 
 function createEditorHistoryActions({
+  cancelPendingProjectSave,
   get,
+  persistProject,
   set,
   setProject,
 }: EditorSliceActionContext): EditorHistoryActions {
@@ -25,6 +27,7 @@ function createEditorHistoryActions({
         return;
       }
 
+      cancelPendingProjectSave();
       set((state) => {
         state.editor.historyTransactionLabel = label;
         state.editor.historyTransactionSubtitle = subtitle;
@@ -68,6 +71,7 @@ function createEditorHistoryActions({
       trackEvent("editor-history-transaction-committed", {
         label: transactionLabel,
       });
+      persistProject(project, "[editor] Project transaction save failed");
     },
     redoProjectChange: () => {
       const project = get().editor.project;
@@ -78,6 +82,7 @@ function createEditorHistoryActions({
         return;
       }
 
+      cancelPendingProjectSave();
       set((state) => {
         state.editor.historyFuture = state.editor.historyFuture.slice(1);
         state.editor.historyFutureLabels =
@@ -103,11 +108,7 @@ function createEditorHistoryActions({
       trackEvent("editor-redone", {
         label: nextLabel,
       });
-      void get()
-        .editor.saveProject(nextProject)
-        .catch((error) => {
-          console.warn("[editor] Project redo save failed", { error });
-        });
+      persistProject(nextProject, "[editor] Project redo save failed");
     },
     undoProjectChange: () => {
       const project = get().editor.project;
@@ -118,6 +119,7 @@ function createEditorHistoryActions({
         return;
       }
 
+      cancelPendingProjectSave();
       set((state) => {
         state.editor.historyFuture = [
           createEditorProjectHistorySnapshot(project),
@@ -146,11 +148,7 @@ function createEditorHistoryActions({
       trackEvent("editor-undone", {
         label: previousLabel,
       });
-      void get()
-        .editor.saveProject(previousProject)
-        .catch((error) => {
-          console.warn("[editor] Project undo save failed", { error });
-        });
+      persistProject(previousProject, "[editor] Project undo save failed");
     },
   };
 }

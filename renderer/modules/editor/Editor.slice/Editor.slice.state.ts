@@ -27,6 +27,7 @@ type EditorStateFields = Omit<
   | "redoProjectChange"
   | "refreshMedia"
   | "refreshMediaRecentlyClippedSince"
+  | "renameProject"
   | "removeAllTimelineGaps"
   | "removeTimelineClip"
   | "removeTimelineGap"

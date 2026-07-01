@@ -1,4 +1,5 @@
 import type {
+  EditorMediaAssetPageQuery,
   EditorMediaReference,
   EditorProject,
 } from "~/main/modules/editor";
@@ -30,6 +31,8 @@ import {
   refreshWorkspaceAssets,
 } from "./Editor.slice.utils";
 
+const editorProjectRenameFailureMessage = "Project rename failed";
+
 type EditorWorkspaceActions = Pick<
   EditorSlice["editor"],
   | "createProject"
@@ -42,6 +45,7 @@ type EditorWorkspaceActions = Pick<
   | "openProject"
   | "refreshMedia"
   | "refreshMediaRecentlyClippedSince"
+  | "renameProject"
   | "resetMediaPagination"
   | "saveProject"
   | "selectAsset"
@@ -58,15 +62,91 @@ type EditorWorkspaceActions = Pick<
 >;
 
 function createEditorWorkspaceActions({
+  cancelPendingProjectSave,
   get,
   set,
   setProject,
   updateProject,
 }: EditorSliceActionContext): EditorWorkspaceActions {
   let mediaAssetRequestId = 0;
+  let mediaAssetPendingPromise: Promise<void> | null = null;
+  let mediaAssetPendingPromiseQuery: EditorMediaAssetPageQuery | null = null;
+  let mediaRefreshRequestId = 0;
+  let projectListRequestId = 0;
+  let projectSaveRequestId = 0;
+  let projectSaveQueue: Promise<void> | null = null;
+  let routeRequestId = 0;
+
+  const createMediaRefreshRequestId = () => {
+    mediaRefreshRequestId += 1;
+
+    return mediaRefreshRequestId;
+  };
+
+  const createProjectListRequestId = () => {
+    projectListRequestId += 1;
+
+    return projectListRequestId;
+  };
+
+  const createRouteRequestId = () => {
+    routeRequestId += 1;
+
+    return routeRequestId;
+  };
+
+  const isCurrentMediaRefreshRequest = (requestId: number) =>
+    requestId === mediaRefreshRequestId;
+  const isCurrentProjectListRequest = (requestId: number) =>
+    requestId === projectListRequestId;
+  const isCurrentRouteRequest = (requestId: number) =>
+    requestId === routeRequestId;
+  const isEditorProjectStillCurrent = (projectId: string | null) =>
+    (get().editor.project?.id ?? null) === projectId;
+  const enqueueProjectSave = <T>(operation: () => Promise<T>) => {
+    const savePromise = projectSaveQueue
+      ? projectSaveQueue.then(operation, operation)
+      : operation();
+    const queuedSave = savePromise.then(
+      () => undefined,
+      () => undefined,
+    );
+    projectSaveQueue = queuedSave;
+    void queuedSave.then(
+      () => {
+        if (projectSaveQueue === queuedSave) {
+          projectSaveQueue = null;
+        }
+      },
+      () => {
+        if (projectSaveQueue === queuedSave) {
+          projectSaveQueue = null;
+        }
+      },
+    );
+
+    return savePromise;
+  };
+  const clearProjectRenameFailureIfSaved = (savedProject: EditorProject) => {
+    set((state) => {
+      if (state.editor.error !== editorProjectRenameFailureMessage) {
+        return;
+      }
+
+      if (
+        state.editor.project?.id !== savedProject.id ||
+        state.editor.project.title !== savedProject.title
+      ) {
+        return;
+      }
+
+      state.editor.error = null;
+    });
+  };
 
   return {
     createProject: async (input) => {
+      const requestId = createRouteRequestId();
       set((state) => {
         state.editor.error = null;
         state.editor.exportState = initialExportState;
@@ -75,6 +155,9 @@ function createEditorWorkspaceActions({
 
       try {
         const project = await window.electron.editor.createProject(input);
+        if (!isCurrentRouteRequest(requestId)) {
+          return;
+        }
         setProject(project, { resetHistory: true, resetViewState: true });
         set((state) => {
           state.editor.mediaPageIndex = 0;
@@ -83,6 +166,9 @@ function createEditorWorkspaceActions({
         });
         trackEvent("editor-project-created");
       } catch (error) {
+        if (!isCurrentRouteRequest(requestId)) {
+          return;
+        }
         set((state) => {
           state.editor.error =
             error instanceof Error ? error.message : "Editor failed";
@@ -91,6 +177,7 @@ function createEditorWorkspaceActions({
       }
     },
     deleteProject: async (projectId) => {
+      const requestId = createRouteRequestId();
       set((state) => {
         state.editor.error = null;
         state.editor.exportState = initialExportState;
@@ -99,6 +186,9 @@ function createEditorWorkspaceActions({
 
       try {
         const workspace = await window.electron.editor.deleteProject(projectId);
+        if (!isCurrentRouteRequest(requestId)) {
+          return;
+        }
         const project = createHydratedEditorProject({
           project: workspace.project,
           shouldStartWithEmptyTimeline: true,
@@ -120,6 +210,9 @@ function createEditorWorkspaceActions({
         });
         trackEvent("editor-project-deleted");
       } catch (error) {
+        if (!isCurrentRouteRequest(requestId)) {
+          return;
+        }
         set((state) => {
           state.editor.error =
             error instanceof Error ? error.message : "Editor failed";
@@ -128,6 +221,7 @@ function createEditorWorkspaceActions({
       }
     },
     deleteAllProjects: async () => {
+      const requestId = createRouteRequestId();
       set((state) => {
         state.editor.error = null;
         state.editor.exportState = initialExportState;
@@ -136,6 +230,9 @@ function createEditorWorkspaceActions({
 
       try {
         const workspace = await window.electron.editor.deleteAllProjects();
+        if (!isCurrentRouteRequest(requestId)) {
+          return;
+        }
         const project = createHydratedEditorProject({
           project: workspace.project,
           shouldStartWithEmptyTimeline: true,
@@ -157,6 +254,9 @@ function createEditorWorkspaceActions({
         });
         trackEvent("editor-projects-deleted-all");
       } catch (error) {
+        if (!isCurrentRouteRequest(requestId)) {
+          return;
+        }
         set((state) => {
           state.editor.error =
             error instanceof Error ? error.message : "Editor failed";
@@ -165,6 +265,7 @@ function createEditorWorkspaceActions({
       }
     },
     hydrate: async (source?: EditorMediaReference | null) => {
+      const requestId = createRouteRequestId();
       set((state) => {
         state.editor.error = null;
         state.editor.exportState = initialExportState;
@@ -180,6 +281,9 @@ function createEditorWorkspaceActions({
           project: workspace.project,
           shouldStartWithEmptyTimeline: !source,
         });
+        if (!isCurrentRouteRequest(requestId)) {
+          return false;
+        }
         set((state) => {
           resetEditorLoadedProjectState(state.editor, project);
           if (!source) {
@@ -199,6 +303,9 @@ function createEditorWorkspaceActions({
         trackEvent("editor-hydrated");
         return true;
       } catch (error) {
+        if (!isCurrentRouteRequest(requestId)) {
+          return false;
+        }
         set((state) => {
           state.editor.error =
             error instanceof Error ? error.message : "Editor failed";
@@ -207,7 +314,39 @@ function createEditorWorkspaceActions({
         return false;
       }
     },
-    hydrateMediaAssets: async (query) => {
+    hydrateMediaAssets: (query, options = {}) => {
+      const { force = false } = options;
+      const currentEditor = get().editor;
+      if (
+        !force &&
+        currentEditor.mediaAssetPendingQuery !== null &&
+        mediaAssetPendingPromise !== null &&
+        mediaAssetPendingPromiseQuery !== null &&
+        areEditorMediaAssetPageQueriesEqual(
+          mediaAssetPendingPromiseQuery,
+          query,
+        )
+      ) {
+        return mediaAssetPendingPromise;
+      }
+
+      if (
+        !force &&
+        currentEditor.mediaAssetPendingQuery === null &&
+        currentEditor.mediaAssetPage !== null &&
+        currentEditor.mediaAssetQuery !== null &&
+        areEditorMediaAssetPageQueriesEqual(
+          currentEditor.mediaAssetQuery,
+          query,
+        )
+      ) {
+        set((state) => {
+          state.editor.error = null;
+        });
+
+        return Promise.resolve();
+      }
+
       mediaAssetRequestId += 1;
       const requestId = mediaAssetRequestId;
       set((state) => {
@@ -215,46 +354,59 @@ function createEditorWorkspaceActions({
         state.editor.mediaAssetPendingQuery = query;
       });
 
-      try {
-        const mediaAssetPage =
-          await window.electron.editor.listMediaAssets(query);
-        set((state) => {
-          if (
-            requestId !== mediaAssetRequestId ||
-            state.editor.mediaAssetPendingQuery === null ||
-            !areEditorMediaAssetPageQueriesEqual(
-              state.editor.mediaAssetPendingQuery,
-              query,
-            )
-          ) {
-            return;
-          }
+      const mediaAssetRequest = (async () => {
+        try {
+          const mediaAssetPage =
+            await window.electron.editor.listMediaAssets(query);
+          set((state) => {
+            if (
+              requestId !== mediaAssetRequestId ||
+              state.editor.mediaAssetPendingQuery === null ||
+              !areEditorMediaAssetPageQueriesEqual(
+                state.editor.mediaAssetPendingQuery,
+                query,
+              )
+            ) {
+              return;
+            }
 
-          state.editor.error = null;
-          state.editor.mediaAssetPendingQuery = null;
-          state.editor.mediaAssetPage = mediaAssetPage;
-          state.editor.mediaAssetQuery = query;
-        });
-      } catch (error) {
-        set((state) => {
-          if (
-            requestId !== mediaAssetRequestId ||
-            state.editor.mediaAssetPendingQuery === null ||
-            !areEditorMediaAssetPageQueriesEqual(
-              state.editor.mediaAssetPendingQuery,
-              query,
-            )
-          ) {
-            return;
-          }
+            state.editor.error = null;
+            state.editor.mediaAssetPendingQuery = null;
+            state.editor.mediaAssetPage = mediaAssetPage;
+            state.editor.mediaAssetQuery = query;
+          });
+        } catch (error) {
+          set((state) => {
+            if (
+              requestId !== mediaAssetRequestId ||
+              state.editor.mediaAssetPendingQuery === null ||
+              !areEditorMediaAssetPageQueriesEqual(
+                state.editor.mediaAssetPendingQuery,
+                query,
+              )
+            ) {
+              return;
+            }
 
-          state.editor.mediaAssetPendingQuery = null;
-          state.editor.error =
-            error instanceof Error ? error.message : "Editor failed";
-        });
-      }
+            state.editor.mediaAssetPendingQuery = null;
+            state.editor.error =
+              error instanceof Error ? error.message : "Editor failed";
+          });
+        } finally {
+          if (requestId === mediaAssetRequestId) {
+            mediaAssetPendingPromise = null;
+            mediaAssetPendingPromiseQuery = null;
+          }
+        }
+      })();
+      mediaAssetPendingPromise = mediaAssetRequest;
+      mediaAssetPendingPromiseQuery = query;
+
+      return mediaAssetRequest;
     },
     loadMoreProjects: async () => {
+      const requestId = createProjectListRequestId();
+      const projectIdAtRequestStart = get().editor.project?.id ?? null;
       set((state) => {
         state.editor.error = null;
       });
@@ -268,6 +420,12 @@ function createEditorWorkspaceActions({
             : {}),
           projectLimit,
         });
+        if (
+          !isCurrentProjectListRequest(requestId) ||
+          !isEditorProjectStillCurrent(projectIdAtRequestStart)
+        ) {
+          return;
+        }
 
         set((state) => {
           const project = state.editor.project ?? refreshedWorkspace.project;
@@ -284,6 +442,12 @@ function createEditorWorkspaceActions({
         });
         trackEvent("editor-projects-loaded-more");
       } catch (error) {
+        if (
+          !isCurrentProjectListRequest(requestId) ||
+          !isEditorProjectStillCurrent(projectIdAtRequestStart)
+        ) {
+          return;
+        }
         set((state) => {
           state.editor.error =
             error instanceof Error ? error.message : "Editor failed";
@@ -291,6 +455,7 @@ function createEditorWorkspaceActions({
       }
     },
     openProject: async (projectId) => {
+      const requestId = createRouteRequestId();
       set((state) => {
         state.editor.error = null;
         state.editor.exportState = initialExportState;
@@ -306,6 +471,9 @@ function createEditorWorkspaceActions({
           project: workspace.project,
           shouldStartWithEmptyTimeline: false,
         });
+        if (!isCurrentRouteRequest(requestId)) {
+          return false;
+        }
         set((state) => {
           resetEditorLoadedProjectState(state.editor, project);
           state.editor.playbackSeconds = 0;
@@ -320,6 +488,9 @@ function createEditorWorkspaceActions({
         trackEvent("editor-project-opened");
         return true;
       } catch (error) {
+        if (!isCurrentRouteRequest(requestId)) {
+          return false;
+        }
         set((state) => {
           state.editor.error =
             error instanceof Error ? error.message : "Editor failed";
@@ -329,6 +500,8 @@ function createEditorWorkspaceActions({
       }
     },
     refreshMedia: async () => {
+      const requestId = createMediaRefreshRequestId();
+      const projectIdAtRequestStart = get().editor.project?.id ?? null;
       set((state) => {
         state.editor.error = null;
       });
@@ -341,6 +514,12 @@ function createEditorWorkspaceActions({
             : {}),
           projectLimit: currentEditor.projectLimit,
         });
+        if (
+          !isCurrentMediaRefreshRequest(requestId) ||
+          !isEditorProjectStillCurrent(projectIdAtRequestStart)
+        ) {
+          return;
+        }
         set((state) => {
           const project = normalizeEditorProjectTimeline(
             state.editor.project
@@ -364,6 +543,12 @@ function createEditorWorkspaceActions({
         });
         trackEvent("editor-media-refreshed");
       } catch (error) {
+        if (
+          !isCurrentMediaRefreshRequest(requestId) ||
+          !isEditorProjectStillCurrent(projectIdAtRequestStart)
+        ) {
+          return;
+        }
         set((state) => {
           state.editor.error =
             error instanceof Error ? error.message : "Editor failed";
@@ -449,7 +634,43 @@ function createEditorWorkspaceActions({
         state.editor.savedEditPageIndex = Math.max(0, pageIndex);
       });
     },
-    saveProject: async (project) => {
+    renameProject: (title) => {
+      const nextTitle = title.trim();
+      const project = get().editor.project;
+      if (!project || !nextTitle || project.title === nextTitle) {
+        return;
+      }
+
+      const nextProject = normalizeEditorProjectTimeline({
+        ...project,
+        title: nextTitle,
+      });
+      cancelPendingProjectSave();
+      setProject(nextProject, { recordHistory: false });
+      set((state) => {
+        state.editor.error = null;
+      });
+      void get()
+        .editor.saveProject(nextProject)
+        .catch((error) => {
+          console.warn("[editor] Project rename save failed", { error });
+          set((state) => {
+            if (
+              state.editor.project?.id !== project.id ||
+              state.editor.project.title !== nextTitle
+            ) {
+              return;
+            }
+
+            state.editor.error = editorProjectRenameFailureMessage;
+          });
+        });
+      trackEvent("editor-project-renamed");
+    },
+    saveProject: async (project, options = {}) => {
+      const { applyResponse = true } = options;
+      projectSaveRequestId += 1;
+      const requestId = projectSaveRequestId;
       const currentEditor = get().editor;
       const projectWithHistory = createEditorProjectWithHistoryMetadata(
         project,
@@ -459,10 +680,26 @@ function createEditorWorkspaceActions({
       );
       const normalizedProject =
         normalizeEditorProjectTimeline(projectWithHistory);
-      const savedProject = await window.electron.editor.saveProject({
-        project: normalizedProject,
+      const savedProject = await enqueueProjectSave(async () => {
+        const projectAtSaveStart = get().editor.project;
+        const savedProject = await window.electron.editor.saveProject({
+          project: normalizedProject,
+        });
+        if (
+          applyResponse &&
+          requestId === projectSaveRequestId &&
+          shouldApplySavedEditorProject(
+            projectAtSaveStart,
+            get().editor.project,
+            savedProject,
+          )
+        ) {
+          setProject(savedProject, { recordHistory: false });
+        }
+        clearProjectRenameFailureIfSaved(savedProject);
+
+        return savedProject;
       });
-      setProject(savedProject, { recordHistory: false });
 
       return savedProject;
     },
@@ -582,6 +819,21 @@ function clearEditorProjectSelection(project: EditorProject): EditorProject {
     activeClipId: null,
     selectedAssetKey: null,
   };
+}
+
+function shouldApplySavedEditorProject(
+  projectAtSaveStart: EditorProject | null,
+  currentProject: EditorProject | null,
+  savedProject: EditorProject,
+): boolean {
+  if (!projectAtSaveStart || !currentProject) {
+    return true;
+  }
+
+  return (
+    currentProject === projectAtSaveStart &&
+    currentProject.id === savedProject.id
+  );
 }
 
 export { createEditorWorkspaceActions };

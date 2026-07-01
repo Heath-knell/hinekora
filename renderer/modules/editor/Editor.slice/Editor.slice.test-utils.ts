@@ -40,6 +40,17 @@ function createEditorSliceTestStore() {
   });
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+
+  return { promise, reject, resolve };
+}
+
 function setupEditorSliceTest() {
   let editorApi: ReturnType<typeof createEditorApiMock>;
   let progressTracker: ReturnType<typeof installEditorApiMock>;
@@ -207,6 +218,7 @@ function createEditorTestTimelineClip(
 }
 
 export {
+  createDeferred,
   createEditorTestAsset,
   createEditorTestExportResult,
   createEditorTestProject,

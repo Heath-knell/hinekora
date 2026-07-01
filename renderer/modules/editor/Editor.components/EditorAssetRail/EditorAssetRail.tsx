@@ -11,11 +11,19 @@ import { useEditorAssetRailHydration } from "./useEditorAssetRailHydration/useEd
 import { useEditorAssetRailPageModel } from "./useEditorAssetRailPageModel/useEditorAssetRailPageModel";
 import { useEditorAssetRailSelectedPage } from "./useEditorAssetRailSelectedPage/useEditorAssetRailSelectedPage";
 
-function EditorAssetRail({ scope }: { scope: MediaLibraryScope }) {
+interface EditorAssetRailProps {
+  isHydrationEnabled?: boolean;
+  scope: MediaLibraryScope;
+}
+
+function EditorAssetRail({
+  isHydrationEnabled = true,
+  scope,
+}: EditorAssetRailProps) {
   const pageModel = useEditorAssetRailPageModel(scope);
   const { isProcessing, isSavedEditsFilter } = pageModel;
 
-  useEditorAssetRailHydration(pageModel);
+  useEditorAssetRailHydration({ ...pageModel, isHydrationEnabled });
   useEditorAssetRailSelectedPage(pageModel);
 
   return (

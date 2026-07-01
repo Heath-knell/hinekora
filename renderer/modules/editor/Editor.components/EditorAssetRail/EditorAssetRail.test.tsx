@@ -368,14 +368,17 @@ describe("EditorAssetRail", () => {
     await renderAssetRail();
     await renderAssetRail();
 
-    expect(storeMocks.hydrateMediaAssets).toHaveBeenCalledWith({
-      category: "death-clip",
-      excludeAssetKeys: ["clip:death"],
-      game: "poe2",
-      league: "Standard",
-      pageIndex: 0,
-      pageSize: 5,
-    });
+    expect(storeMocks.hydrateMediaAssets).toHaveBeenCalledWith(
+      {
+        category: "death-clip",
+        excludeAssetKeys: ["clip:death"],
+        game: "poe2",
+        league: "Standard",
+        pageIndex: 0,
+        pageSize: 5,
+      },
+      { force: true },
+    );
     expect(assetCardText()).toContain("run.mp4");
     expect(assetCardText()).not.toContain("death.mp4");
   });
@@ -581,6 +584,9 @@ describe("EditorAssetRail", () => {
       expect(
         storeMocks.hydrateMediaAssets.mock.lastCall?.[0].createdAfter,
       ).toBe("2026-06-28T12:00:00.000Z");
+      expect(storeMocks.hydrateMediaAssets.mock.lastCall?.[1]).toEqual({
+        force: true,
+      });
     } finally {
       vi.useRealTimers();
     }

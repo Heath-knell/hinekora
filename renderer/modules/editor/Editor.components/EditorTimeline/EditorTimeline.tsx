@@ -19,6 +19,7 @@ import {
   resolveEditorTimelineDragPreviewState,
   resolveEditorTimelineModel,
   resolveEditorTimelineUseCompactTrimHandles,
+  resolveEditorTimelineVisibleDuration,
 } from "./EditorTimeline.utils";
 import { useEditorTimelineGridWidth } from "./useEditorTimelineGridWidth";
 import { useEditorTimelineInteraction } from "./useEditorTimelineInteraction/useEditorTimelineInteraction";
@@ -46,6 +47,23 @@ function EditorTimeline() {
     setZoom: editor.setZoom,
     zoom: editor.zoom,
   }));
+  const baseVisibleDurationSeconds = resolveEditorTimelineVisibleDuration({
+    isTimelineFitToEdit,
+    project,
+  });
+  const {
+    activeTrimVisibleDurationSeconds,
+    activeTimelineMarkerKind,
+    activeTimelineMarkerSeconds,
+    clipDragPreview,
+    handleTimelinePointerDown,
+    handleTimelinePointerEnd,
+    handleTimelinePointerMove,
+    timelineGridRef,
+  } = useEditorTimelineDrag({
+    railPaddingPixels: editorTimelineRailPaddingPixels,
+    visibleDurationSeconds: baseVisibleDurationSeconds,
+  });
   const {
     gaps,
     markers,
@@ -57,21 +75,10 @@ function EditorTimeline() {
     visibleDurationSeconds,
   } = resolveEditorTimelineModel({
     isTimelineFitToEdit,
+    minimumVisibleDurationSeconds: activeTrimVisibleDurationSeconds,
     project,
     selectedClipId,
     zoom,
-  });
-  const {
-    activeTimelineMarkerKind,
-    activeTimelineMarkerSeconds,
-    clipDragPreview,
-    handleTimelinePointerDown,
-    handleTimelinePointerEnd,
-    handleTimelinePointerMove,
-    timelineGridRef,
-  } = useEditorTimelineDrag({
-    railPaddingPixels: editorTimelineRailPaddingPixels,
-    visibleDurationSeconds,
   });
   const timelineGridWidthPixels = useEditorTimelineGridWidth(timelineGridRef);
   const timelineRailWidthPixels = Math.max(

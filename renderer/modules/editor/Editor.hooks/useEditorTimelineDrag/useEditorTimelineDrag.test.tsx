@@ -91,6 +91,7 @@ function configureEditorState(projectOverride = project) {
 
 function TimelineDragHarness() {
   const {
+    activeTrimVisibleDurationSeconds,
     activeTimelineMarkerKind,
     activeTimelineMarkerSeconds,
     clipDragPreview,
@@ -161,6 +162,11 @@ function TimelineDragHarness() {
       {activeTimelineMarkerKind !== null && (
         <output data-testid="active-marker-kind">
           {activeTimelineMarkerKind}
+        </output>
+      )}
+      {activeTrimVisibleDurationSeconds !== null && (
+        <output data-testid="active-trim-visible-duration">
+          {activeTrimVisibleDurationSeconds.toFixed(2)}
         </output>
       )}
     </div>
@@ -294,6 +300,9 @@ describe("useEditorTimelineDrag", () => {
     dispatchPointer(getElement("trim-start"), "pointerdown", { clientX: 280 });
     expect(getElement("active-marker").textContent).toBe("2.00");
     expect(getElement("active-marker-kind").textContent).toBe("trim");
+    expect(getElement("active-trim-visible-duration").textContent).toBe(
+      "10.00",
+    );
     dispatchPointer(getElement("timeline"), "pointermove", { clientX: 370 });
     expect(getElement("active-marker").textContent).toBe("3.00");
     dispatchPointer(getElement("timeline"), "pointerup", { clientX: 400 });
@@ -321,6 +330,9 @@ describe("useEditorTimelineDrag", () => {
     expect(container.querySelector("[data-testid='active-marker-kind']")).toBe(
       null,
     );
+    expect(
+      container.querySelector("[data-testid='active-trim-visible-duration']"),
+    ).toBe(null);
   });
 
   it("uses the visible timeline range when starting a trim drag", async () => {

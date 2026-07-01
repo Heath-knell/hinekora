@@ -45,6 +45,14 @@ interface SetProjectOptions {
   resetViewState?: boolean;
 }
 
+interface SaveProjectOptions {
+  applyResponse?: boolean;
+}
+
+interface HydrateMediaAssetsOptions {
+  force?: boolean;
+}
+
 interface EditorSlice {
   editor: {
     clipboardState: EditorClipboardState;
@@ -96,7 +104,10 @@ interface EditorSlice {
     }) => Promise<void>;
     fitTimelineToEdit: () => void;
     hydrate: (source?: EditorMediaReference | null) => Promise<boolean>;
-    hydrateMediaAssets: (query: EditorMediaAssetPageQuery) => Promise<void>;
+    hydrateMediaAssets: (
+      query: EditorMediaAssetPageQuery,
+      options?: HydrateMediaAssetsOptions,
+    ) => Promise<void>;
     keepEditingAfterExport: () => void;
     loadMoreProjects: () => Promise<void>;
     removeAllTimelineGaps: () => void;
@@ -109,6 +120,7 @@ interface EditorSlice {
     openProject: (projectId: string) => Promise<boolean>;
     refreshMedia: () => Promise<void>;
     refreshMediaRecentlyClippedSince: () => string;
+    renameProject: (title: string) => void;
     removeTimelineClip: (clipId: string) => void;
     removeTimelineGap: (gap: {
       endSeconds: number;
@@ -129,7 +141,10 @@ interface EditorSlice {
     setPreviewPlaying: (isPlaying: boolean) => void;
     setPreviewVolume: (volume: number) => void;
     setZoom: (zoom: number) => void;
-    saveProject: (project: EditorProject) => Promise<EditorProject>;
+    saveProject: (
+      project: EditorProject,
+      options?: SaveProjectOptions,
+    ) => Promise<EditorProject>;
     splitTimelineClipAt: (timelineSeconds: number) => void;
     toggleProjectAudioMuted: () => void;
     trimTimelineClipEdge: (
@@ -149,5 +164,6 @@ export type {
   EditorMediaFilter,
   EditorMediaRailTab,
   EditorSlice,
+  SaveProjectOptions,
   SetProjectOptions,
 };

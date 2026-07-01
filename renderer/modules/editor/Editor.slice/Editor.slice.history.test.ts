@@ -10,7 +10,7 @@ import {
 const { createTestStore, getEditorApi } = setupEditorSliceTest();
 
 describe("Editor history slice", () => {
-  it("records history transactions and supports undo and redo", () => {
+  it("records history transactions and supports undo and redo", async () => {
     const store = createTestStore();
     const asset = createEditorTestAsset();
     const project = createEditorTestProject(asset);
@@ -70,8 +70,10 @@ describe("Editor history slice", () => {
     );
     expect(store.getState().editor.isPreviewPlaying).toBe(false);
     expect(store.getState().editor.playbackSeconds).toBe(10);
-    expect(getEditorApi().saveProject).toHaveBeenLastCalledWith({
-      project,
+    await vi.waitFor(() => {
+      expect(getEditorApi().saveProject).toHaveBeenLastCalledWith({
+        project,
+      });
     });
 
     store.getState().editor.redoProjectChange();
@@ -81,16 +83,18 @@ describe("Editor history slice", () => {
       "asset-1.mp4",
     );
     expect(store.getState().editor.playbackSeconds).toBe(3);
-    expect(getEditorApi().saveProject).toHaveBeenLastCalledWith({
-      project: {
-        ...changedProject,
-        history: {
-          editCount: 1,
-          labels: ["Trim end"],
-          subtitles: ["asset-1.mp4"],
-          snapshots: [project],
+    await vi.waitFor(() => {
+      expect(getEditorApi().saveProject).toHaveBeenLastCalledWith({
+        project: {
+          ...changedProject,
+          history: {
+            editCount: 1,
+            labels: ["Trim end"],
+            subtitles: ["asset-1.mp4"],
+            snapshots: [project],
+          },
         },
-      },
+      });
     });
   });
 
@@ -203,17 +207,53 @@ describe("Editor history slice", () => {
 
     try {
       store.getState().editor.undoProjectChange();
-      await Promise.resolve();
-      await Promise.resolve();
-      expect(warn).toHaveBeenCalledWith("[editor] Project undo save failed", {
-        error: expect.any(Error),
+      await vi.waitFor(() => {
+        expect(warn).toHaveBeenCalledWith("[editor] Project undo save failed", {
+          error: expect.any(Error),
+        });
       });
 
       store.getState().editor.redoProjectChange();
-      await Promise.resolve();
-      await Promise.resolve();
-      expect(warn).toHaveBeenCalledWith("[editor] Project redo save failed", {
-        error: expect.any(Error),
+      await vi.waitFor(() => {
+        expect(warn).toHaveBeenCalledWith("[editor] Project redo save failed", {
+          error: expect.any(Error),
+        });
+      });
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("logs transaction persistence failures", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const store = createTestStore();
+    const asset = createEditorTestAsset();
+    const project = createEditorTestProject(asset);
+    getEditorApi().saveProject.mockRejectedValue(new Error("save failed"));
+    loadEditorProject(store, project, [asset]);
+
+    try {
+      store
+        .getState()
+        .editor.beginHistoryTransaction("Trim end", "asset-1.mp4");
+      store.setState((state) => ({
+        editor: {
+          ...state.editor,
+          project: {
+            ...project,
+            durationSeconds: 4,
+          },
+        },
+      }));
+      store.getState().editor.commitHistoryTransaction();
+
+      await vi.waitFor(() => {
+        expect(warn).toHaveBeenCalledWith(
+          "[editor] Project transaction save failed",
+          {
+            error: expect.any(Error),
+          },
+        );
       });
     } finally {
       warn.mockRestore();

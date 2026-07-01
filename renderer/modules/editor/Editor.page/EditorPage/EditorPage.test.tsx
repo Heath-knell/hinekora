@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { EditorProject } from "~/main/modules/editor";
 
+import { createDeferred } from "../../Editor.slice/Editor.slice.test-utils";
+
 const storeMocks = vi.hoisted(() => ({
   copyProjectToClipboard: vi.fn(),
   createProject: vi.fn(),
@@ -22,6 +24,12 @@ const storeMocks = vi.hoisted(() => ({
   useSavedEditsShallow: vi.fn(),
   useSettingsSelector: vi.fn(),
 }));
+const assetRailMocks = vi.hoisted(() => ({
+  props: [] as Array<{
+    isHydrationEnabled?: boolean;
+    scope: { game: string; league: string };
+  }>,
+}));
 
 vi.mock("~/renderer/store", () => ({
   useEditorShallow: storeMocks.useEditorShallow,
@@ -30,7 +38,19 @@ vi.mock("~/renderer/store", () => ({
 }));
 
 vi.mock("../../Editor.components/EditorAssetRail/EditorAssetRail", () => ({
-  EditorAssetRail: () => <div data-testid="asset-rail" />,
+  EditorAssetRail: (props: {
+    isHydrationEnabled?: boolean;
+    scope: { game: string; league: string };
+  }) => {
+    assetRailMocks.props.push(props);
+
+    return (
+      <div
+        data-hydration-enabled={String(props.isHydrationEnabled)}
+        data-testid="asset-rail"
+      />
+    );
+  },
 }));
 vi.mock("../../Editor.components/EditorActionsMenu/EditorActionsMenu", () => ({
   EditorActionsMenu: ({
@@ -211,6 +231,7 @@ describe("EditorPage shortcuts", () => {
     storeMocks.hydrate.mockResolvedValue(true);
     storeMocks.openProject.mockResolvedValue(true);
     configureEditorState();
+    assetRailMocks.props = [];
     storeMocks.useSettingsSelector.mockImplementation((selector) =>
       selector(settingsSlice),
     );
@@ -545,6 +566,119 @@ describe("EditorPage shortcuts", () => {
 
     expect(storeMocks.openProject).toHaveBeenCalledWith("project-2");
     expect(storeMocks.hydrate).not.toHaveBeenCalled();
+  });
+
+  it("does not open the same saved edit route twice while it is pending", async () => {
+    const openProjectRequest = createDeferred<boolean>();
+    storeMocks.openProject.mockReturnValue(openProjectRequest.promise);
+
+    await act(async () => {
+      root.render(<EditorPage projectId="project-2" />);
+    });
+    await act(async () => {
+      root.render(<EditorPage projectId="project-2" />);
+    });
+
+    expect(storeMocks.openProject).toHaveBeenCalledTimes(1);
+
+    openProjectRequest.resolve(true);
+    await act(async () => {
+      await openProjectRequest.promise;
+    });
+  });
+
+  it("keeps asset rail hydration disabled until settings are ready", async () => {
+    storeMocks.useSettingsSelector.mockImplementation((selector) =>
+      selector({ value: null }),
+    );
+    configureEditorState({
+      project: {
+        ...project,
+        id: "project-2",
+      },
+    });
+
+    await act(async () => {
+      root.render(<EditorPage projectId="project-2" />);
+    });
+
+    expect(
+      container
+        .querySelector("[data-testid='asset-rail']")
+        ?.getAttribute("data-hydration-enabled"),
+    ).toBe("false");
+  });
+
+  it("enables asset rail hydration when settings and the route are ready", async () => {
+    storeMocks.useSettingsSelector.mockImplementation((selector) =>
+      selector(settingsSlice),
+    );
+    configureEditorState({
+      project: {
+        ...project,
+        id: "project-2",
+      },
+    });
+    await act(async () => {
+      root.render(<EditorPage projectId="project-2" />);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(
+      container
+        .querySelector("[data-testid='asset-rail']")
+        ?.getAttribute("data-hydration-enabled"),
+    ).toBe("true");
+    expect(assetRailMocks.props.at(-1)?.scope).toEqual({
+      game: "poe2",
+      league: "Standard",
+    });
+  });
+
+  it("enables asset rail hydration after settings become ready on the mounted route", async () => {
+    let currentSettings: typeof settingsSlice.value | null = null;
+    function SettingsReadyHarness({ renderTick }: { renderTick: number }) {
+      void renderTick;
+
+      return <EditorPage projectId="project-2" />;
+    }
+
+    storeMocks.useSettingsSelector.mockImplementation((selector) =>
+      selector({ value: currentSettings }),
+    );
+    configureEditorState({
+      project: {
+        ...project,
+        id: "project-2",
+      },
+    });
+
+    await act(async () => {
+      root.render(<SettingsReadyHarness renderTick={0} />);
+    });
+    const pendingSettingsRenderCount = assetRailMocks.props.length;
+    expect(assetRailMocks.props.at(-1)?.isHydrationEnabled).toBe(false);
+
+    currentSettings = settingsSlice.value;
+    await act(async () => {
+      root.render(<SettingsReadyHarness renderTick={1} />);
+      await Promise.resolve();
+    });
+    await vi.waitFor(() => {
+      expect(assetRailMocks.props.length).toBeGreaterThan(
+        pendingSettingsRenderCount,
+      );
+    });
+
+    expect(assetRailMocks.props.at(-1)).toMatchObject({
+      isHydrationEnabled: true,
+      scope: {
+        game: "poe2",
+        league: "Standard",
+      },
+    });
   });
 
   it("does not rehydrate over an existing local editor project", async () => {

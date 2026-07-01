@@ -345,8 +345,8 @@ function getEditorProjectHistorySubtitles(
 function getEditorProjectHistorySnapshots(
   project: EditorProject,
 ): EditorProject[] {
-  return (project.history?.snapshots ?? []).map((snapshot) =>
-    createEditorProjectHistorySnapshot(snapshot),
+  return normalizeEditorProjectHistorySnapshots(
+    project.history?.snapshots ?? [],
   );
 }
 
@@ -410,24 +410,7 @@ function canUseEditorMediaAssetPage(
   requestedQuery: EditorMediaAssetPageQuery,
   currentQuery: EditorMediaAssetPageQuery,
 ): boolean {
-  return (
-    requestedQuery.category === currentQuery.category &&
-    (requestedQuery.createdAfter ?? null) ===
-      (currentQuery.createdAfter ?? null) &&
-    requestedQuery.game === currentQuery.game &&
-    areEditorMediaAssetKeyListsEqual(
-      requestedQuery.excludeAssetKeys,
-      currentQuery.excludeAssetKeys,
-    ) &&
-    areEditorMediaAssetKeyListsEqual(
-      requestedQuery.includeAssetKeys,
-      currentQuery.includeAssetKeys,
-    ) &&
-    (requestedQuery.league ?? null) === (currentQuery.league ?? null) &&
-    (requestedQuery.pageIndex ?? 0) === (currentQuery.pageIndex ?? 0) &&
-    (requestedQuery.pageSize ?? editorAssetRailPageSize) ===
-      (currentQuery.pageSize ?? editorAssetRailPageSize)
-  );
+  return areEditorMediaAssetPageQueriesEqual(requestedQuery, currentQuery);
 }
 
 function areEditorMediaAssetKeyListsEqual(

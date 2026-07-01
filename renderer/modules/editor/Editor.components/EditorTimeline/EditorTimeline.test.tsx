@@ -117,6 +117,7 @@ describe("EditorTimeline", () => {
     document.body.append(container);
     root = createRoot(container);
     dragMocks.useEditorTimelineDrag.mockReturnValue({
+      activeTrimVisibleDurationSeconds: null,
       activeTimelineMarkerKind: null,
       activeTimelineMarkerSeconds: null,
       clipDragPreview: null,
@@ -286,6 +287,61 @@ describe("EditorTimeline", () => {
     ).toBe("30");
   });
 
+  it("keeps the visual rail duration stable while trimming the last clip", async () => {
+    const asset = createEditorTestAsset({ durationSeconds: 54.95 });
+    const createProjectWithClipDuration = (durationSeconds: number) =>
+      createEditorTestProject(asset, {
+        durationSeconds,
+        tracks: [
+          {
+            clips: [
+              createEditorTestTimelineClip(asset, {
+                durationSeconds,
+                outSeconds: durationSeconds,
+                sourceOutSeconds: 54.95,
+              }),
+            ],
+            id: "video-track",
+            kind: "video",
+            label: "Video",
+          },
+        ],
+      });
+
+    configureEditorState({
+      project: createProjectWithClipDuration(30),
+      zoom: 1,
+    });
+    await renderTimeline();
+    expect(
+      container
+        .querySelector('[data-testid="track-video-track"]')
+        ?.getAttribute("data-visible-duration"),
+    ).toBe("37.5");
+
+    dragMocks.useEditorTimelineDrag.mockReturnValue({
+      activeTrimVisibleDurationSeconds: 37.5,
+      activeTimelineMarkerKind: "trim",
+      activeTimelineMarkerSeconds: 20,
+      clipDragPreview: null,
+      handleTimelinePointerDown: dragMocks.handleTimelinePointerDown,
+      handleTimelinePointerEnd: dragMocks.handleTimelinePointerEnd,
+      handleTimelinePointerMove: dragMocks.handleTimelinePointerMove,
+      timelineGridRef: { current: null },
+    });
+    configureEditorState({
+      project: createProjectWithClipDuration(20),
+      zoom: 1,
+    });
+    await renderTimeline();
+
+    expect(
+      container
+        .querySelector('[data-testid="track-video-track"]')
+        ?.getAttribute("data-visible-duration"),
+    ).toBe("37.5");
+  });
+
   it("uses compact trim handles for every clip once any clip is too narrow", async () => {
     const asset = createEditorTestAsset({ durationSeconds: 20 });
     const firstClip = createEditorTestTimelineClip(asset, {
@@ -403,6 +459,7 @@ describe("EditorTimeline", () => {
 
   it("uses the active drag marker ahead of passive hover", async () => {
     dragMocks.useEditorTimelineDrag.mockReturnValue({
+      activeTrimVisibleDurationSeconds: 37.5,
       activeTimelineMarkerKind: "trim",
       activeTimelineMarkerSeconds: 7.54,
       clipDragPreview: null,
@@ -421,6 +478,7 @@ describe("EditorTimeline", () => {
 
   it("hides the hover marker while dragging the playhead", async () => {
     dragMocks.useEditorTimelineDrag.mockReturnValue({
+      activeTrimVisibleDurationSeconds: null,
       activeTimelineMarkerKind: "playhead",
       activeTimelineMarkerSeconds: 7.54,
       clipDragPreview: null,

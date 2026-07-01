@@ -89,14 +89,14 @@ function EditorAssetRailHeader({
           timelineAssetKeys,
         });
         if (nextMediaAssetsQuery) {
-          void hydrateMediaAssets(nextMediaAssetsQuery);
+          void hydrateMediaAssets(nextMediaAssetsQuery, { force: true });
         }
         return;
       }
     }
 
     if (mediaPageIndex === 0 && mediaAssetsQuery) {
-      void hydrateMediaAssets(mediaAssetsQuery);
+      void hydrateMediaAssets(mediaAssetsQuery, { force: true });
       return;
     }
 

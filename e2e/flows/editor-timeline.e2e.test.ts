@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 
 import {
   clickTimelineMarkerAtClipOffset,
@@ -16,6 +16,33 @@ import {
 test.afterEach(async ({ page }) => {
   await expectNoUnexpectedEditorBridgeCalls(page);
 });
+
+async function expectMediaAssetQueryCountToRemainAtMost(
+  page: Page,
+  maximumCount: number,
+) {
+  await waitForEditorBridgeToSettle(page);
+  const settledQueryCount = (await getEditorE2ECalls(page)).mediaAssetQueries
+    .length;
+  expect(settledQueryCount).toBeLessThanOrEqual(maximumCount);
+
+  await waitForEditorBridgeToSettle(page);
+  expect((await getEditorE2ECalls(page)).mediaAssetQueries.length).toBe(
+    settledQueryCount,
+  );
+}
+
+async function waitForEditorBridgeToSettle(page: Page) {
+  await page.evaluate(async () => {
+    await new Promise<void>((resolve) => {
+      window.requestAnimationFrame(() => resolve());
+    });
+    await Promise.resolve();
+    await new Promise<void>((resolve) => {
+      window.requestAnimationFrame(() => resolve());
+    });
+  });
+}
 
 test("normalizes corrupted editor timeline state before autosaving UI edits", async ({
   page,
@@ -273,8 +300,20 @@ test("covers editor help, shortcuts, saved-edit rail, and debug actions", async 
     })
     .toEqual(["project-1"]);
 
+  const callsBeforeSavedEditOpen = await getEditorE2ECalls(page);
   await page.getByRole("button", { name: /secondary\.mp4 edit/ }).click();
   await expect(page).toHaveURL(/#\/editor\?projectId=project-2/);
+  await expect
+    .poll(async () => {
+      const calls = await getEditorE2ECalls(page);
+
+      return calls.workspaceQueries.length;
+    })
+    .toBe(callsBeforeSavedEditOpen.workspaceQueries.length + 1);
+  await expectMediaAssetQueryCountToRemainAtMost(
+    page,
+    callsBeforeSavedEditOpen.mediaAssetQueries.length + 1,
+  );
 
   await openEditorActionsMenu(page);
   await page.getByRole("button", { name: "Debug" }).click();
@@ -374,8 +413,20 @@ test("covers saved edits route library interactions", async ({ page }) => {
     })
     .toEqual(["project-1"]);
 
+  const callsBeforeSavedEditOpen = await getEditorE2ECalls(page);
   await page.getByText("asset-1.mp4 edit").click();
   await expect(page).toHaveURL(/#\/editor\?projectId=project-1/);
+  await expect
+    .poll(async () => {
+      const calls = await getEditorE2ECalls(page);
+
+      return calls.workspaceQueries.length;
+    })
+    .toBe(callsBeforeSavedEditOpen.workspaceQueries.length + 1);
+  await expectMediaAssetQueryCountToRemainAtMost(
+    page,
+    callsBeforeSavedEditOpen.mediaAssetQueries.length + 1,
+  );
 
   await page.goto("/#/saved-edits");
   await page.getByLabel("Library league").selectOption("Standard");

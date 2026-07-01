@@ -10,7 +10,11 @@ import { createEditorHistoryActions } from "./Editor.slice.history";
 import { createEditorProjectActions } from "./Editor.slice.project";
 import { createEditorInitialState } from "./Editor.slice.state";
 import { createEditorTimelineActions } from "./Editor.slice.timeline";
-import type { EditorSlice, SetProjectOptions } from "./Editor.slice.types";
+import type {
+  EditorSlice,
+  SaveProjectOptions,
+  SetProjectOptions,
+} from "./Editor.slice.types";
 import {
   createEditorProjectHistorySnapshot,
   getEditorProjectHistoryLabels,
@@ -119,11 +123,21 @@ const createEditorSlice: BoundStoreStateCreator<EditorSlice> = (set, get) => {
       historySubtitle: options.historySubtitle ?? null,
       recordHistory: options.recordHistory ?? true,
     });
+    if (get().editor.historyTransactionProject) {
+      return;
+    }
+
     scheduleEditorProjectSave(nextProject, get().editor.saveProject);
   };
 
+  const persistProject = (project: EditorProject, failureMessage: string) => {
+    persistEditorProject(project, get().editor.saveProject, failureMessage);
+  };
+
   const context = {
+    cancelPendingProjectSave: cancelEditorProjectSave,
     get,
+    persistProject,
     set,
     setProject,
     updateProject,
@@ -176,18 +190,42 @@ function createEditorProjectSummary(
 
 let editorProjectSaveTimer: number | null = null;
 
+type SaveEditorProject = (
+  project: EditorProject,
+  options?: SaveProjectOptions,
+) => Promise<EditorProject>;
+
+function cancelEditorProjectSave() {
+  if (editorProjectSaveTimer === null) {
+    return;
+  }
+
+  window.clearTimeout(editorProjectSaveTimer);
+  editorProjectSaveTimer = null;
+}
+
 function scheduleEditorProjectSave(
   project: EditorProject,
-  saveProject: (project: EditorProject) => Promise<EditorProject>,
+  saveProject: SaveEditorProject,
 ) {
-  if (editorProjectSaveTimer !== null) {
-    window.clearTimeout(editorProjectSaveTimer);
-  }
+  cancelEditorProjectSave();
 
   editorProjectSaveTimer = window.setTimeout(() => {
     editorProjectSaveTimer = null;
-    void saveProject(project).catch((error) => {
-      console.warn("[editor] Project autosave failed", { error });
-    });
+    persistEditorProject(
+      project,
+      saveProject,
+      "[editor] Project autosave failed",
+    );
   }, 500);
+}
+
+function persistEditorProject(
+  project: EditorProject,
+  saveProject: SaveEditorProject,
+  failureMessage: string,
+) {
+  void saveProject(project, { applyResponse: false }).catch((error) => {
+    console.warn(failureMessage, { error });
+  });
 }

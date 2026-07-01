@@ -13,14 +13,14 @@ function EditorProjectPicker() {
     loadMoreProjects,
     openProject,
     project,
-    saveProject,
+    renameProject,
     workspace,
   } = useEditorShallow((editor) => ({
     isClipboardBusy: editor.clipboardState.status === "copying",
     loadMoreProjects: editor.loadMoreProjects,
     openProject: editor.openProject,
     project: editor.project,
-    saveProject: editor.saveProject,
+    renameProject: editor.renameProject,
     workspace: editor.workspace,
   }));
   const projects = workspace?.projects ?? [];
@@ -72,10 +72,7 @@ function EditorProjectPicker() {
     }
 
     handleCloseDialog();
-    void saveProject({
-      ...project,
-      title,
-    });
+    renameProject(title);
   };
 
   return (

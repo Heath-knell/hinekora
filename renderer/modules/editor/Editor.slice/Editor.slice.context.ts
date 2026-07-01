@@ -19,6 +19,8 @@ interface EditorSliceActionContext {
       resetViewState?: boolean;
     },
   ) => void;
+  cancelPendingProjectSave: () => void;
+  persistProject: (project: EditorProject, failureMessage: string) => void;
   updateProject: (
     updater: (project: EditorProject) => EditorProject,
     options?: {

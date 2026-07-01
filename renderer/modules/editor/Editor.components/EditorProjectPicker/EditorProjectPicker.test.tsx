@@ -10,7 +10,7 @@ import {
 const storeMocks = vi.hoisted(() => ({
   loadMoreProjects: vi.fn(),
   openProject: vi.fn(),
-  saveProject: vi.fn(),
+  renameProject: vi.fn(),
   useEditorShallow: vi.fn(),
 }));
 
@@ -33,7 +33,7 @@ function configureEditorState(overrides: Record<string, unknown> = {}) {
       loadMoreProjects: storeMocks.loadMoreProjects,
       openProject: storeMocks.openProject,
       project,
-      saveProject: storeMocks.saveProject,
+      renameProject: storeMocks.renameProject,
       workspace: {
         assets: [asset],
         hasMoreProjects: false,
@@ -73,7 +73,6 @@ describe("EditorProjectPicker", () => {
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
-    storeMocks.saveProject.mockResolvedValue(project);
     configureEditorState();
     Object.defineProperty(HTMLDialogElement.prototype, "showModal", {
       configurable: true,
@@ -175,10 +174,7 @@ describe("EditorProjectPicker", () => {
       submitButton?.click();
     });
 
-    expect(storeMocks.saveProject).toHaveBeenCalledWith({
-      ...project,
-      title: "Boss kills",
-    });
+    expect(storeMocks.renameProject).toHaveBeenCalledWith("Boss kills");
   });
 
   it("loads more saved projects from the selector", async () => {

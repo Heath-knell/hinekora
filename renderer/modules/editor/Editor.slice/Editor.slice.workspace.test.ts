@@ -2,11 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 
 import type {
   EditorMediaAssetPage,
+  EditorProject,
   EditorWorkspace,
 } from "~/main/modules/editor";
 import type { BoundStore } from "~/renderer/store/store.types";
 
 import {
+  createDeferred,
   createEditorTestAsset,
   createEditorTestProject,
   createEditorTestTimelineClip,
@@ -15,17 +17,6 @@ import {
 } from "./Editor.slice.test-utils";
 
 const { createTestStore, getEditorApi } = setupEditorSliceTest();
-
-function createDeferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((promiseResolve, promiseReject) => {
-    resolve = promiseResolve;
-    reject = promiseReject;
-  });
-
-  return { promise, reject, resolve };
-}
 
 describe("Editor workspace slice", () => {
   it("hydrates the default editor with a fresh empty timeline", async () => {
@@ -258,6 +249,275 @@ describe("Editor workspace slice", () => {
     ).not.toHaveProperty("history");
   });
 
+  it("does not apply stale explicit save responses after local project changes", async () => {
+    const store = createTestStore();
+    const editorApi = getEditorApi();
+    const asset = createEditorTestAsset();
+    const project = createEditorTestProject(asset);
+    const saveDeferred = createDeferred<EditorProject>();
+    editorApi.saveProject.mockImplementation(() => saveDeferred.promise);
+    loadEditorProject(store, project, [asset]);
+
+    const savePromise = store.getState().editor.saveProject({
+      ...project,
+      title: "Renamed project",
+    });
+    store.setState((state) => ({
+      editor: {
+        ...state.editor,
+        project: {
+          ...project,
+          title: "Newer local title",
+          updatedAt: "2026-06-18T00:03:00.000Z",
+        },
+      },
+    }));
+    const requestedProject = editorApi.saveProject.mock.calls[0]?.[0].project;
+    if (!requestedProject) {
+      throw new Error("Expected save request to be captured");
+    }
+    saveDeferred.resolve({
+      ...requestedProject,
+      title: "Stale save response",
+      updatedAt: "2026-06-18T00:02:00.000Z",
+    });
+    await savePromise;
+
+    expect(store.getState().editor.project?.title).toBe("Newer local title");
+  });
+
+  it("serializes project saves and only applies the newest response", async () => {
+    const store = createTestStore();
+    const editorApi = getEditorApi();
+    const asset = createEditorTestAsset();
+    const project = createEditorTestProject(asset);
+    const firstSave = createDeferred<EditorProject>();
+    const secondSave = createDeferred<EditorProject>();
+    editorApi.saveProject
+      .mockReturnValueOnce(firstSave.promise)
+      .mockReturnValueOnce(secondSave.promise);
+    loadEditorProject(store, project, [asset]);
+
+    const firstSavePromise = store.getState().editor.saveProject({
+      ...project,
+      title: "First title",
+    });
+    const secondSavePromise = store.getState().editor.saveProject({
+      ...project,
+      title: "Second title",
+    });
+
+    expect(editorApi.saveProject).toHaveBeenCalledTimes(1);
+    expect(editorApi.saveProject.mock.calls[0]?.[0].project.title).toBe(
+      "First title",
+    );
+
+    firstSave.resolve({
+      ...project,
+      title: "Saved first title",
+      updatedAt: "2026-06-18T00:01:00.000Z",
+    });
+    await firstSavePromise;
+    await Promise.resolve();
+
+    expect(editorApi.saveProject).toHaveBeenCalledTimes(2);
+    expect(editorApi.saveProject.mock.calls[1]?.[0].project.title).toBe(
+      "Second title",
+    );
+    expect(store.getState().editor.project?.title).toBe(project.title);
+
+    secondSave.resolve({
+      ...project,
+      title: "Saved second title",
+      updatedAt: "2026-06-18T00:02:00.000Z",
+    });
+    await secondSavePromise;
+
+    expect(store.getState().editor.project?.title).toBe("Saved second title");
+  });
+
+  it("keeps renamed project titles in later autosaves after local changes", async () => {
+    vi.useFakeTimers();
+    const store = createTestStore();
+    const editorApi = getEditorApi();
+    const asset = createEditorTestAsset();
+    const project = createEditorTestProject(asset);
+    const renameSave = createDeferred<EditorProject>();
+    const selectionSave = createDeferred<EditorProject>();
+    editorApi.saveProject
+      .mockReturnValueOnce(renameSave.promise)
+      .mockReturnValueOnce(selectionSave.promise);
+    loadEditorProject(store, project, [asset]);
+
+    try {
+      store.getState().editor.selectTimelineClip("missing");
+      store.getState().editor.renameProject("Renamed edit");
+
+      expect(store.getState().editor.project?.title).toBe("Renamed edit");
+      expect(editorApi.saveProject).toHaveBeenCalledTimes(1);
+      expect(editorApi.saveProject.mock.calls[0]?.[0].project.title).toBe(
+        "Renamed edit",
+      );
+
+      store.getState().editor.selectTimelineClip("timeline-1");
+      await vi.advanceTimersByTimeAsync(500);
+      expect(editorApi.saveProject).toHaveBeenCalledTimes(1);
+
+      const renameRequest = editorApi.saveProject.mock.calls[0]?.[0].project;
+      if (!renameRequest) {
+        throw new Error("Expected rename save request");
+      }
+      renameSave.resolve({
+        ...renameRequest,
+        title: "Renamed edit",
+        updatedAt: "2026-06-18T00:02:00.000Z",
+      });
+      await renameSave.promise;
+      for (let index = 0; index < 5; index += 1) {
+        await Promise.resolve();
+      }
+
+      expect(editorApi.saveProject).toHaveBeenCalledTimes(2);
+      expect(editorApi.saveProject.mock.calls[1]?.[0].project.title).toBe(
+        "Renamed edit",
+      );
+
+      const selectionRequest = editorApi.saveProject.mock.calls[1]?.[0].project;
+      if (!selectionRequest) {
+        throw new Error("Expected selection save request");
+      }
+      selectionSave.resolve({
+        ...selectionRequest,
+        title: "Renamed edit",
+        updatedAt: "2026-06-18T00:03:00.000Z",
+      });
+      await selectionSave.promise;
+
+      expect(store.getState().editor.project?.title).toBe("Renamed edit");
+      expect(store.getState().editor.workspace?.project.title).toBe(
+        "Renamed edit",
+      );
+      expect(store.getState().editor.workspace?.projects[0]?.title).toBe(
+        "Renamed edit",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("surfaces project rename save failures without dropping the local title", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const store = createTestStore();
+    const editorApi = getEditorApi();
+    const asset = createEditorTestAsset();
+    const project = createEditorTestProject(asset);
+    editorApi.saveProject.mockRejectedValueOnce(new Error("rename failed"));
+    loadEditorProject(store, project, [asset], {
+      error: "previous editor error",
+    });
+
+    try {
+      store.getState().editor.renameProject("Renamed edit");
+
+      expect(store.getState().editor.project?.title).toBe("Renamed edit");
+      expect(store.getState().editor.error).toBeNull();
+      await vi.waitFor(() => {
+        expect(store.getState().editor.error).toBe("Project rename failed");
+      });
+
+      expect(store.getState().editor.project?.title).toBe("Renamed edit");
+      expect(store.getState().editor.workspace?.project.title).toBe(
+        "Renamed edit",
+      );
+      expect(store.getState().editor.workspace?.projects[0]?.title).toBe(
+        "Renamed edit",
+      );
+      expect(warn).toHaveBeenCalledWith("[editor] Project rename save failed", {
+        error: expect.any(Error),
+      });
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("ignores stale project rename failures after another rename", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const store = createTestStore();
+    const editorApi = getEditorApi();
+    const asset = createEditorTestAsset();
+    const project = createEditorTestProject(asset);
+    const firstRename = createDeferred<EditorProject>();
+    const secondRename = createDeferred<EditorProject>();
+    editorApi.saveProject
+      .mockReturnValueOnce(firstRename.promise)
+      .mockReturnValueOnce(secondRename.promise);
+    loadEditorProject(store, project, [asset]);
+
+    try {
+      store.getState().editor.renameProject("First rename");
+      store.getState().editor.renameProject("Second rename");
+
+      firstRename.reject(new Error("stale rename failed"));
+      await vi.waitFor(() => {
+        expect(warn).toHaveBeenCalledWith(
+          "[editor] Project rename save failed",
+          {
+            error: expect.any(Error),
+          },
+        );
+      });
+
+      expect(store.getState().editor.error).toBeNull();
+      expect(store.getState().editor.project?.title).toBe("Second rename");
+      secondRename.resolve({
+        ...project,
+        title: "Second rename",
+        updatedAt: "2026-06-18T00:02:00.000Z",
+      });
+      await secondRename.promise;
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("clears project rename failure after a later autosave persists the renamed project", async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const store = createTestStore();
+    const editorApi = getEditorApi();
+    const asset = createEditorTestAsset();
+    const project = createEditorTestProject(asset);
+    editorApi.saveProject
+      .mockRejectedValueOnce(new Error("rename failed"))
+      .mockImplementationOnce(async ({ project }) => ({
+        ...project,
+        updatedAt: "2026-06-18T00:04:00.000Z",
+      }));
+    loadEditorProject(store, project, [asset]);
+
+    try {
+      store.getState().editor.renameProject("Renamed edit");
+
+      await vi.waitFor(() => {
+        expect(store.getState().editor.error).toBe("Project rename failed");
+      });
+
+      store.getState().editor.selectTimelineClip("missing");
+      await vi.advanceTimersByTimeAsync(500);
+
+      await vi.waitFor(() => {
+        expect(store.getState().editor.error).toBeNull();
+      });
+      expect(editorApi.saveProject).toHaveBeenCalledTimes(2);
+      expect(editorApi.saveProject.mock.calls[1]?.[0].project.title).toBe(
+        "Renamed edit",
+      );
+    } finally {
+      warn.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it("repairs malformed timeline clip order when opening saved projects", async () => {
     const store = createTestStore();
     const editorApi = getEditorApi();
@@ -306,6 +566,328 @@ describe("Editor workspace slice", () => {
     ]);
     expect(store.getState().editor.project?.durationSeconds).toBe(20);
     expect(store.getState().editor.selectedClipId).toBe("timeline-overlap");
+  });
+
+  it("ignores stale saved edit open responses", async () => {
+    const store = createTestStore();
+    const editorApi = getEditorApi();
+    const firstAsset = createEditorTestAsset({
+      assetKey: "clip:first",
+      id: "first",
+      name: "first.mp4",
+    });
+    const secondAsset = createEditorTestAsset({
+      assetKey: "clip:second",
+      id: "second",
+      name: "second.mp4",
+    });
+    const firstProject = createEditorTestProject(firstAsset, {
+      id: "project-first",
+      title: "First project",
+    });
+    const secondProject = createEditorTestProject(secondAsset, {
+      id: "project-second",
+      title: "Second project",
+    });
+    const firstRequest = createDeferred<EditorWorkspace>();
+    const secondRequest = createDeferred<EditorWorkspace>();
+    editorApi.getWorkspace
+      .mockReturnValueOnce(firstRequest.promise)
+      .mockReturnValueOnce(secondRequest.promise);
+
+    const firstOpen = store.getState().editor.openProject(firstProject.id);
+    const secondOpen = store.getState().editor.openProject(secondProject.id);
+
+    secondRequest.resolve({
+      assets: [secondAsset],
+      hasMoreProjects: false,
+      project: secondProject,
+      projects: [],
+    });
+    await expect(secondOpen).resolves.toBe(true);
+    firstRequest.resolve({
+      assets: [firstAsset],
+      hasMoreProjects: false,
+      project: firstProject,
+      projects: [],
+    });
+    await expect(firstOpen).resolves.toBe(false);
+
+    expect(store.getState().editor.project?.id).toBe(secondProject.id);
+    expect(store.getState().editor.workspace?.project.id).toBe(
+      secondProject.id,
+    );
+  });
+
+  it("keeps saved edit opens current when media refresh resolves later", async () => {
+    const store = createTestStore();
+    const editorApi = getEditorApi();
+    const activeAsset = createEditorTestAsset({
+      assetKey: "clip:active",
+      id: "active",
+      name: "active.mp4",
+    });
+    const openedAsset = createEditorTestAsset({
+      assetKey: "clip:opened",
+      id: "opened",
+      name: "opened.mp4",
+    });
+    const activeProject = createEditorTestProject(activeAsset, {
+      id: "project-active",
+      title: "Active project",
+    });
+    const openedProject = createEditorTestProject(openedAsset, {
+      id: "project-opened",
+      title: "Opened project",
+    });
+    const openRequest = createDeferred<EditorWorkspace>();
+    const refreshRequest = createDeferred<EditorWorkspace>();
+    editorApi.getWorkspace
+      .mockReturnValueOnce(openRequest.promise)
+      .mockReturnValueOnce(refreshRequest.promise);
+    loadEditorProject(store, activeProject, [activeAsset]);
+
+    const openProject = store.getState().editor.openProject(openedProject.id);
+    const refreshMedia = store.getState().editor.refreshMedia();
+
+    openRequest.resolve({
+      assets: [openedAsset],
+      hasMoreProjects: false,
+      project: openedProject,
+      projects: [],
+    });
+    await expect(openProject).resolves.toBe(true);
+    expect(store.getState().editor.project?.id).toBe(openedProject.id);
+    expect(store.getState().editor.isLoading).toBe(false);
+
+    refreshRequest.resolve({
+      assets: [activeAsset],
+      hasMoreProjects: false,
+      project: activeProject,
+      projects: [],
+    });
+    await refreshMedia;
+
+    expect(store.getState().editor.project?.id).toBe(openedProject.id);
+    expect(store.getState().editor.workspace?.project.id).toBe(
+      openedProject.id,
+    );
+  });
+
+  it("ignores stale media refresh failures after saved edit opens", async () => {
+    const store = createTestStore();
+    const editorApi = getEditorApi();
+    const activeAsset = createEditorTestAsset({
+      assetKey: "clip:active",
+      id: "active",
+      name: "active.mp4",
+    });
+    const openedAsset = createEditorTestAsset({
+      assetKey: "clip:opened",
+      id: "opened",
+      name: "opened.mp4",
+    });
+    const activeProject = createEditorTestProject(activeAsset, {
+      id: "project-active",
+      title: "Active project",
+    });
+    const openedProject = createEditorTestProject(openedAsset, {
+      id: "project-opened",
+      title: "Opened project",
+    });
+    const openRequest = createDeferred<EditorWorkspace>();
+    const refreshRequest = createDeferred<EditorWorkspace>();
+    editorApi.getWorkspace
+      .mockReturnValueOnce(openRequest.promise)
+      .mockReturnValueOnce(refreshRequest.promise);
+    loadEditorProject(store, activeProject, [activeAsset]);
+
+    const openProject = store.getState().editor.openProject(openedProject.id);
+    const refreshMedia = store.getState().editor.refreshMedia();
+
+    openRequest.resolve({
+      assets: [openedAsset],
+      hasMoreProjects: false,
+      project: openedProject,
+      projects: [],
+    });
+    await expect(openProject).resolves.toBe(true);
+
+    refreshRequest.reject(new Error("stale refresh failed"));
+    await refreshMedia;
+
+    expect(store.getState().editor.error).toBeNull();
+    expect(store.getState().editor.project?.id).toBe(openedProject.id);
+    expect(store.getState().editor.workspace?.project.id).toBe(
+      openedProject.id,
+    );
+  });
+
+  it("keeps saved edit opens current when project pagination resolves later", async () => {
+    const store = createTestStore();
+    const editorApi = getEditorApi();
+    const activeAsset = createEditorTestAsset({
+      assetKey: "clip:active",
+      id: "active",
+      name: "active.mp4",
+    });
+    const openedAsset = createEditorTestAsset({
+      assetKey: "clip:opened",
+      id: "opened",
+      name: "opened.mp4",
+    });
+    const activeProject = createEditorTestProject(activeAsset, {
+      id: "project-active",
+      title: "Active project",
+    });
+    const openedProject = createEditorTestProject(openedAsset, {
+      id: "project-opened",
+      title: "Opened project",
+    });
+    const openRequest = createDeferred<EditorWorkspace>();
+    const loadMoreRequest = createDeferred<EditorWorkspace>();
+    editorApi.getWorkspace
+      .mockReturnValueOnce(openRequest.promise)
+      .mockReturnValueOnce(loadMoreRequest.promise);
+    loadEditorProject(store, activeProject, [activeAsset]);
+
+    const openProject = store.getState().editor.openProject(openedProject.id);
+    const loadMoreProjects = store.getState().editor.loadMoreProjects();
+
+    openRequest.resolve({
+      assets: [openedAsset],
+      hasMoreProjects: false,
+      project: openedProject,
+      projects: [],
+    });
+    await expect(openProject).resolves.toBe(true);
+
+    loadMoreRequest.resolve({
+      assets: [activeAsset],
+      hasMoreProjects: false,
+      project: activeProject,
+      projects: [
+        {
+          clipCount: 1,
+          createdAt: activeProject.createdAt,
+          durationSeconds: activeProject.durationSeconds,
+          id: activeProject.id,
+          title: activeProject.title,
+          updatedAt: activeProject.updatedAt,
+        },
+      ],
+    });
+    await loadMoreProjects;
+
+    expect(store.getState().editor.project?.id).toBe(openedProject.id);
+    expect(store.getState().editor.projectLimit).toBe(5);
+    expect(store.getState().editor.workspace?.project.id).toBe(
+      openedProject.id,
+    );
+  });
+
+  it("ignores stale project pagination failures after saved edit opens", async () => {
+    const store = createTestStore();
+    const editorApi = getEditorApi();
+    const activeAsset = createEditorTestAsset({
+      assetKey: "clip:active",
+      id: "active",
+      name: "active.mp4",
+    });
+    const openedAsset = createEditorTestAsset({
+      assetKey: "clip:opened",
+      id: "opened",
+      name: "opened.mp4",
+    });
+    const activeProject = createEditorTestProject(activeAsset, {
+      id: "project-active",
+      title: "Active project",
+    });
+    const openedProject = createEditorTestProject(openedAsset, {
+      id: "project-opened",
+      title: "Opened project",
+    });
+    const openRequest = createDeferred<EditorWorkspace>();
+    const loadMoreRequest = createDeferred<EditorWorkspace>();
+    editorApi.getWorkspace
+      .mockReturnValueOnce(openRequest.promise)
+      .mockReturnValueOnce(loadMoreRequest.promise);
+    loadEditorProject(store, activeProject, [activeAsset]);
+
+    const openProject = store.getState().editor.openProject(openedProject.id);
+    const loadMoreProjects = store.getState().editor.loadMoreProjects();
+
+    openRequest.resolve({
+      assets: [openedAsset],
+      hasMoreProjects: false,
+      project: openedProject,
+      projects: [],
+    });
+    await expect(openProject).resolves.toBe(true);
+
+    loadMoreRequest.reject(new Error("stale load more failed"));
+    await loadMoreProjects;
+
+    expect(store.getState().editor.error).toBeNull();
+    expect(store.getState().editor.project?.id).toBe(openedProject.id);
+    expect(store.getState().editor.workspace?.project.id).toBe(
+      openedProject.id,
+    );
+  });
+
+  it("ignores stale source hydration responses", async () => {
+    const store = createTestStore();
+    const editorApi = getEditorApi();
+    const staleAsset = createEditorTestAsset({
+      assetKey: "clip:stale",
+      id: "stale",
+      name: "stale.mp4",
+    });
+    const currentAsset = createEditorTestAsset({
+      assetKey: "clip:current",
+      id: "current",
+      name: "current.mp4",
+    });
+    const staleProject = createEditorTestProject(staleAsset, {
+      id: "project-stale",
+      title: "Stale project",
+    });
+    const currentProject = createEditorTestProject(currentAsset, {
+      id: "project-current",
+      title: "Current project",
+    });
+    const staleRequest = createDeferred<EditorWorkspace>();
+    const currentRequest = createDeferred<EditorWorkspace>();
+    editorApi.getWorkspace
+      .mockReturnValueOnce(staleRequest.promise)
+      .mockReturnValueOnce(currentRequest.promise);
+
+    const staleHydration = store
+      .getState()
+      .editor.hydrate({ id: staleAsset.id, kind: "clip" });
+    const currentHydration = store
+      .getState()
+      .editor.hydrate({ id: currentAsset.id, kind: "clip" });
+
+    currentRequest.resolve({
+      assets: [currentAsset],
+      hasMoreProjects: false,
+      project: currentProject,
+      projects: [],
+    });
+    await expect(currentHydration).resolves.toBe(true);
+    staleRequest.resolve({
+      assets: [staleAsset],
+      hasMoreProjects: false,
+      project: staleProject,
+      projects: [],
+    });
+    await expect(staleHydration).resolves.toBe(false);
+
+    expect(store.getState().editor.project?.id).toBe(currentProject.id);
+    expect(store.getState().editor.workspace?.project.id).toBe(
+      currentProject.id,
+    );
   });
 
   it("loads more project summaries without replacing the active edit", async () => {
@@ -738,6 +1320,125 @@ describe("Editor workspace slice", () => {
     });
 
     expect(store.getState().editor.error).toBe("Editor failed");
+  });
+
+  it("skips duplicate pending editor media asset hydration", async () => {
+    const store = createTestStore();
+    const editorApi = getEditorApi();
+    const asset = createEditorTestAsset();
+    const pageRequest = createDeferred<EditorMediaAssetPage>();
+    const query = {
+      category: "death-clip" as const,
+      game: "poe2" as const,
+      league: "Standard",
+      pageIndex: 0,
+      pageSize: 5,
+    };
+    editorApi.listMediaAssets.mockReturnValue(pageRequest.promise);
+
+    const firstHydration = store.getState().editor.hydrateMediaAssets(query);
+    const duplicateHydration = store
+      .getState()
+      .editor.hydrateMediaAssets({ ...query });
+
+    expect(editorApi.listMediaAssets).toHaveBeenCalledTimes(1);
+    expect(store.getState().editor.mediaAssetPendingQuery).toEqual(query);
+
+    pageRequest.resolve({
+      items: [asset],
+      pageCount: 1,
+      pageIndex: 0,
+      pageSize: 5,
+      totalCount: 1,
+    });
+    await Promise.all([firstHydration, duplicateHydration]);
+
+    expect(store.getState().editor.mediaAssetPendingQuery).toBeNull();
+    expect(store.getState().editor.mediaAssetPage?.items).toEqual([asset]);
+  });
+
+  it("skips duplicate loaded editor media asset hydration", async () => {
+    const store = createTestStore();
+    const editorApi = getEditorApi();
+    const asset = createEditorTestAsset();
+    const query = {
+      category: "death-clip" as const,
+      game: "poe2" as const,
+      league: "Standard",
+      pageIndex: 0,
+      pageSize: 5,
+    };
+    editorApi.listMediaAssets.mockResolvedValue({
+      items: [asset],
+      pageCount: 1,
+      pageIndex: 0,
+      pageSize: 5,
+      totalCount: 1,
+    });
+
+    await store.getState().editor.hydrateMediaAssets(query);
+    store.setState((state) => ({
+      editor: {
+        ...state.editor,
+        error: "stale media error",
+      },
+    }));
+    await store.getState().editor.hydrateMediaAssets({ ...query });
+
+    expect(editorApi.listMediaAssets).toHaveBeenCalledTimes(1);
+    expect(store.getState().editor.error).toBeNull();
+    expect(store.getState().editor.mediaAssetQuery).toEqual(query);
+    expect(store.getState().editor.mediaAssetPage?.items).toEqual([asset]);
+  });
+
+  it("forces editor media asset hydration for explicit refreshes", async () => {
+    const store = createTestStore();
+    const editorApi = getEditorApi();
+    const firstAsset = createEditorTestAsset({
+      assetKey: "clip:asset-1",
+      id: "asset-1",
+      name: "asset-1.mp4",
+    });
+    const refreshedAsset = createEditorTestAsset({
+      assetKey: "clip:asset-2",
+      id: "asset-2",
+      name: "asset-2.mp4",
+    });
+    const query = {
+      category: "death-clip" as const,
+      game: "poe2" as const,
+      league: "Standard",
+      pageIndex: 0,
+      pageSize: 5,
+    };
+    editorApi.listMediaAssets
+      .mockResolvedValueOnce({
+        items: [firstAsset],
+        pageCount: 1,
+        pageIndex: 0,
+        pageSize: 5,
+        totalCount: 1,
+      })
+      .mockResolvedValueOnce({
+        items: [refreshedAsset],
+        pageCount: 1,
+        pageIndex: 0,
+        pageSize: 5,
+        totalCount: 1,
+      });
+
+    await store.getState().editor.hydrateMediaAssets(query);
+    await store.getState().editor.hydrateMediaAssets(
+      { ...query },
+      {
+        force: true,
+      },
+    );
+
+    expect(editorApi.listMediaAssets).toHaveBeenCalledTimes(2);
+    expect(store.getState().editor.mediaAssetPage?.items).toEqual([
+      refreshedAsset,
+    ]);
   });
 
   it("keeps editor media asset paging pending until the response loads", async () => {

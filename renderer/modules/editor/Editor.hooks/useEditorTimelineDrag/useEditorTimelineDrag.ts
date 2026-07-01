@@ -35,6 +35,10 @@ function useEditorTimelineDrag({
   const scheduledClipDragPreviewFrameRef = useRef<number | null>(null);
   const [clipDragPreview, setClipDragPreview] =
     useState<TimelineClipDragPreview | null>(null);
+  const [
+    activeTrimVisibleDurationSeconds,
+    setActiveTrimVisibleDurationSeconds,
+  ] = useState<number | null>(null);
   const [activeTimelineMarkerKind, setActiveTimelineMarkerKind] =
     useState<ActiveTimelineMarkerKind | null>(null);
   const [activeTimelineMarkerSeconds, setActiveTimelineMarkerSeconds] =
@@ -201,6 +205,7 @@ function useEditorTimelineDrag({
         trimmedClipName,
       );
       selectTimelineClip(clipId);
+      setActiveTrimVisibleDurationSeconds(visibleDurationSeconds);
       setActiveTimelineMarkerKind("trim");
       setActiveTimelineMarkerSeconds(timelineSeconds);
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -355,12 +360,14 @@ function useEditorTimelineDrag({
     }
     commitHistoryTransaction();
     dragStateRef.current = null;
+    setActiveTrimVisibleDurationSeconds(null);
     setActiveTimelineMarkerKind(null);
     setActiveTimelineMarkerSeconds(null);
     clearClipDragPreview();
   };
 
   return {
+    activeTrimVisibleDurationSeconds,
     activeTimelineMarkerKind,
     activeTimelineMarkerSeconds,
     clipDragPreview,

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { EditorProject } from "~/main/modules/editor";
 
@@ -10,7 +10,7 @@ import {
   setupEditorSliceTest,
 } from "./Editor.slice.test-utils";
 
-const { createTestStore } = setupEditorSliceTest();
+const { createTestStore, getEditorApi } = setupEditorSliceTest();
 
 describe("Editor timeline trim slice", () => {
   it("pushes following clips when trimming a clip end over the next clip", () => {
@@ -52,6 +52,103 @@ describe("Editor timeline trim slice", () => {
       "asset-1.mp4",
     );
     expect(store.getState().editor.project?.durationSeconds).toBe(12);
+  });
+
+  it("saves only the committed trim transaction instead of every drag update", async () => {
+    vi.useFakeTimers();
+    const store = createTestStore();
+    const editorApi = getEditorApi();
+    const asset = createEditorTestAsset({ durationSeconds: 10 });
+    const project = createEditorTestProject(asset);
+    loadEditorProject(store, project, [asset]);
+
+    try {
+      store
+        .getState()
+        .editor.beginHistoryTransaction("Trim end", "asset-1.mp4");
+      store.getState().editor.trimTimelineClipEdge("timeline-1", "end", 8);
+      store.getState().editor.trimTimelineClipEdge("timeline-1", "end", 6);
+      store.getState().editor.trimTimelineClipEdge("timeline-1", "end", 4);
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(editorApi.saveProject).not.toHaveBeenCalled();
+
+      store.getState().editor.commitHistoryTransaction();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(editorApi.saveProject).toHaveBeenCalledTimes(1);
+      expect(editorApi.saveProject).toHaveBeenCalledWith({
+        project: expect.objectContaining({
+          durationSeconds: 4,
+          history: expect.objectContaining({
+            editCount: 1,
+            labels: ["Trim end"],
+            subtitles: ["asset-1.mp4"],
+          }),
+        }),
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("cancels a pending autosave when a trim transaction begins", async () => {
+    vi.useFakeTimers();
+    const store = createTestStore();
+    const editorApi = getEditorApi();
+    const asset = createEditorTestAsset({ durationSeconds: 10 });
+    const project = createEditorTestProject(asset);
+    loadEditorProject(store, project, [asset]);
+
+    try {
+      store.getState().editor.selectTimelineClip("timeline-1");
+      store
+        .getState()
+        .editor.beginHistoryTransaction("Trim end", "asset-1.mp4");
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(editorApi.saveProject).not.toHaveBeenCalled();
+
+      store.getState().editor.trimTimelineClipEdge("timeline-1", "end", 4);
+      store.getState().editor.commitHistoryTransaction();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(editorApi.saveProject).toHaveBeenCalledTimes(1);
+      expect(editorApi.saveProject).toHaveBeenCalledWith({
+        project: expect.objectContaining({
+          durationSeconds: 4,
+        }),
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps local transaction state when the save response is stale", async () => {
+    const store = createTestStore();
+    const editorApi = getEditorApi();
+    const asset = createEditorTestAsset({ durationSeconds: 10 });
+    const project = createEditorTestProject(asset);
+    const staleSavedProject = createEditorTestProject(asset, {
+      durationSeconds: 9,
+      updatedAt: "2026-06-18T00:09:00.000Z",
+    });
+    editorApi.saveProject.mockResolvedValue(staleSavedProject);
+    loadEditorProject(store, project, [asset]);
+
+    store.getState().editor.beginHistoryTransaction("Trim end", "asset-1.mp4");
+    store.getState().editor.trimTimelineClipEdge("timeline-1", "end", 4);
+    store.getState().editor.commitHistoryTransaction();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(editorApi.saveProject).toHaveBeenCalledTimes(1);
+    expect(store.getState().editor.project?.durationSeconds).toBe(4);
+    expect(store.getState().editor.project?.updatedAt).not.toBe(
+      staleSavedProject.updatedAt,
+    );
   });
 
   it("keeps a shortened reordered clip expandable from its source copy", () => {

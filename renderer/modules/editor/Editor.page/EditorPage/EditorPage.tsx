@@ -32,7 +32,11 @@ type EditorSidePanel = "history" | "shortcuts";
 function EditorPage({ projectId = null, source = null }: EditorPageProps) {
   const [visibleSidePanel, setVisibleSidePanel] =
     useState<EditorSidePanel | null>(null);
-  const { scope, setLeague } = useMediaLibraryScope();
+  const {
+    isReady: isMediaScopeReady,
+    scope,
+    setLeague,
+  } = useMediaLibraryScope();
   const savedEditAvailableLeagues = useSavedEditsShallow(
     (savedEdits) => savedEdits.libraryPage?.availableLeagues ?? [],
   );
@@ -91,13 +95,14 @@ function EditorPage({ projectId = null, source = null }: EditorPageProps) {
     setVisibleSidePanel(null);
   };
 
-  useEditorRouteHydration({
+  const isRouteHydrated = useEditorRouteHydration({
     hydrate,
     openProject,
     project,
     projectId,
     source,
   });
+  const isAssetRailHydrationEnabled = isMediaScopeReady && isRouteHydrated;
 
   useEditorKeyboardShortcuts({ onToggleHistory: handleToggleHistory });
 
@@ -156,7 +161,10 @@ function EditorPage({ projectId = null, source = null }: EditorPageProps) {
         )}
       >
         <EditorDragDropProvider>
-          <EditorAssetRail scope={scope} />
+          <EditorAssetRail
+            isHydrationEnabled={isAssetRailHydrationEnabled}
+            scope={scope}
+          />
           <EditorPreviewStage />
           {isHistoryVisible && (
             <EditorHistoryRail onClose={handleCloseSidePanel} />

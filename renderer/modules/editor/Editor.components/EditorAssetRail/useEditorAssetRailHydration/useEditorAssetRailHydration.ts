@@ -7,9 +7,12 @@ import type { EditorAssetRailPageModel } from "../useEditorAssetRailPageModel/us
 type EditorAssetRailHydrationModel = Pick<
   EditorAssetRailPageModel,
   "isSavedEditsFilter" | "mediaAssetsQuery" | "savedEditsQuery"
->;
+> & {
+  isHydrationEnabled: boolean;
+};
 
 function useEditorAssetRailHydration({
+  isHydrationEnabled,
   isSavedEditsFilter,
   mediaAssetsQuery,
   savedEditsQuery,
@@ -22,20 +25,25 @@ function useEditorAssetRailHydration({
   }));
 
   useEffect(() => {
-    if (!isSavedEditsFilter) {
+    if (!isHydrationEnabled || !isSavedEditsFilter) {
       return;
     }
 
     void hydrateLibrary(savedEditsQuery);
-  }, [hydrateLibrary, isSavedEditsFilter, savedEditsQuery]);
+  }, [hydrateLibrary, isHydrationEnabled, isSavedEditsFilter, savedEditsQuery]);
 
   useEffect(() => {
-    if (!mediaAssetsQuery || isSavedEditsFilter) {
+    if (!isHydrationEnabled || !mediaAssetsQuery || isSavedEditsFilter) {
       return;
     }
 
     void hydrateMediaAssets(mediaAssetsQuery);
-  }, [hydrateMediaAssets, isSavedEditsFilter, mediaAssetsQuery]);
+  }, [
+    hydrateMediaAssets,
+    isHydrationEnabled,
+    isSavedEditsFilter,
+    mediaAssetsQuery,
+  ]);
 }
 
 export { useEditorAssetRailHydration };

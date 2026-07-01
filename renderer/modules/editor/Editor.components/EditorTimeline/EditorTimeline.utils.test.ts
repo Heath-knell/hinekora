@@ -1,11 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  createEditorTestAsset,
+  createEditorTestProject,
+} from "../../Editor.slice/Editor.slice.test-utils";
+import {
   formatEditorTimelineRailLeft,
   formatEditorTimelineRailWidth,
   resolveEditorTimelineFollowScroll,
   resolveEditorTimelineHoverSeconds,
   resolveEditorTimelineUseCompactTrimHandles,
+  resolveEditorTimelineVisibleDuration,
   resolveEditorTimelineWheelZoom,
   resolveTrimEdgeHoverSeconds,
 } from "./EditorTimeline.utils";
@@ -140,6 +145,53 @@ describe("EditorTimeline utils", () => {
         visibleDurationSeconds: 100,
       }),
     ).toBe(true);
+  });
+
+  it("floors the visible duration while allowing the timeline to grow past the floor", () => {
+    const asset = createEditorTestAsset({ durationSeconds: 40 });
+    const shortProject = createEditorTestProject(asset, {
+      durationSeconds: 20,
+    });
+    const longProject = createEditorTestProject(asset, {
+      durationSeconds: 40,
+    });
+
+    expect(
+      resolveEditorTimelineVisibleDuration({
+        isTimelineFitToEdit: false,
+        minimumVisibleDurationSeconds: 50,
+        project: shortProject,
+      }),
+    ).toBe(50);
+    expect(
+      resolveEditorTimelineVisibleDuration({
+        isTimelineFitToEdit: false,
+        minimumVisibleDurationSeconds: 10,
+        project: longProject,
+      }),
+    ).toBe(50);
+  });
+
+  it("ignores invalid visible duration floors and supports fit mode", () => {
+    const asset = createEditorTestAsset({ durationSeconds: 40 });
+    const project = createEditorTestProject(asset, {
+      durationSeconds: 40,
+    });
+
+    expect(
+      resolveEditorTimelineVisibleDuration({
+        isTimelineFitToEdit: false,
+        minimumVisibleDurationSeconds: Number.NaN,
+        project,
+      }),
+    ).toBe(50);
+    expect(
+      resolveEditorTimelineVisibleDuration({
+        isTimelineFitToEdit: true,
+        minimumVisibleDurationSeconds: 60,
+        project,
+      }),
+    ).toBe(60);
   });
 
   it("resolves playback follow scrolling with viewport padding", () => {

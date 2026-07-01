@@ -229,6 +229,38 @@ describe("Editor slice utilities", () => {
     expect(createEditorProjectWithHistoryMetadata(project, [])).toBe(project);
   });
 
+  it("caps legacy persisted editor history snapshots on read", () => {
+    const project = createEditorTestProject(undefined, {
+      history: {
+        editCount: 55,
+        labels: Array.from({ length: 55 }, (_, index) => `Edit ${index + 1}`),
+        snapshots: Array.from({ length: 55 }, (_, index) => {
+          const snapshot = createEditorTestProject(undefined, {
+            id: `snapshot-${index + 1}`,
+          }) as ReturnType<typeof createEditorTestProject> & {
+            history?: unknown;
+            timelineScrollLeft?: number;
+            zoom?: number;
+          };
+          snapshot.history = { editCount: 1, labels: ["Nested"] };
+          snapshot.timelineScrollLeft = 200 + index;
+          snapshot.zoom = 3;
+
+          return snapshot;
+        }),
+      },
+    });
+
+    const snapshots = getEditorProjectHistorySnapshots(project);
+
+    expect(snapshots).toHaveLength(50);
+    expect(snapshots[0]?.id).toBe("snapshot-6");
+    expect(snapshots.at(-1)?.id).toBe("snapshot-55");
+    expect(snapshots[0]).not.toHaveProperty("history");
+    expect(snapshots[0]).not.toHaveProperty("timelineScrollLeft");
+    expect(snapshots[0]).not.toHaveProperty("zoom");
+  });
+
   it("compares media asset page queries for rail paging", () => {
     const firstPageQuery = {
       category: "death-clip" as const,
