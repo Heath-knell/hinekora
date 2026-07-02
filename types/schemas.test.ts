@@ -18,6 +18,7 @@ import {
   ProfileCreateInputSchema,
   ProfileSchema,
   ProfileUpdateInputSchema,
+  RecorderOverlayBoundsSchema,
   StateBundleSchema,
 } from "./schemas";
 
@@ -82,6 +83,25 @@ describe("shared schemas", () => {
     );
     expect(captureProfileSettingKeys).toContain("recordingAutoStartMode");
     expect(captureProfileSettingKeys).toContain("deathClipSeconds");
+  });
+
+  it("accepts the compact recorder overlay width", () => {
+    expect(
+      RecorderOverlayBoundsSchema.safeParse({
+        x: 0,
+        y: 0,
+        width: 216,
+        height: 42,
+      }).success,
+    ).toBe(true);
+    expect(
+      RecorderOverlayBoundsSchema.safeParse({
+        x: 0,
+        y: 0,
+        width: 215,
+        height: 42,
+      }).success,
+    ).toBe(false);
   });
 
   it("keeps omitted capture profile update settings omitted", () => {

@@ -477,7 +477,7 @@ export type MainWindowBounds = z.infer<typeof MainWindowBoundsSchema>;
 export const RecorderOverlayBoundsSchema = z.object({
   x: z.number().int().min(-100_000).max(100_000),
   y: z.number().int().min(-100_000).max(100_000),
-  width: z.number().int().min(236).max(100_000),
+  width: z.number().int().min(216).max(100_000),
   height: z.number().int().min(42).max(100_000),
 });
 export type RecorderOverlayBounds = z.infer<typeof RecorderOverlayBoundsSchema>;
