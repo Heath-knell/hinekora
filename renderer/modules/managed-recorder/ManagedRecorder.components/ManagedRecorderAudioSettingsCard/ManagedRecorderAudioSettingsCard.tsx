@@ -10,11 +10,9 @@ import {
 import { FiRefreshCw } from "react-icons/fi";
 
 import type { ManagedRecorderAudioDevices } from "~/main/modules/managed-recorder/ManagedRecorder.dto";
-import {
-  useManagedRecorderSelector,
-  useSettingsShallow,
-} from "~/renderer/store";
+import { useSettingsShallow } from "~/renderer/store";
 
+import { useManagedRecorderSettingsDisabled } from "../../ManagedRecorder.hooks/useManagedRecorderSettingsDisabled/useManagedRecorderSettingsDisabled";
 import { ManagedRecorderAudioDeviceErrorState } from "../ManagedRecorderAudioDeviceErrorState/ManagedRecorderAudioDeviceErrorState";
 import { ManagedRecorderAudioDeviceLoadingState } from "../ManagedRecorderAudioDeviceLoadingState/ManagedRecorderAudioDeviceLoadingState";
 import { ManagedRecorderAudioDeviceSelects } from "../ManagedRecorderAudioDeviceSelects/ManagedRecorderAudioDeviceSelects";
@@ -32,6 +30,7 @@ const emptyAudioDevices: ManagedRecorderAudioDevices = {
 type AudioDeviceLoadStatus = "idle" | "loading" | "loaded" | "failed";
 
 function ManagedRecorderAudioSettingsCard() {
+  const disabled = useManagedRecorderSettingsDisabled();
   const [audioDevices, setAudioDevices] =
     useState<ManagedRecorderAudioDevices>(emptyAudioDevices);
   const [audioDeviceLoadStatus, setAudioDeviceLoadStatus] =
@@ -42,13 +41,7 @@ function ManagedRecorderAudioSettingsCard() {
     settingsValue: settings.value,
     updateSettings: settings.update,
   }));
-  const status = useManagedRecorderSelector(
-    (managedRecorder) => managedRecorder.status,
-  );
-  const isRecording = status?.recording === true;
-  const isBusy =
-    status?.isStartingRecording === true ||
-    status?.isStoppingRecording === true;
+  const areControlsDisabled = disabled;
   const isLoadingAudioDevices = audioDeviceLoadStatus === "loading";
   const hasLoadedAudioDevices =
     audioDevices.input.length > 0 || audioDevices.output.length > 0;
@@ -141,9 +134,17 @@ function ManagedRecorderAudioSettingsCard() {
   }, [loadAudioDevices]);
 
   const handleAudioDevicesRefresh = () => {
+    if (areControlsDisabled) {
+      return;
+    }
+
     void loadAudioDevices(true);
   };
   const handleAudioInputChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    if (areControlsDisabled) {
+      return;
+    }
+
     void updateSettings({
       recordingAudioInputDeviceId: resolveAudioDeviceValue(
         audioInputOptions,
@@ -152,6 +153,10 @@ function ManagedRecorderAudioSettingsCard() {
     });
   };
   const handleAudioOutputChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    if (areControlsDisabled) {
+      return;
+    }
+
     void updateSettings({
       recordingAudioOutputDeviceId: resolveAudioDeviceValue(
         audioOutputOptions,
@@ -167,7 +172,7 @@ function ManagedRecorderAudioSettingsCard() {
         <button
           aria-label="Refresh audio devices"
           className="btn btn-ghost btn-xs h-7 min-h-0 w-7 p-0 text-primary"
-          disabled={isRecording || isBusy || isLoadingAudioDevices}
+          disabled={areControlsDisabled || isLoadingAudioDevices}
           title={audioDevicesRefreshTitle}
           type="button"
           onClick={handleAudioDevicesRefresh}
@@ -190,7 +195,7 @@ function ManagedRecorderAudioSettingsCard() {
           audioInputValue={audioInputValue}
           audioOutputOptions={audioOutputOptions}
           audioOutputValue={audioOutputValue}
-          disabled={isRecording || isBusy}
+          disabled={areControlsDisabled}
           onAudioInputChange={handleAudioInputChange}
           onAudioOutputChange={handleAudioOutputChange}
         />

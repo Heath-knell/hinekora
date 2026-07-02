@@ -5,6 +5,7 @@ import { FiInfo } from "react-icons/fi";
 interface ManagedRecorderSettingsToggleProps {
   ariaLabel: string;
   checked: boolean;
+  disabled?: boolean;
   helpText: string;
   label: string;
   onChange: (checked: boolean) => void;
@@ -13,12 +14,17 @@ interface ManagedRecorderSettingsToggleProps {
 function ManagedRecorderSettingsToggle({
   ariaLabel,
   checked,
+  disabled = false,
   helpText,
   label,
   onChange,
 }: ManagedRecorderSettingsToggleProps) {
   const inputId = useId();
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
+    if (disabled) {
+      return;
+    }
+
     onChange(event.target.checked);
   };
 
@@ -41,6 +47,7 @@ function ManagedRecorderSettingsToggle({
         aria-label={ariaLabel}
         checked={checked}
         className="toggle toggle-primary toggle-xs shrink-0"
+        disabled={disabled}
         id={inputId}
         type="checkbox"
         onChange={handleChange}

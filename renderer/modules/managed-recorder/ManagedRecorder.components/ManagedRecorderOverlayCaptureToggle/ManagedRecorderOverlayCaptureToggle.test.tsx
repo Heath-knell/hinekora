@@ -3,7 +3,13 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const storeMocks = vi.hoisted(() => ({
+  isProfileUnlocked: true,
+  isRewindActive: false,
+  isRunRecordingActive: false,
+  isStartingRecording: false,
+  isStoppingRecording: false,
   overlayCaptureProtectionEnabled: false,
+  selectedProfileId: "capture-profile-1" as string | null,
   settingKey: "recordingHideOverlaysFromRecording" as
     | "recordingHideOverlaysFromRecording"
     | "recordingHideOverlaysFromRewind",
@@ -12,6 +18,21 @@ const storeMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("~/renderer/store", () => ({
+  useCaptureProfilesShallow: (selector: (state: unknown) => unknown) =>
+    selector({
+      isProfileUnlocked: storeMocks.isProfileUnlocked,
+      selectedProfileId: storeMocks.selectedProfileId,
+    }),
+  useManagedRecorderShallow: (selector: (state: unknown) => unknown) =>
+    selector({
+      status: {
+        bufferActive: storeMocks.isRewindActive,
+        isStartingRecording: storeMocks.isStartingRecording,
+        isStoppingRecording: storeMocks.isStoppingRecording,
+        recording: storeMocks.isRunRecordingActive,
+        runRecordingActive: storeMocks.isRunRecordingActive,
+      },
+    }),
   useSettingsShallow: storeMocks.useSettingsShallow,
 }));
 
@@ -49,7 +70,13 @@ describe("ManagedRecorderOverlayCaptureToggle", () => {
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
+    storeMocks.isProfileUnlocked = true;
+    storeMocks.isRewindActive = false;
+    storeMocks.isRunRecordingActive = false;
+    storeMocks.isStartingRecording = false;
+    storeMocks.isStoppingRecording = false;
     storeMocks.overlayCaptureProtectionEnabled = false;
+    storeMocks.selectedProfileId = "capture-profile-1";
     storeMocks.settingKey = "recordingHideOverlaysFromRecording";
     storeMocks.updateSettings.mockReset();
     storeMocks.updateSettings.mockResolvedValue(undefined);
@@ -103,5 +130,19 @@ describe("ManagedRecorderOverlayCaptureToggle", () => {
     expect(storeMocks.updateSettings).toHaveBeenCalledWith({
       recordingHideOverlaysFromRewind: true,
     });
+  });
+
+  it("does not update while the selected profile is locked", async () => {
+    storeMocks.isProfileUnlocked = false;
+
+    await renderToggle();
+
+    expect(getCheckbox().disabled).toBe(true);
+
+    await act(async () => {
+      getCheckbox().click();
+    });
+
+    expect(storeMocks.updateSettings).not.toHaveBeenCalled();
   });
 });

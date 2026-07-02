@@ -306,6 +306,37 @@ describe("CapturePreview slice", () => {
     vi.useRealTimers();
   });
 
+  it("cancels a pending retry when the listener stops", async () => {
+    vi.useFakeTimers();
+    listSources.mockResolvedValue([source]);
+    const store = createTestStore();
+    store.setState((state) => ({
+      poeProcess: {
+        ...state.poeProcess,
+        state: {
+          game: "poe2",
+          isRunning: true,
+          processName: "PathOfExileSteam.exe",
+        },
+      },
+    }));
+    const stopListening = store.getState().capturePreview.startListening();
+
+    refreshRequestedListener?.();
+    await vi.waitFor(() => {
+      expect(listSources).toHaveBeenCalledTimes(1);
+    });
+    await vi.waitFor(() => {
+      expect(vi.getTimerCount()).toBe(1);
+    });
+
+    stopListening();
+    await vi.advanceTimersByTimeAsync(2_500);
+
+    expect(listSources).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
   it("does not retry when a newer refresh finds the running game source", async () => {
     vi.useFakeTimers();
     listSources
@@ -336,6 +367,127 @@ describe("CapturePreview slice", () => {
 
     stopListening();
     vi.useRealTimers();
+  });
+
+  it("stops retrying after the retry budget is exhausted", async () => {
+    vi.useFakeTimers();
+    listSources.mockResolvedValue([source]);
+    const store = createTestStore();
+    store.setState((state) => ({
+      poeProcess: {
+        ...state.poeProcess,
+        state: {
+          game: "poe2",
+          isRunning: true,
+          processName: "PathOfExileSteam.exe",
+        },
+      },
+    }));
+    const stopListening = store.getState().capturePreview.startListening();
+
+    refreshRequestedListener?.();
+    await vi.waitFor(() => {
+      expect(listSources).toHaveBeenCalledTimes(1);
+    });
+
+    for (let index = 0; index < 8; index += 1) {
+      await vi.advanceTimersByTimeAsync(2_500);
+      await vi.waitFor(() => {
+        expect(listSources).toHaveBeenCalledTimes(index + 2);
+      });
+    }
+    await vi.advanceTimersByTimeAsync(2_500);
+
+    expect(listSources).toHaveBeenCalledTimes(9);
+    stopListening();
+    vi.useRealTimers();
+  });
+
+  it("ignores stale retry refreshes after the listener stops", async () => {
+    vi.useFakeTimers();
+    let resolveRetryRefresh: (sources: CapturePreviewSource[]) => void = () =>
+      undefined;
+    listSources.mockResolvedValueOnce([source]).mockReturnValueOnce(
+      new Promise<CapturePreviewSource[]>((resolve) => {
+        resolveRetryRefresh = resolve;
+      }),
+    );
+    const store = createTestStore();
+    store.setState((state) => ({
+      poeProcess: {
+        ...state.poeProcess,
+        state: {
+          game: "poe2",
+          isRunning: true,
+          processName: "PathOfExileSteam.exe",
+        },
+      },
+    }));
+    const stopListening = store.getState().capturePreview.startListening();
+
+    refreshRequestedListener?.();
+    await vi.waitFor(() => {
+      expect(listSources).toHaveBeenCalledTimes(1);
+    });
+    await vi.advanceTimersByTimeAsync(2_500);
+    await vi.waitFor(() => {
+      expect(listSources).toHaveBeenCalledTimes(2);
+    });
+
+    stopListening();
+    resolveRetryRefresh([source]);
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(2_500);
+
+    expect(listSources).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+
+  it("refreshes immediately when listener startup refresh is requested", async () => {
+    listSources.mockResolvedValue([source, poe2WindowSource]);
+    const store = createTestStore();
+
+    const stopListening = store
+      .getState()
+      .capturePreview.startListening({ refreshOnStart: true });
+
+    await vi.waitFor(() => {
+      expect(listSources).toHaveBeenCalledWith(true);
+    });
+
+    stopListening();
+  });
+
+  it("keeps the selected source when settings have not hydrated yet", async () => {
+    const store = createTestStore();
+    store.setState((state) => ({
+      settings: {
+        ...state.settings,
+        value: null,
+      },
+    }));
+    store.getState().capturePreview.select("screen:manual");
+
+    await store.getState().capturePreview.refresh();
+
+    expect(store.getState().capturePreview.selectedSourceId).toBe("screen:1");
+  });
+
+  it("can refresh without a selected capture profile", async () => {
+    const store = createTestStoreWithoutSelectedProfile();
+    store.setState((state) => ({
+      captureProfiles: {
+        ...state.captureProfiles,
+        items: [],
+        selectedProfileId: null,
+      },
+    }));
+
+    await store.getState().capturePreview.refresh();
+
+    expect(store.getState().capturePreview.selectedSourceId).toBe(
+      "missing-window:poe2",
+    );
   });
 
   it("keeps an existing source when no selected profile target is available", async () => {
@@ -381,6 +533,17 @@ describe("CapturePreview slice", () => {
     await store.getState().capturePreview.refresh();
 
     expect(store.getState().capturePreview.thumbnailsBySourceId).toEqual({});
+  });
+
+  it("keeps cached thumbnails for sources that remain listed", async () => {
+    const store = createTestStore();
+
+    await store.getState().capturePreview.getThumbnail("screen:1");
+    await store.getState().capturePreview.refresh();
+
+    expect(store.getState().capturePreview.thumbnailsBySourceId).toEqual({
+      "screen:1": "data:image/png;base64,screen",
+    });
   });
 
   it("caps retained cached thumbnails", async () => {

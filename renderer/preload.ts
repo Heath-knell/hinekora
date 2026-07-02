@@ -75,6 +75,10 @@ function createScopedApi(hash: string): ElectronAPI | ScopedElectronAPI {
         list: ProfilesAPI.list,
         onChanged: ProfilesAPI.onChanged,
       },
+      settings: {
+        get: SettingsStoreAPI.get,
+        onChanged: SettingsStoreAPI.onChanged,
+      },
       replayClips: {
         list: ReplayClipsAPI.list,
         saveManualReplay: ReplayClipsAPI.saveManualReplay,
@@ -104,6 +108,7 @@ function createScopedApi(hash: string): ElectronAPI | ScopedElectronAPI {
     return {
       capturePreview: {
         listSources: CapturePreviewAPI.listSources,
+        onRefreshRequested: CapturePreviewAPI.onRefreshRequested,
         sourceExists: CapturePreviewAPI.sourceExists,
       },
       overlayWindows: {
@@ -114,10 +119,21 @@ function createScopedApi(hash: string): ElectronAPI | ScopedElectronAPI {
         setAuraLocked: OverlayWindowsAPI.setAuraLocked,
         showAura: OverlayWindowsAPI.showAura,
       },
+      poeProcess: {
+        getState: PoeProcessAPI.getState,
+        onError: PoeProcessAPI.onError,
+        onStart: PoeProcessAPI.onStart,
+        onState: PoeProcessAPI.onState,
+        onStop: PoeProcessAPI.onStop,
+      },
       profiles: {
         list: ProfilesAPI.list,
         update: ProfilesAPI.update,
         onChanged: ProfilesAPI.onChanged,
+      },
+      settings: {
+        get: SettingsStoreAPI.get,
+        onChanged: SettingsStoreAPI.onChanged,
       },
     };
   }

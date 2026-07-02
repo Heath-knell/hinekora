@@ -13,7 +13,7 @@ interface MigrationTable {
 interface ProfileTable {
   id: string;
   name: string;
-  game: GameId;
+  game: GameId | null;
   data_json: string;
   created_at: TimestampColumn;
   updated_at: TimestampColumn;

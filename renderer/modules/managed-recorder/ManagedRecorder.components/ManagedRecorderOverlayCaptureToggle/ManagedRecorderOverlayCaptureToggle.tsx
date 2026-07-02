@@ -1,6 +1,7 @@
 import { useSettingsShallow } from "~/renderer/store";
 
 import type { AppSettings } from "~/types";
+import { useManagedRecorderSettingsDisabled } from "../../ManagedRecorder.hooks/useManagedRecorderSettingsDisabled/useManagedRecorderSettingsDisabled";
 import { ManagedRecorderSettingsToggle } from "../ManagedRecorderSettingsToggle/ManagedRecorderSettingsToggle";
 
 type OverlayCaptureSettingKey =
@@ -20,6 +21,7 @@ function ManagedRecorderOverlayCaptureToggle({
   label,
   settingKey,
 }: ManagedRecorderOverlayCaptureToggleProps) {
+  const disabled = useManagedRecorderSettingsDisabled();
   const { overlayCaptureProtectionEnabled, updateSettings } =
     useSettingsShallow((settings) => ({
       overlayCaptureProtectionEnabled: settings.value?.[settingKey] ?? true,
@@ -39,6 +41,7 @@ function ManagedRecorderOverlayCaptureToggle({
     <ManagedRecorderSettingsToggle
       ariaLabel={ariaLabel}
       checked={overlayCaptureProtectionEnabled}
+      disabled={disabled}
       helpText={helpText}
       label={label}
       onChange={handleOverlayCaptureProtectionChange}

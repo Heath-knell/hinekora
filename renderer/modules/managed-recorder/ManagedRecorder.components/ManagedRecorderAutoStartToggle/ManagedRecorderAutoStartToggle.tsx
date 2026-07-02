@@ -1,6 +1,7 @@
 import { useSettingsShallow } from "~/renderer/store";
 
 import type { RecordingAutoStartMode } from "~/types";
+import { useManagedRecorderSettingsDisabled } from "../../ManagedRecorder.hooks/useManagedRecorderSettingsDisabled/useManagedRecorderSettingsDisabled";
 import { ManagedRecorderSettingsToggle } from "../ManagedRecorderSettingsToggle/ManagedRecorderSettingsToggle";
 
 interface ManagedRecorderAutoStartToggleProps {
@@ -16,6 +17,7 @@ function ManagedRecorderAutoStartToggle({
   label,
   mode,
 }: ManagedRecorderAutoStartToggleProps) {
+  const disabled = useManagedRecorderSettingsDisabled();
   const { autoStartMode, updateSettings } = useSettingsShallow((settings) => ({
     autoStartMode: settings.value?.recordingAutoStartMode ?? "off",
     updateSettings: settings.update,
@@ -32,6 +34,7 @@ function ManagedRecorderAutoStartToggle({
     <ManagedRecorderSettingsToggle
       ariaLabel={ariaLabel}
       checked={checked}
+      disabled={disabled}
       helpText={helpText}
       label={label}
       onChange={handleAutoStartChange}

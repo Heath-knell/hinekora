@@ -8,6 +8,7 @@ import { ManagedRecorderRecordingSettingsFields } from "~/renderer/modules/manag
 import { ManagedRecorderRewindSettingsFields } from "~/renderer/modules/managed-recorder/ManagedRecorder.components/ManagedRecorderRewindSettingsFields/ManagedRecorderRewindSettingsFields";
 import { ManagedRecorderSettingsFields } from "~/renderer/modules/managed-recorder/ManagedRecorder.components/ManagedRecorderSettingsFields/ManagedRecorderSettingsFields";
 import { ManagedRecorderSettingsInfoAlert } from "~/renderer/modules/managed-recorder/ManagedRecorder.components/ManagedRecorderSettingsInfoAlert/ManagedRecorderSettingsInfoAlert";
+import { ManagedRecorderSettingsLockedOverlay } from "~/renderer/modules/managed-recorder/ManagedRecorder.components/ManagedRecorderSettingsLockedOverlay/ManagedRecorderSettingsLockedOverlay";
 
 const recorderSettingsTabs = [
   { id: "recording", label: "Recording" },
@@ -89,7 +90,7 @@ function ManagedRecorderPanel() {
 
         <div
           aria-labelledby={getRecorderSettingsTabId(selectedTab)}
-          className="grid gap-3"
+          className="relative grid min-h-75 content-start gap-3"
           id={getRecorderSettingsPanelId(selectedTab)}
           role="tabpanel"
         >
@@ -118,6 +119,7 @@ function ManagedRecorderPanel() {
             </>
           )}
           {selectedTab === "audio" && <ManagedRecorderAudioSettingsCard />}
+          <ManagedRecorderSettingsLockedOverlay />
         </div>
       </section>
     </div>

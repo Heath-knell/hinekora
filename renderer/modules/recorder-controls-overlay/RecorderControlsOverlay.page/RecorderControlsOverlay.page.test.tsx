@@ -79,9 +79,13 @@ function createStatus(
   };
 }
 
-function createProfile(id: string, name: string): Profile {
+function createProfile(
+  id: string,
+  name: string,
+  game: Profile["game"] = "poe1",
+): Profile {
   return {
-    ...createDefaultProfile({ game: "poe1", name }),
+    ...createDefaultProfile({ game, name }),
     id,
   };
 }
@@ -219,6 +223,7 @@ describe("RecorderControlsOverlayPage", () => {
     };
     settingsState = {
       hydrate: vi.fn().mockResolvedValue(undefined),
+      startListening: vi.fn(() => vi.fn()),
       update: vi.fn().mockResolvedValue(undefined),
       value: {
         ...createDefaultSettings(),
@@ -377,6 +382,30 @@ describe("RecorderControlsOverlayPage", () => {
         source: "recorder-overlay",
       },
     );
+  });
+
+  it("keeps aura actions enabled for the active game profile after a game switch", async () => {
+    settingsState.value = {
+      ...createDefaultSettings(),
+      activeGame: "poe2",
+      selectedProfileId: "profile-poe1",
+    };
+    profilesState.items = [
+      createProfile("profile-poe1", "PoE 1 Profile", "poe1"),
+      createProfile("profile-poe2", "PoE 2 Profile", "poe2"),
+    ];
+    profilesState.selectedProfileId = "profile-poe1";
+
+    await renderOverlay();
+
+    expect(getProfileSelect(container).value).toBe("profile-poe2");
+    expect(getButton(container, "Edit auras").disabled).toBe(false);
+
+    getButton(container, "Edit auras").click();
+    await flushPromises();
+
+    expect(electronMocks.setAuraLocked).toHaveBeenCalledWith(false);
+    expect(electronMocks.showAura).toHaveBeenCalledWith("profile-poe2");
   });
 
   it("starts add-aura mode from the default aura button", async () => {

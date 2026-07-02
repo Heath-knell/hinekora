@@ -15,6 +15,7 @@ import {
 } from "~/main/utils/ipc-window-roles";
 
 import {
+  type GameId,
   type Profile,
   type ProfileCreateInput,
   ProfileCreateInputSchema,
@@ -64,24 +65,13 @@ class ProfilesService {
 
   ensureDefaultProfile(): Profile {
     const profiles = this.list();
-    let poe1Profile =
-      profiles.find((profile) => profile.game === "poe1") ?? null;
-
-    if (!poe1Profile) {
-      poe1Profile = this.create({
-        name: "Default PoE Profile",
-        game: "poe1",
-      });
+    const existingProfile =
+      profiles.find((profile) => profile.game === null) ?? profiles[0] ?? null;
+    if (existingProfile) {
+      return existingProfile;
     }
 
-    if (!profiles.some((profile) => profile.game === "poe2")) {
-      this.create({
-        name: "Default PoE 2 Profile",
-        game: "poe2",
-      });
-    }
-
-    return poe1Profile;
+    return this.create({ name: "Default Aura Profile" });
   }
 
   create(input: ProfileCreateInput): Profile {
@@ -120,6 +110,21 @@ class ProfilesService {
       }
     });
     this.publishProfilesChanged();
+  }
+
+  resolveProfileForGame(
+    profileId: string | null | undefined,
+    game: GameId,
+  ): Profile | null {
+    return resolveProfileForGame(this.list(), profileId, game);
+  }
+
+  resolveRenderableProfileForGame(game: GameId): Profile | null {
+    return resolveRenderableProfileForGame(this.list(), game);
+  }
+
+  hasRenderableAuraPlacements(profile: Profile): boolean {
+    return hasRenderableAuraPlacements(profile);
   }
 
   private publishProfilesChanged(): void {
@@ -195,4 +200,53 @@ class ProfilesService {
   }
 }
 
-export { ProfilesService };
+function isProfileAvailableForGame(profile: Profile, game: GameId): boolean {
+  return profile.game === null || profile.game === game;
+}
+
+function resolveProfileForGame(
+  profiles: Profile[],
+  profileId: string | null | undefined,
+  game: GameId,
+): Profile | null {
+  if (profileId) {
+    const profile = profiles.find((item) => item.id === profileId) ?? null;
+
+    return profile && isProfileAvailableForGame(profile, game) ? profile : null;
+  }
+
+  return (
+    resolveRenderableProfileForGame(profiles, game) ??
+    profiles.find((profile) => isProfileAvailableForGame(profile, game)) ??
+    null
+  );
+}
+
+function resolveRenderableProfileForGame(
+  profiles: Profile[],
+  game: GameId,
+): Profile | null {
+  return (
+    profiles.find(
+      (profile) =>
+        isProfileAvailableForGame(profile, game) &&
+        hasRenderableAuraPlacements(profile),
+    ) ?? null
+  );
+}
+
+function hasRenderableAuraPlacements(profile: Profile): boolean {
+  const cropRegionIds = new Set(profile.cropRegions.map((crop) => crop.id));
+
+  return profile.overlayPlacements.some((placement) =>
+    cropRegionIds.has(placement.cropRegionId),
+  );
+}
+
+export {
+  hasRenderableAuraPlacements,
+  isProfileAvailableForGame,
+  ProfilesService,
+  resolveProfileForGame,
+  resolveRenderableProfileForGame,
+};

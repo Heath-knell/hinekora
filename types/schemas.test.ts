@@ -15,7 +15,9 @@ import {
   createDefaultCaptureProfile,
   createDefaultSettings,
   normalizeRecordingEncoderChoice,
+  ProfileCreateInputSchema,
   ProfileSchema,
+  ProfileUpdateInputSchema,
   StateBundleSchema,
 } from "./schemas";
 
@@ -295,6 +297,32 @@ describe("shared schemas", () => {
           referenceHeight: 1080,
         },
       ],
+    });
+  });
+
+  it("defaults aura profiles to all games and accepts optional game scope updates", () => {
+    const profile = {
+      id: "profile-1",
+      name: "Default",
+      game: null,
+      targetFps: 30,
+      captureTarget: null,
+      cropRegions: [],
+      overlayPlacements: [],
+      createdAt: new Date(0).toISOString(),
+      updatedAt: new Date(0).toISOString(),
+    };
+
+    expect(ProfileSchema.parse(profile)).toEqual(profile);
+    expect(ProfileCreateInputSchema.parse({ name: "Mapper" })).toEqual({
+      name: "Mapper",
+      game: null,
+    });
+    expect(
+      ProfileUpdateInputSchema.parse({ id: "profile-1", game: null }),
+    ).toEqual({
+      id: "profile-1",
+      game: null,
     });
   });
 

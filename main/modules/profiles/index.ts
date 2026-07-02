@@ -7,4 +7,10 @@ export type {
 } from "./Profiles.dto";
 export { mapProfileRow } from "./Profiles.mapper";
 export { ProfilesRepository } from "./Profiles.repository";
-export { ProfilesService } from "./Profiles.service";
+export {
+  hasRenderableAuraPlacements,
+  isProfileAvailableForGame,
+  ProfilesService,
+  resolveProfileForGame,
+  resolveRenderableProfileForGame,
+} from "./Profiles.service";

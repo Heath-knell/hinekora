@@ -8,6 +8,7 @@ import { CaptureProfileLockToggle } from "./CaptureProfileLockToggle";
 
 const storeMocks = vi.hoisted(() => ({
   isProfileUnlocked: false,
+  isRecording: false,
   isRewindActive: false,
   isRunRecordingActive: false,
   isStartingRecording: false,
@@ -31,6 +32,7 @@ vi.mock("~/renderer/store", () => ({
     selector({
       status: {
         bufferActive: storeMocks.isRewindActive,
+        recording: storeMocks.isRecording,
         isStartingRecording: storeMocks.isStartingRecording,
         isStoppingRecording: storeMocks.isStoppingRecording,
         runRecordingActive: storeMocks.isRunRecordingActive,
@@ -55,6 +57,7 @@ describe("CaptureProfileLockToggle", () => {
     document.body.append(container);
     root = createRoot(container);
     storeMocks.isProfileUnlocked = false;
+    storeMocks.isRecording = false;
     storeMocks.isRewindActive = false;
     storeMocks.isRunRecordingActive = false;
     storeMocks.isStartingRecording = false;
@@ -120,6 +123,16 @@ describe("CaptureProfileLockToggle", () => {
     });
 
     expect(storeMocks.toggleProfileLock).not.toHaveBeenCalled();
+
+    storeMocks.isRunRecordingActive = false;
+    storeMocks.isRecording = true;
+    await renderToggle();
+
+    expect(
+      container.querySelector<HTMLButtonElement>(
+        "button[aria-label='Unlock capture profile']",
+      )?.disabled,
+    ).toBe(true);
   });
 
   it("blocks unlocking while recording is starting or stopping", async () => {

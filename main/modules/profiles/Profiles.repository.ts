@@ -40,6 +40,7 @@ class ProfilesRepository {
 
     const updated: Profile = {
       ...existing,
+      game: parsed.game === undefined ? existing.game : parsed.game,
       name: parsed.name ?? existing.name,
       targetFps: parsed.targetFps ?? existing.targetFps,
       captureTarget:

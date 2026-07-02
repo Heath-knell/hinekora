@@ -25,19 +25,21 @@ describe("ProfilesRepository", () => {
 
     const created = repository.create({
       name: "Mapper",
-      game: "poe1",
     });
 
     expect(repository.list()).toEqual([created]);
+    expect(created.game).toBeNull();
 
     const updated = repository.update({
       id: created.id,
+      game: "poe2",
       name: "Boss Mapper",
       targetFps: 60,
     });
 
     expect(updated).toMatchObject({
       id: created.id,
+      game: "poe2",
       name: "Boss Mapper",
       targetFps: 60,
     });
@@ -64,7 +66,6 @@ describe("ProfilesRepository", () => {
 
     const replacement = createDefaultProfile({
       name: "Replacement",
-      game: "poe2",
     });
     repository.replaceAll([replacement]);
 

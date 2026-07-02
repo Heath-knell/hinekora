@@ -79,21 +79,25 @@ function createTestStore(isProfileUnlocked = false) {
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((next) => {
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((next, fail) => {
     resolve = next;
+    reject = fail;
   });
 
-  return { promise, resolve };
+  return { promise, reject, resolve };
 }
 
 describe("Settings slice", () => {
   const updateCaptureProfile = vi.fn();
   const getSettings = vi.fn();
+  const onSettingsChanged = vi.fn();
   const updateSettings = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
     getSettings.mockResolvedValue(settings);
+    onSettingsChanged.mockReturnValue(vi.fn());
     updateSettings.mockResolvedValue({ ...settings, activeLeague: "Hardcore" });
     updateCaptureProfile.mockResolvedValue(captureProfile);
 
@@ -105,6 +109,7 @@ describe("Settings slice", () => {
         },
         settings: {
           get: getSettings,
+          onChanged: onSettingsChanged,
           update: updateSettings,
         },
       },
@@ -121,6 +126,47 @@ describe("Settings slice", () => {
     expect(updateSettings).toHaveBeenCalledWith({ activeLeague: "Hardcore" });
     expect(store.getState().settings.value?.activeLeague).toBe("Hardcore");
     expect(analyticsMocks.trackEvent).toHaveBeenCalledWith("settings-updated");
+  });
+
+  it("ignores stale settings hydrate responses", async () => {
+    const firstHydrate = createDeferred<AppSettings>();
+    const secondHydrate = createDeferred<AppSettings>();
+    getSettings
+      .mockReturnValueOnce(firstHydrate.promise)
+      .mockReturnValueOnce(secondHydrate.promise);
+    const store = createTestStore();
+
+    const firstRequest = store.getState().settings.hydrate();
+    const secondRequest = store.getState().settings.hydrate();
+
+    secondHydrate.resolve({ ...settings, activeLeague: "Hardcore" });
+    await secondRequest;
+    firstHydrate.resolve({ ...settings, activeLeague: "Standard" });
+    await firstRequest;
+
+    expect(store.getState().settings.value?.activeLeague).toBe("Hardcore");
+  });
+
+  it("mirrors settings change events from main", () => {
+    const unsubscribe = vi.fn();
+    const settingsChangedListeners: Array<(nextSettings: AppSettings) => void> =
+      [];
+    onSettingsChanged.mockImplementation(
+      (callback: (nextSettings: AppSettings) => void) => {
+        settingsChangedListeners.push(callback);
+
+        return unsubscribe;
+      },
+    );
+    const store = createTestStore();
+
+    const stopListening = store.getState().settings.startListening();
+    settingsChangedListeners[0]?.({ ...settings, activeLeague: "Hardcore" });
+
+    expect(store.getState().settings.value?.activeLeague).toBe("Hardcore");
+
+    stopListening();
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
   });
 
   it("does not track character-name-only settings updates", async () => {
@@ -189,6 +235,90 @@ describe("Settings slice", () => {
       recordingFps: 30,
     });
     expect(store.getState().captureProfiles.items[0]?.recordingFps).toBe(30);
+  });
+
+  it("keeps synced profile selection when the profile list is stale", async () => {
+    updateSettings.mockResolvedValue({
+      ...settings,
+      recordingFps: 30,
+      selectedCaptureProfileId: captureProfile.id,
+    });
+    updateCaptureProfile.mockResolvedValue({
+      ...captureProfile,
+      recordingFps: 30,
+    });
+    const store = createTestStore(true);
+    store.setState((state) => ({
+      captureProfiles: {
+        ...state.captureProfiles,
+        items: [],
+      },
+    }));
+
+    await store.getState().settings.update({ recordingFps: 30 });
+
+    expect(store.getState().captureProfiles.items).toEqual([]);
+    expect(store.getState().captureProfiles.selectedProfileId).toBe(
+      captureProfile.id,
+    );
+  });
+
+  it("skips unlocked profile sync without a selected capture profile", async () => {
+    updateSettings.mockResolvedValue({
+      ...settings,
+      recordingFps: 30,
+      selectedCaptureProfileId: null,
+    });
+    const store = createTestStore(true);
+
+    await store.getState().settings.update({ recordingFps: 30 });
+
+    expect(updateCaptureProfile).not.toHaveBeenCalled();
+  });
+
+  it("skips unlocked profile sync for non-capture settings updates", async () => {
+    updateSettings.mockResolvedValue({
+      ...settings,
+      activeLeague: "Hardcore",
+      selectedCaptureProfileId: captureProfile.id,
+    });
+    const store = createTestStore(true);
+
+    await store.getState().settings.update({ activeLeague: "Hardcore" });
+
+    expect(updateCaptureProfile).not.toHaveBeenCalled();
+  });
+
+  it("stores capture profile sync errors while unlocked", async () => {
+    updateSettings.mockResolvedValue({
+      ...settings,
+      recordingFps: 30,
+      selectedCaptureProfileId: captureProfile.id,
+    });
+    updateCaptureProfile.mockRejectedValue(new Error("profile update failed"));
+    const store = createTestStore(true);
+
+    await store.getState().settings.update({ recordingFps: 30 });
+
+    expect(store.getState().captureProfiles.error).toBe(
+      "profile update failed",
+    );
+  });
+
+  it("stores a fallback capture profile sync error for unknown failures", async () => {
+    updateSettings.mockResolvedValue({
+      ...settings,
+      recordingFps: 30,
+      selectedCaptureProfileId: captureProfile.id,
+    });
+    updateCaptureProfile.mockRejectedValue("failed");
+    const store = createTestStore(true);
+
+    await store.getState().settings.update({ recordingFps: 30 });
+
+    expect(store.getState().captureProfiles.error).toBe(
+      "Unable to update selected capture profile",
+    );
   });
 
   it("ignores stale settings update responses while syncing unlocked profiles", async () => {
@@ -274,5 +404,38 @@ describe("Settings slice", () => {
     expect(store.getState().settings.value?.recordingFps).toBe(60);
     expect(store.getState().captureProfiles.items[0]?.recordingFps).toBe(60);
     expect(analyticsMocks.trackEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores stale capture profile sync failures after a newer settings update", async () => {
+    const firstProfileUpdate = createDeferred<CaptureProfile>();
+    updateSettings
+      .mockResolvedValueOnce({
+        ...settings,
+        recordingFps: 30,
+        selectedCaptureProfileId: captureProfile.id,
+      })
+      .mockResolvedValueOnce({
+        ...settings,
+        recordingFps: 60,
+        selectedCaptureProfileId: captureProfile.id,
+      });
+    updateCaptureProfile
+      .mockReturnValueOnce(firstProfileUpdate.promise)
+      .mockResolvedValueOnce({
+        ...captureProfile,
+        recordingFps: 60,
+      });
+    const store = createTestStore(true);
+
+    const firstUpdate = store.getState().settings.update({ recordingFps: 30 });
+    await Promise.resolve();
+    const secondUpdate = store.getState().settings.update({ recordingFps: 60 });
+    await secondUpdate;
+
+    firstProfileUpdate.reject(new Error("stale failure"));
+    await firstUpdate;
+
+    expect(store.getState().captureProfiles.error).toBeNull();
+    expect(store.getState().captureProfiles.items[0]?.recordingFps).toBe(60);
   });
 });

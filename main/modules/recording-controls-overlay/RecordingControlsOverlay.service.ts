@@ -22,12 +22,13 @@ import {
 import { OverlayWindowsChannel } from "../overlay-windows/OverlayWindows.channels";
 import type { RecorderOverlayMode } from "../overlay-windows/OverlayWindows.dto";
 
+const RECORDER_OVERLAY_WIDTH = 216;
 const RECORDER_OVERLAY_BOUNDS: Record<
   RecorderOverlayMode,
   Pick<Electron.Rectangle, "width" | "height">
 > = {
-  expanded: { width: 216, height: 200 },
-  minimized: { width: 236, height: 42 },
+  expanded: { width: RECORDER_OVERLAY_WIDTH, height: 200 },
+  minimized: { width: RECORDER_OVERLAY_WIDTH, height: 42 },
 };
 const RECORDER_OVERLAY_RIGHT_MARGIN = 20;
 const RECORDER_OVERLAY_TOP_MARGIN = 24;

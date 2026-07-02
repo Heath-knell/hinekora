@@ -13,6 +13,7 @@ import {
   getLeagueSettingKey,
   normalizeLeagueForGame,
 } from "~/renderer/modules/game/GameScope.constants";
+import { isManagedRecorderStatusActive } from "~/renderer/modules/managed-recorder/ManagedRecorder.utils/ManagedRecorder.utils";
 import { trackEvent } from "~/renderer/modules/umami";
 import type {
   BoundStore,
@@ -94,18 +95,16 @@ export const createCaptureProfilesSlice: BoundStoreStateCreator<
           const activeGame = settingsValue?.activeGame ?? "poe1";
           seedRememberedProfiles(settingsValue, items);
           const selectedProfile =
-            resolveCaptureProfileForGame(
-              items,
-              selectedProfileIdsByGame[activeGame] ??
-                settingsValue?.selectedCaptureProfileId ??
-                null,
-              activeGame,
-            ) ??
-            resolveActiveGameCaptureProfile(
+            resolveSelectedCaptureProfile(
               items,
               settingsValue?.selectedCaptureProfileId ?? null,
+            ) ??
+            resolveCaptureProfileForGame(
+              items,
+              selectedProfileIdsByGame[activeGame] ?? null,
               activeGame,
-            );
+            ) ??
+            resolveActiveGameCaptureProfile(items, null, activeGame);
           set((state) => {
             state.captureProfiles.items = items;
             state.captureProfiles.isLoading = false;
@@ -301,14 +300,7 @@ export const createCaptureProfilesSlice: BoundStoreStateCreator<
 };
 
 function isCaptureProfileUnlockBlocked(get: () => BoundStore): boolean {
-  const status = get().managedRecorder?.status;
-
-  return (
-    status?.bufferActive === true ||
-    status?.runRecordingActive === true ||
-    status?.isStartingRecording === true ||
-    status?.isStoppingRecording === true
-  );
+  return isManagedRecorderStatusActive(get().managedRecorder?.status);
 }
 
 async function persistCurrentSettingsToSelectedCaptureProfile(

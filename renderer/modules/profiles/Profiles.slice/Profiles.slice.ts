@@ -1,3 +1,4 @@
+import { resolveActiveGameProfile } from "~/renderer/modules/profiles/Profiles.utils/Profiles.utils";
 import { trackEvent } from "~/renderer/modules/umami";
 import type {
   BoundStore,
@@ -5,7 +6,7 @@ import type {
   ProfilesSlice,
 } from "~/renderer/store/store.types";
 
-import type { ProfileUpdateInput } from "~/types";
+import type { GameId, Profile, ProfileUpdateInput } from "~/types";
 
 export const createProfilesSlice: BoundStoreStateCreator<ProfilesSlice> = (
   set,
@@ -34,6 +35,7 @@ export const createProfilesSlice: BoundStoreStateCreator<ProfilesSlice> = (
             selectedProfileId = resolveSelectedProfileId(
               items,
               preferredProfileId,
+              getActiveGame(get),
             );
             state.profiles.items = items;
             state.profiles.isLoading = false;
@@ -54,11 +56,7 @@ export const createProfilesSlice: BoundStoreStateCreator<ProfilesSlice> = (
         }
       },
       create: async (name: string) => {
-        const activeGame = get().settings?.value?.activeGame ?? "poe1";
-        const created = await window.electron.profiles.create({
-          name,
-          game: activeGame,
-        });
+        const created = await window.electron.profiles.create({ name });
         const items = await window.electron.profiles.list();
         set((state) => {
           state.profiles.items = items;
@@ -66,7 +64,7 @@ export const createProfilesSlice: BoundStoreStateCreator<ProfilesSlice> = (
         });
         persistSelectedProfileId(created.id);
         trackEvent("profile-created", {
-          game: created.game,
+          game: created.game ?? "all",
         });
       },
       update: async (input: ProfileUpdateInput) => {
@@ -87,6 +85,7 @@ export const createProfilesSlice: BoundStoreStateCreator<ProfilesSlice> = (
           get().profiles.selectedProfileId === id
             ? null
             : get().profiles.selectedProfileId,
+          getActiveGame(get),
         );
         set((state) => {
           state.profiles.items = items;
@@ -112,6 +111,7 @@ export const createProfilesSlice: BoundStoreStateCreator<ProfilesSlice> = (
             selectedProfileId = resolveSelectedProfileId(
               items,
               state.profiles.selectedProfileId,
+              getActiveGame(get),
             );
             state.profiles.items = items;
             state.profiles.selectedProfileId = selectedProfileId;
@@ -128,17 +128,13 @@ export const createProfilesSlice: BoundStoreStateCreator<ProfilesSlice> = (
 };
 
 function resolveSelectedProfileId(
-  items: Array<{ id: string }>,
+  items: Profile[],
   preferredProfileId: string | null,
+  activeGame: GameId,
 ): string | null {
-  if (
-    preferredProfileId &&
-    items.some((item) => item.id === preferredProfileId)
-  ) {
-    return preferredProfileId;
-  }
-
-  return items[0]?.id ?? null;
+  return (
+    resolveActiveGameProfile(items, preferredProfileId, activeGame)?.id ?? null
+  );
 }
 
 function getSettings(get: () => BoundStore): BoundStore["settings"] | null {
@@ -147,6 +143,10 @@ function getSettings(get: () => BoundStore): BoundStore["settings"] | null {
 
 function getPersistedSelectedProfileId(get: () => BoundStore): string | null {
   return getSettings(get)?.value?.selectedProfileId ?? null;
+}
+
+function getActiveGame(get: () => BoundStore): GameId {
+  return getSettings(get)?.value?.activeGame ?? "poe1";
 }
 
 function createSelectedProfileIdPersister(
@@ -158,7 +158,7 @@ function createSelectedProfileIdPersister(
 
   return (selectedProfileId) => {
     const settings = getSettings(get);
-    if (!settings) {
+    if (!settings || typeof window.electron.settings?.update !== "function") {
       return;
     }
 
@@ -192,6 +192,7 @@ function createSelectedProfileIdPersister(
           state.profiles.selectedProfileId = resolveSelectedProfileId(
             state.profiles.items,
             previousSelectedProfileId,
+            getActiveGame(get),
           );
           state.profiles.error =
             error instanceof Error

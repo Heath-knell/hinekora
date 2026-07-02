@@ -105,6 +105,7 @@ export const useBoundStore = create<BoundStore>()(
             cropEditorSlice.cropEditor.startListening(),
             managedRecorderSlice.managedRecorder.startListening(),
             poeProcessSlice.poeProcess.startListening(),
+            settingsSlice.settings.startListening(),
             clientLogSlice.clientLog.startListening(),
             replayClipsSlice.replayClips.startListening(),
             updaterSlice.updater.startListening(),

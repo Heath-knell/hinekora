@@ -12,6 +12,7 @@ import {
   rewindBufferSeconds,
   rewindDurationPresetSeconds,
 } from "~/types";
+import { useManagedRecorderSettingsDisabled } from "../../ManagedRecorder.hooks/useManagedRecorderSettingsDisabled/useManagedRecorderSettingsDisabled";
 import { ManagedRecorderAutoStartToggle } from "../ManagedRecorderAutoStartToggle/ManagedRecorderAutoStartToggle";
 import { ManagedRecorderOverlayCaptureToggle } from "../ManagedRecorderOverlayCaptureToggle/ManagedRecorderOverlayCaptureToggle";
 
@@ -22,6 +23,7 @@ const rewindOverlayCaptureHelp =
   "Uses window capture protection so Hinekora overlays stay out of death clips, manual replays, screenshots, and external capture tools.";
 
 function ManagedRecorderRewindSettingsFields() {
+  const disabled = useManagedRecorderSettingsDisabled();
   const { settingsValue, updateSettings } = useSettingsShallow((settings) => ({
     settingsValue: settings.value,
     updateSettings: settings.update,
@@ -47,12 +49,20 @@ function ManagedRecorderRewindSettingsFields() {
   }, [selectedRewindSeconds, selectedRewindSecondsIsPreset]);
 
   const commitRewindSeconds = (seconds: number) => {
+    if (disabled) {
+      return;
+    }
+
     const nextSeconds = clampRewindSaveSeconds(seconds);
     setDraftSeconds(String(nextSeconds));
     void updateSettings({ deathClipSeconds: nextSeconds });
   };
 
   const handlePresetClick = (event: MouseEvent<HTMLButtonElement>) => {
+    if (disabled) {
+      return;
+    }
+
     const seconds = Number(event.currentTarget.dataset.seconds);
     if (Number.isFinite(seconds)) {
       setIsCustomDurationEditing(false);
@@ -61,10 +71,18 @@ function ManagedRecorderRewindSettingsFields() {
   };
 
   const handleDurationChange = (event: ChangeEvent<HTMLInputElement>) => {
+    if (disabled) {
+      return;
+    }
+
     setDraftSeconds(event.target.value.replace(/\D/g, "").slice(0, 2));
   };
 
   const handleDurationFocus = () => {
+    if (disabled) {
+      return;
+    }
+
     if (!showCustomDurationInput) {
       setIsCustomDurationEditing(true);
       setDraftSeconds("");
@@ -72,6 +90,10 @@ function ManagedRecorderRewindSettingsFields() {
   };
 
   const handleDurationBlur = (event: FocusEvent<HTMLInputElement>) => {
+    if (disabled) {
+      return;
+    }
+
     if (event.target.value.trim() === "") {
       setDraftSeconds(String(selectedRewindSeconds));
       setIsCustomDurationEditing(!selectedRewindSecondsIsPreset);
@@ -126,6 +148,7 @@ function ManagedRecorderRewindSettingsFields() {
               },
             )}
             id="rewind-duration-seconds"
+            disabled={disabled}
             inputMode="numeric"
             maxLength={2}
             placeholder="60"
@@ -153,6 +176,7 @@ function ManagedRecorderRewindSettingsFields() {
                   },
                 )}
                 data-seconds={seconds}
+                disabled={disabled}
                 key={seconds}
                 type="button"
                 onClick={handlePresetClick}

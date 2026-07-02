@@ -3,6 +3,12 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const storeMocks = vi.hoisted(() => ({
+  isProfileUnlocked: true,
+  isRewindActive: false,
+  isRunRecordingActive: false,
+  isStartingRecording: false,
+  isStoppingRecording: false,
+  selectedProfileId: "capture-profile-1" as string | null,
   settingsValue: {
     deathClipSeconds: 15,
     recordingAutoStartMode: "off",
@@ -13,6 +19,21 @@ const storeMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("~/renderer/store", () => ({
+  useCaptureProfilesShallow: (selector: (state: unknown) => unknown) =>
+    selector({
+      isProfileUnlocked: storeMocks.isProfileUnlocked,
+      selectedProfileId: storeMocks.selectedProfileId,
+    }),
+  useManagedRecorderShallow: (selector: (state: unknown) => unknown) =>
+    selector({
+      status: {
+        bufferActive: storeMocks.isRewindActive,
+        isStartingRecording: storeMocks.isStartingRecording,
+        isStoppingRecording: storeMocks.isStoppingRecording,
+        recording: storeMocks.isRunRecordingActive,
+        runRecordingActive: storeMocks.isRunRecordingActive,
+      },
+    }),
   useSettingsShallow: storeMocks.useSettingsShallow,
 }));
 
@@ -77,6 +98,12 @@ describe("ManagedRecorderRewindSettingsFields", () => {
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
+    storeMocks.isProfileUnlocked = true;
+    storeMocks.isRewindActive = false;
+    storeMocks.isRunRecordingActive = false;
+    storeMocks.isStartingRecording = false;
+    storeMocks.isStoppingRecording = false;
+    storeMocks.selectedProfileId = "capture-profile-1";
     storeMocks.settingsValue = {
       deathClipSeconds: 15,
       recordingAutoStartMode: "off",
@@ -220,5 +247,33 @@ describe("ManagedRecorderRewindSettingsFields", () => {
     expect(storeMocks.updateSettings).toHaveBeenCalledWith({
       recordingAutoStartMode: "off",
     });
+  });
+
+  it("disables rewind settings while the selected profile is locked", async () => {
+    storeMocks.isProfileUnlocked = false;
+
+    await renderFields();
+
+    expect(getDurationInput().disabled).toBe(true);
+    expect(getPresetButton("45").disabled).toBe(true);
+    expect(getCheckbox("Start rewind automatically").disabled).toBe(true);
+    expect(getOverlayCheckbox().disabled).toBe(true);
+
+    await act(async () => {
+      getPresetButton("45").click();
+    });
+
+    expect(storeMocks.updateSettings).not.toHaveBeenCalled();
+  });
+
+  it("disables rewind settings while recording is active", async () => {
+    storeMocks.isRunRecordingActive = true;
+
+    await renderFields();
+
+    expect(getDurationInput().disabled).toBe(true);
+    expect(getPresetButton("45").disabled).toBe(true);
+    expect(getCheckbox("Start rewind automatically").disabled).toBe(true);
+    expect(getOverlayCheckbox().disabled).toBe(true);
   });
 });

@@ -46,7 +46,7 @@ interface DashboardE2ECalls {
   duplicatePoeStateEmissions: number;
   getUserMediaConstraints: unknown[];
   mainWindowActions: string[];
-  profileCreates: Array<{ game: GameId; id: string; name: string }>;
+  profileCreates: Array<{ game: GameId | null; id: string; name: string }>;
   profileDeletes: string[];
   profileUpdates: ProfileUpdateInput[];
   recorderOverlayToggles: number;
@@ -153,7 +153,7 @@ function createDashboardE2EFixture(
     },
     createdAt: dashboardE2ENow,
     cropRegions: [],
-    game: "poe2",
+    game: null,
     id: "profile-1",
     name: "PoE 2",
     overlayPlacements: [],
@@ -319,7 +319,7 @@ async function setupDashboardE2E(
       const poe1Profile: Profile = {
         ...fixture.profile,
         captureTarget: null,
-        game: "poe1",
+        game: null,
         id: "profile-poe1",
         name: "PoE 1",
       };
@@ -366,6 +366,7 @@ async function setupDashboardE2E(
         profileChanged?: (profiles: Profile[]) => void;
         recorderStatus?: (status: ManagedRecorderStatus) => void;
         recorderVisibility?: (visible: boolean) => void;
+        settingsChanged?: (settings: AppSettings) => void;
         updateAvailable?: (info: UpdateInfo) => void;
         updateProgress?: (progress: DownloadProgress) => void;
       } = {};
@@ -732,7 +733,7 @@ async function setupDashboardE2E(
                 ...fixture.profile,
                 captureTarget: null,
                 cropRegions: [],
-                game: input.game,
+                game: input.game ?? null,
                 id: `profile-${profilesById.size + 1}`,
                 name: input.name,
                 overlayPlacements: [],
@@ -741,7 +742,7 @@ async function setupDashboardE2E(
               };
               calls.profileCreates.push(
                 clone({
-                  game: input.game,
+                  game: input.game ?? null,
                   id: createdProfile.id,
                   name: input.name,
                 }),
@@ -833,9 +834,15 @@ async function setupDashboardE2E(
           "settings",
           {
             get: async () => clone(settings),
+            onChanged: (callback) => {
+              listeners.settingsChanged = callback;
+
+              return unsubscribe;
+            },
             update: async (input) => {
               calls.settingsUpdates.push(clone(input));
               settings = { ...settings, ...input };
+              listeners.settingsChanged?.(clone(settings));
 
               return clone(settings);
             },

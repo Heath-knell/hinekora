@@ -34,15 +34,21 @@ void initTelemetry();
 document.documentElement.dataset.theme = "hinekora";
 document.body.dataset.theme = "hinekora";
 
-const overlayRouteNames = [
-  "recorder-overlay",
-  "clip-preview-overlay",
-  "crop-selector-overlay",
-  "aura-overlay",
-];
-const isOverlayRoute = overlayRouteNames.some((routeName) =>
-  window.location.hash.includes(routeName),
+const overlayRoutes = [
+  { name: "recorder-overlay", routeClassName: null },
+  { name: "clip-preview-overlay", routeClassName: "is-clip-preview-route" },
+  { name: "crop-selector-overlay", routeClassName: "is-crop-selector-route" },
+  { name: "aura-overlay", routeClassName: "is-aura-overlay-route" },
+] as const;
+const overlayRoute = overlayRoutes.find((route) =>
+  window.location.hash.includes(route.name),
 );
+const isOverlayRoute = overlayRoute !== undefined;
+
+if (overlayRoute?.routeClassName) {
+  document.documentElement.classList.add(overlayRoute.routeClassName);
+  document.body.classList.add(overlayRoute.routeClassName);
+}
 const hashHistory = createHashHistory();
 const router = createRouter({
   routeTree,

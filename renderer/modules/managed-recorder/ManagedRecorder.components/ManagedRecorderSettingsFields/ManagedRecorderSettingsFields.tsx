@@ -2,11 +2,7 @@ import clsx from "clsx";
 import type { ChangeEvent, MouseEvent } from "react";
 import { FiInfo } from "react-icons/fi";
 
-import {
-  useCapturePreviewShallow,
-  useManagedRecorderSelector,
-  useSettingsShallow,
-} from "~/renderer/store";
+import { useCapturePreviewShallow, useSettingsShallow } from "~/renderer/store";
 
 import {
   normalizeRecordingEncoderChoice,
@@ -14,6 +10,7 @@ import {
   RecordingEncoderOptions,
   type RecordingQuality,
 } from "~/types";
+import { useManagedRecorderSettingsDisabled } from "../../ManagedRecorder.hooks/useManagedRecorderSettingsDisabled/useManagedRecorderSettingsDisabled";
 
 const recordingResolutionOptions = [
   { value: "native", label: "Native source" },
@@ -39,6 +36,7 @@ const recordingFieldHelp = {
 } as const;
 
 function ManagedRecorderSettingsFields() {
+  const disabled = useManagedRecorderSettingsDisabled();
   const { settingsValue, updateSettings } = useSettingsShallow((settings) => ({
     settingsValue: settings.value,
     updateSettings: settings.update,
@@ -52,13 +50,6 @@ function ManagedRecorderSettingsFields() {
       ? `${selectedSource.width}x${selectedSource.height}`
       : null;
   });
-  const status = useManagedRecorderSelector(
-    (managedRecorder) => managedRecorder.status,
-  );
-  const isRecording = status?.recording === true;
-  const isBusy =
-    status?.isStartingRecording === true ||
-    status?.isStoppingRecording === true;
   const selectedFps = settingsValue?.recordingFps ?? 30;
   const selectedResolution =
     settingsValue?.recordingOutputResolution ?? "native";
@@ -68,25 +59,45 @@ function ManagedRecorderSettingsFields() {
       : "Native source";
 
   const handleResolutionChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    if (disabled) {
+      return;
+    }
+
     void updateSettings({ recordingOutputResolution: event.target.value });
   };
   const handleFpsSelect = (event: MouseEvent<HTMLButtonElement>) => {
+    if (disabled) {
+      return;
+    }
+
     const fps = Number(event.currentTarget.dataset.fps);
     if (recordingFpsOptions.includes(fps)) {
       void updateSettings({ recordingFps: fps });
     }
   };
   const handleEncoderChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    if (disabled) {
+      return;
+    }
+
     void updateSettings({
       recordingEncoder: event.target.value as RecordingEncoderChoice,
     });
   };
   const handleClipQualityChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    if (disabled) {
+      return;
+    }
+
     void updateSettings({
       recordingClipQuality: event.target.value as RecordingQuality,
     });
   };
   const handleRunQualityChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    if (disabled) {
+      return;
+    }
+
     void updateSettings({
       recordingRunQuality: event.target.value as RecordingQuality,
     });
@@ -109,7 +120,7 @@ function ManagedRecorderSettingsFields() {
         </span>
         <select
           className="select select-bordered select-sm w-full"
-          disabled={isRecording || isBusy}
+          disabled={disabled}
           value={selectedResolution}
           onChange={handleResolutionChange}
         >
@@ -145,7 +156,7 @@ function ManagedRecorderSettingsFields() {
                   : "btn-outline border-base-content/20 bg-base-200",
               )}
               data-fps={fps}
-              disabled={isRecording || isBusy}
+              disabled={disabled}
               key={fps}
               type="button"
               onClick={handleFpsSelect}
@@ -171,7 +182,7 @@ function ManagedRecorderSettingsFields() {
         </span>
         <select
           className="select select-bordered select-sm w-full"
-          disabled={isRecording || isBusy}
+          disabled={disabled}
           value={normalizeRecordingEncoderChoice(
             settingsValue?.recordingEncoder,
           )}
@@ -201,7 +212,7 @@ function ManagedRecorderSettingsFields() {
           </span>
           <select
             className="select select-bordered select-sm w-full"
-            disabled={isRecording || isBusy}
+            disabled={disabled}
             value={settingsValue?.recordingRunQuality ?? "moderate"}
             onChange={handleRunQualityChange}
           >
@@ -228,7 +239,7 @@ function ManagedRecorderSettingsFields() {
           </span>
           <select
             className="select select-bordered select-sm w-full"
-            disabled={isRecording || isBusy}
+            disabled={disabled}
             value={settingsValue?.recordingClipQuality ?? "high"}
             onChange={handleClipQualityChange}
           >

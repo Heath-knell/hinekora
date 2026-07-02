@@ -77,7 +77,7 @@ export const createCapturePreviewSlice: BoundStoreStateCreator<
     hydrate: async () => {
       await get().capturePreview.refresh();
     },
-    startListening: () => {
+    startListening: (options = {}) => {
       let retryTimer: number | null = null;
       let requestVersion = 0;
       const clearRetryTimer = () => {
@@ -150,6 +150,10 @@ export const createCapturePreviewSlice: BoundStoreStateCreator<
           void refreshAfterRequest(requestVersion);
         },
       );
+      if (options.refreshOnStart === true) {
+        requestVersion += 1;
+        void refreshAfterRequest(requestVersion);
+      }
 
       return () => {
         requestVersion += 1;

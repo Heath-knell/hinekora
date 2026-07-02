@@ -7,12 +7,16 @@ import { ManagedRecorderSettingsToggle } from "./ManagedRecorderSettingsToggle";
 let container: HTMLDivElement;
 let root: Root;
 
-async function renderToggle(onChange = vi.fn()): Promise<void> {
+async function renderToggle(
+  onChange = vi.fn(),
+  disabled = false,
+): Promise<void> {
   await act(async () => {
     root.render(
       <ManagedRecorderSettingsToggle
         ariaLabel="Start recording automatically"
         checked={false}
+        disabled={disabled}
         helpText="Starts recording when the selected game is running"
         label="Start recording automatically"
         onChange={onChange}
@@ -61,6 +65,22 @@ describe("ManagedRecorderSettingsToggle", () => {
 
     await act(async () => {
       helpButton?.click();
+    });
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("does not toggle while disabled", async () => {
+    const onChange = vi.fn();
+    await renderToggle(onChange, true);
+
+    const checkbox = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Start recording automatically"]',
+    );
+    expect(checkbox?.disabled).toBe(true);
+
+    await act(async () => {
+      checkbox?.click();
     });
 
     expect(onChange).not.toHaveBeenCalled();

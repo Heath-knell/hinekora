@@ -11,7 +11,12 @@ import {
 } from "~/main/modules/overlay-windows/OverlayWindow.shared";
 import { OverlayWindowsChannel } from "~/main/modules/overlay-windows/OverlayWindows.channels";
 import type { ShowAuraOverlayOptions } from "~/main/modules/overlay-windows/OverlayWindows.dto";
-import { ProfilesService } from "~/main/modules/profiles";
+import {
+  hasRenderableAuraPlacements,
+  ProfilesService,
+  resolveProfileForGame,
+} from "~/main/modules/profiles";
+import { SettingsStoreService } from "~/main/modules/settings-store";
 import { logInfo } from "~/main/utils/app-log";
 import {
   registerIpcWindowRole,
@@ -171,7 +176,7 @@ class AuraManagerOverlaysService {
     if (
       this.auraOverlayLocked &&
       !startAddingAura &&
-      !this.hasRenderableAuraPlacements(profile)
+      !hasRenderableAuraPlacements(profile)
     ) {
       this.closeWindow("no-renderable-placements");
       return;
@@ -196,14 +201,6 @@ class AuraManagerOverlaysService {
     if (canDispatchAddAuraRequest) {
       this.sendAddAuraRequest(window, addAuraShape);
     }
-  }
-
-  private hasRenderableAuraPlacements(profile: Profile): boolean {
-    const cropRegionIds = new Set(profile.cropRegions.map((crop) => crop.id));
-
-    return profile.overlayPlacements.some((placement) =>
-      cropRegionIds.has(placement.cropRegionId),
-    );
   }
 
   private createWindow(): BrowserWindow {
@@ -444,12 +441,11 @@ class AuraManagerOverlaysService {
   }
 
   private resolveProfile(profileId?: string): Profile | null {
-    const profiles = ProfilesService.getInstance().list();
-    if (profileId) {
-      return profiles.find((profile) => profile.id === profileId) ?? null;
-    }
-
-    return profiles[0] ?? null;
+    return resolveProfileForGame(
+      ProfilesService.getInstance().list(),
+      profileId,
+      SettingsStoreService.getInstance().get().activeGame,
+    );
   }
 }
 

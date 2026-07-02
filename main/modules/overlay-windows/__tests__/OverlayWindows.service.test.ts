@@ -150,8 +150,8 @@ function createClip(update: Partial<ReplayClip> = {}): ReplayClip {
 function createProfile(update: Partial<Profile> = {}): Profile {
   return {
     id: "profile-1",
-    name: "Default PoE Profile",
-    game: "poe1",
+    name: "Default Aura Profile",
+    game: null,
     targetFps: 30,
     captureTarget: null,
     cropRegions: [

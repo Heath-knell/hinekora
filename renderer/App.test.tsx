@@ -4,12 +4,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const storeMocks = vi.hoisted(() => ({
   hydrateManagedRecorder: vi.fn(),
+  hydratePoeProcess: vi.fn(),
   hydrateProfiles: vi.fn(),
   hydrateReplayClips: vi.fn(),
-  refreshCapturePreview: vi.fn(),
+  hydrateSettings: vi.fn(),
+  startCapturePreviewListener: vi.fn(),
   startManagedRecorderListener: vi.fn(),
+  startPoeProcessListener: vi.fn(),
   startProfilesListener: vi.fn(),
   startReplayClipsListener: vi.fn(),
+  startSettingsListener: vi.fn(),
   useBoundStore: vi.fn(),
 }));
 
@@ -66,20 +70,28 @@ describe("App overlay bootstrap", () => {
     vi.clearAllMocks();
     window.location.hash = "#/aura-overlay?profileId=profile-1";
     storeMocks.hydrateManagedRecorder.mockResolvedValue(undefined);
+    storeMocks.hydratePoeProcess.mockResolvedValue(undefined);
     storeMocks.hydrateProfiles.mockResolvedValue(undefined);
     storeMocks.hydrateReplayClips.mockResolvedValue(undefined);
-    storeMocks.refreshCapturePreview.mockResolvedValue(undefined);
+    storeMocks.hydrateSettings.mockResolvedValue(undefined);
+    storeMocks.startCapturePreviewListener.mockReturnValue(vi.fn());
     storeMocks.startManagedRecorderListener.mockReturnValue(vi.fn());
+    storeMocks.startPoeProcessListener.mockReturnValue(vi.fn());
     storeMocks.startProfilesListener.mockReturnValue(vi.fn());
     storeMocks.startReplayClipsListener.mockReturnValue(vi.fn());
+    storeMocks.startSettingsListener.mockReturnValue(vi.fn());
     storeMocks.useBoundStore.mockImplementation((selector) =>
       selector({
         capturePreview: {
-          refresh: storeMocks.refreshCapturePreview,
+          startListening: storeMocks.startCapturePreviewListener,
         },
         managedRecorder: {
           hydrate: storeMocks.hydrateManagedRecorder,
           startListening: storeMocks.startManagedRecorderListener,
+        },
+        poeProcess: {
+          hydrate: storeMocks.hydratePoeProcess,
+          startListening: storeMocks.startPoeProcessListener,
         },
         profiles: {
           hydrate: storeMocks.hydrateProfiles,
@@ -88,6 +100,10 @@ describe("App overlay bootstrap", () => {
         replayClips: {
           hydrate: storeMocks.hydrateReplayClips,
           startListening: storeMocks.startReplayClipsListener,
+        },
+        settings: {
+          hydrate: storeMocks.hydrateSettings,
+          startListening: storeMocks.startSettingsListener,
         },
       }),
     );
@@ -98,17 +114,33 @@ describe("App overlay bootstrap", () => {
     vi.restoreAllMocks();
   });
 
-  it("hydrates aura profiles before refreshing capture sources", async () => {
+  it("hydrates aura settings, profiles, and process before starting capture source refresh", async () => {
+    const settingsHydration = createDeferred();
     const profileHydration = createDeferred();
+    const poeProcessHydration = createDeferred();
+    storeMocks.hydrateSettings.mockReturnValue(settingsHydration.promise);
     storeMocks.hydrateProfiles.mockReturnValue(profileHydration.promise);
+    storeMocks.hydratePoeProcess.mockReturnValue(poeProcessHydration.promise);
     const { root } = renderApp();
 
     await act(async () => {
       root.render(<App />);
     });
 
+    expect(storeMocks.hydrateSettings).toHaveBeenCalledTimes(1);
+    expect(storeMocks.hydrateProfiles).not.toHaveBeenCalled();
+    expect(storeMocks.hydratePoeProcess).not.toHaveBeenCalled();
+    expect(storeMocks.startCapturePreviewListener).not.toHaveBeenCalled();
+
+    await act(async () => {
+      settingsHydration.resolve();
+      await settingsHydration.promise;
+      await Promise.resolve();
+    });
+
     expect(storeMocks.hydrateProfiles).toHaveBeenCalledTimes(1);
-    expect(storeMocks.refreshCapturePreview).not.toHaveBeenCalled();
+    expect(storeMocks.hydratePoeProcess).toHaveBeenCalledTimes(1);
+    expect(storeMocks.startCapturePreviewListener).not.toHaveBeenCalled();
 
     await act(async () => {
       profileHydration.resolve();
@@ -116,29 +148,100 @@ describe("App overlay bootstrap", () => {
       await Promise.resolve();
     });
 
-    expect(storeMocks.refreshCapturePreview).toHaveBeenCalledTimes(1);
-    const hydrateCallOrder =
+    expect(storeMocks.startCapturePreviewListener).not.toHaveBeenCalled();
+
+    await act(async () => {
+      poeProcessHydration.resolve();
+      await poeProcessHydration.promise;
+      await Promise.resolve();
+    });
+
+    expect(storeMocks.startCapturePreviewListener).toHaveBeenCalledWith({
+      refreshOnStart: true,
+    });
+    const settingsCallOrder =
+      storeMocks.hydrateSettings.mock.invocationCallOrder[0];
+    const hydrateProfilesCallOrder =
       storeMocks.hydrateProfiles.mock.invocationCallOrder[0];
-    const refreshCallOrder =
-      storeMocks.refreshCapturePreview.mock.invocationCallOrder[0];
-    expect(hydrateCallOrder).toBeDefined();
-    expect(refreshCallOrder).toBeDefined();
-    expect(hydrateCallOrder ?? 0).toBeLessThan(refreshCallOrder ?? 0);
+    const hydratePoeProcessCallOrder =
+      storeMocks.hydratePoeProcess.mock.invocationCallOrder[0];
+    const startCaptureListenerCallOrder =
+      storeMocks.startCapturePreviewListener.mock.invocationCallOrder[0];
+    expect(settingsCallOrder).toBeDefined();
+    expect(hydrateProfilesCallOrder).toBeDefined();
+    expect(hydratePoeProcessCallOrder).toBeDefined();
+    expect(startCaptureListenerCallOrder).toBeDefined();
+    expect(settingsCallOrder ?? 0).toBeLessThan(hydrateProfilesCallOrder ?? 0);
+    expect(settingsCallOrder ?? 0).toBeLessThan(
+      hydratePoeProcessCallOrder ?? 0,
+    );
+    expect(hydrateProfilesCallOrder ?? 0).toBeLessThan(
+      startCaptureListenerCallOrder ?? 0,
+    );
+    expect(hydratePoeProcessCallOrder ?? 0).toBeLessThan(
+      startCaptureListenerCallOrder ?? 0,
+    );
   });
 
-  it("hydrates recorder overlay recorder, clips, and profiles state", async () => {
-    window.location.hash = "#/recorder-overlay";
+  it("cleans up aura overlay listeners on unmount", async () => {
+    const stopCapturePreviewListener = vi.fn();
+    const stopPoeProcessListener = vi.fn();
+    const stopProfilesListener = vi.fn();
+    const stopSettingsListener = vi.fn();
+    storeMocks.startCapturePreviewListener.mockReturnValue(
+      stopCapturePreviewListener,
+    );
+    storeMocks.startPoeProcessListener.mockReturnValue(stopPoeProcessListener);
+    storeMocks.startProfilesListener.mockReturnValue(stopProfilesListener);
+    storeMocks.startSettingsListener.mockReturnValue(stopSettingsListener);
     const { root } = renderApp();
 
     await act(async () => {
       root.render(<App />);
     });
 
-    expect(storeMocks.hydrateManagedRecorder).toHaveBeenCalledTimes(1);
-    expect(storeMocks.hydrateProfiles).toHaveBeenCalledTimes(1);
-    expect(storeMocks.hydrateReplayClips).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      root.unmount();
+    });
+
+    expect(stopCapturePreviewListener).toHaveBeenCalledTimes(1);
+    expect(stopPoeProcessListener).toHaveBeenCalledTimes(1);
+    expect(stopProfilesListener).toHaveBeenCalledTimes(1);
+    expect(stopSettingsListener).toHaveBeenCalledTimes(1);
+  });
+
+  it("hydrates recorder overlay settings before recorder, clips, and profiles state", async () => {
+    window.location.hash = "#/recorder-overlay";
+    const settingsHydration = createDeferred();
+    storeMocks.hydrateSettings.mockReturnValue(settingsHydration.promise);
+    const { root } = renderApp();
+
+    await act(async () => {
+      root.render(<App />);
+    });
+
+    expect(storeMocks.hydrateSettings).toHaveBeenCalledTimes(1);
+    expect(storeMocks.hydrateManagedRecorder).not.toHaveBeenCalled();
+    expect(storeMocks.hydrateProfiles).not.toHaveBeenCalled();
+    expect(storeMocks.hydrateReplayClips).not.toHaveBeenCalled();
     expect(storeMocks.startManagedRecorderListener).toHaveBeenCalledTimes(1);
     expect(storeMocks.startProfilesListener).toHaveBeenCalledTimes(1);
     expect(storeMocks.startReplayClipsListener).toHaveBeenCalledTimes(1);
+    expect(storeMocks.startSettingsListener).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      settingsHydration.resolve();
+      await settingsHydration.promise;
+      await Promise.resolve();
+    });
+
+    expect(storeMocks.hydrateManagedRecorder).toHaveBeenCalledTimes(1);
+    expect(storeMocks.hydrateProfiles).toHaveBeenCalledTimes(1);
+    expect(storeMocks.hydrateReplayClips).toHaveBeenCalledTimes(1);
   });
 });

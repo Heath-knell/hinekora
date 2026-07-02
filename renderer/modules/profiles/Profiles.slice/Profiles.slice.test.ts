@@ -13,7 +13,7 @@ function createProfile(overrides: Partial<Profile> = {}): Profile {
     captureTarget: null,
     createdAt: "2026-06-18T00:00:00.000Z",
     cropRegions: [],
-    game: "poe2",
+    game: null,
     id: "profile-1",
     name: "PoE 2",
     overlayPlacements: [],
@@ -21,6 +21,32 @@ function createProfile(overrides: Partial<Profile> = {}): Profile {
     updatedAt: "2026-06-18T00:00:00.000Z",
     ...overrides,
   };
+}
+
+function createRenderableProfile(overrides: Partial<Profile> = {}): Profile {
+  return createProfile({
+    cropRegions: [
+      {
+        id: "crop-1",
+        label: "Life",
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 40,
+      },
+    ],
+    overlayPlacements: [
+      {
+        id: "placement-1",
+        cropRegionId: "crop-1",
+        x: 20,
+        y: 20,
+        scale: 1,
+        opacity: 1,
+      },
+    ],
+    ...overrides,
+  });
 }
 
 function createTestStore() {
@@ -38,6 +64,7 @@ function createTestStoreWithSettings(settingsValue: AppSettings) {
         settings: {
           value: settingsValue,
           hydrate: vi.fn(),
+          startListening: vi.fn(() => vi.fn()),
           update: updateSettings,
         },
       }) as unknown as BoundStore,
@@ -72,6 +99,9 @@ describe("Profiles slice", () => {
             changedListener = listener;
             return unsubscribe;
           }),
+        },
+        settings: {
+          update: updateSettings,
         },
       },
     });
@@ -117,6 +147,29 @@ describe("Profiles slice", () => {
     });
   });
 
+  it("uses a renderable profile before an empty default when falling back", async () => {
+    const emptyDefault = createProfile({
+      id: "empty-default",
+      name: "Default PoE 2",
+    });
+    const configuredProfile = createRenderableProfile({
+      id: "configured",
+      name: "Configured",
+    });
+    listProfiles.mockResolvedValueOnce([emptyDefault, configuredProfile]);
+    const store = createTestStoreWithSettings({
+      ...createDefaultSettings(),
+      selectedProfileId: "missing",
+    });
+
+    await store.getState().profiles.hydrate();
+
+    expect(store.getState().profiles.selectedProfileId).toBe("configured");
+    expect(updateSettings).toHaveBeenCalledWith({
+      selectedProfileId: "configured",
+    });
+  });
+
   it("persists selected profile changes into settings", () => {
     const store = createTestStoreWithSettings({
       ...createDefaultSettings(),
@@ -128,6 +181,25 @@ describe("Profiles slice", () => {
     expect(updateSettings).toHaveBeenCalledWith({
       selectedProfileId: "profile-2",
     });
+  });
+
+  it("keeps scoped overlay profile selection local when settings update is unavailable", () => {
+    Object.defineProperty(window, "electron", {
+      configurable: true,
+      value: {
+        profiles: window.electron.profiles,
+        settings: {},
+      },
+    });
+    const store = createTestStoreWithSettings({
+      ...createDefaultSettings(),
+      selectedProfileId: "profile-1",
+    });
+
+    store.getState().profiles.select("profile-2");
+
+    expect(store.getState().profiles.selectedProfileId).toBe("profile-2");
+    expect(updateSettings).not.toHaveBeenCalled();
   });
 
   it("rolls back selected profile changes when settings persistence fails", async () => {
@@ -197,7 +269,6 @@ describe("Profiles slice", () => {
 
     await store.getState().profiles.create("Mapper");
     expect(createProfileApi).toHaveBeenCalledWith({
-      game: "poe2",
       name: "Mapper",
     });
     expect(store.getState().profiles.selectedProfileId).toBe("created");

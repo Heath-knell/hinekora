@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import { FiLock as Lock, FiUnlock as Unlock } from "react-icons/fi";
 
+import { isManagedRecorderStatusActive } from "~/renderer/modules/managed-recorder/ManagedRecorder.utils/ManagedRecorder.utils";
 import {
   useCaptureProfilesShallow,
   useManagedRecorderShallow,
@@ -23,12 +24,8 @@ function CaptureProfileLockToggle({
       selectedProfileId: captureProfiles.selectedProfileId,
       toggleProfileLock: captureProfiles.toggleProfileLock,
     }));
-  const isRecorderActive = useManagedRecorderShallow(
-    (managedRecorder) =>
-      managedRecorder.status?.bufferActive === true ||
-      managedRecorder.status?.runRecordingActive === true ||
-      managedRecorder.status?.isStartingRecording === true ||
-      managedRecorder.status?.isStoppingRecording === true,
+  const isRecorderActive = useManagedRecorderShallow((managedRecorder) =>
+    isManagedRecorderStatusActive(managedRecorder.status),
   );
   const Icon = isProfileUnlocked ? Unlock : Lock;
   const label = isProfileUnlocked ? "Unlocked" : "Locked";
@@ -73,8 +70,10 @@ function CaptureProfileLockToggle({
     <button
       aria-label={ariaLabel}
       className={clsx(
-        "btn btn-square btn-sm border-base-content/15 bg-base-200 text-base-content/70 hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-45",
-        isProfileUnlocked && "border-primary bg-primary text-primary-content",
+        "btn btn-square btn-sm border-base-content/15 bg-base-200 text-base-content/70 disabled:cursor-not-allowed disabled:opacity-45",
+        isProfileUnlocked
+          ? "border-primary bg-primary text-primary-content hover:border-primary hover:bg-primary hover:text-primary-content"
+          : "hover:border-primary hover:text-primary",
         attached && "join-item rounded-l-none",
       )}
       disabled={isDisabled}

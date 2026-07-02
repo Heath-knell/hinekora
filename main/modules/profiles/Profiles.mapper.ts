@@ -3,7 +3,7 @@ import { type Profile, ProfileSchema } from "~/types";
 interface ProfileRow {
   id: string;
   name: string;
-  game: string;
+  game: string | null;
   data_json: string;
   created_at: string;
   updated_at: string;

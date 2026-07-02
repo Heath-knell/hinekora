@@ -27,8 +27,6 @@ import {
 } from "./AuraOverlay.page.utils";
 import styles from "./AuraOverlayPage.module.css";
 
-const auraOverlayRouteClassName = "is-aura-overlay-route";
-
 function AuraOverlayPage() {
   const { profileItems, selectedProfileId, updateProfile } = useProfilesShallow(
     (profiles) => ({
@@ -79,8 +77,9 @@ function AuraOverlayPage() {
         profile?.captureTarget,
         sources,
         selectedSourceId,
+        activeGame,
       ),
-    [profile, selectedSourceId, sources],
+    [activeGame, profile, selectedSourceId, sources],
   );
   const captureSource =
     sources.find((source) => source.id === captureSourceId) ?? null;
@@ -155,16 +154,6 @@ function AuraOverlayPage() {
 
     return () => {
       window.removeEventListener("hashchange", handleHashChange);
-    };
-  }, []);
-
-  useEffect(() => {
-    document.documentElement.classList.add(auraOverlayRouteClassName);
-    document.body.classList.add(auraOverlayRouteClassName);
-
-    return () => {
-      document.documentElement.classList.remove(auraOverlayRouteClassName);
-      document.body.classList.remove(auraOverlayRouteClassName);
     };
   }, []);
 

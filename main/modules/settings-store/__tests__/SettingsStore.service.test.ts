@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { WindowName } from "~/main/modules/main-window/MainWindow.types";
 import { mockIpcMainHandlers } from "~/main/test/ipc";
+import {
+  clearIpcWindowRolesForTests,
+  registerIpcWindowRole,
+} from "~/main/utils/ipc-window-roles";
 
 import { createDefaultSettings } from "~/types";
 import { DatabaseService } from "../../database";
@@ -9,6 +14,8 @@ import { SettingsStoreRepository } from "../SettingsStore.repository";
 import { SettingsStoreService } from "../SettingsStore.service";
 
 const electronMocks = vi.hoisted(() => ({
+  getAllWindows: vi.fn<() => unknown[]>(() => []),
+  ipcMainHandle: vi.fn(),
   setLoginItemSettings: vi.fn(),
 }));
 
@@ -16,10 +23,20 @@ vi.mock("electron", () => ({
   app: {
     setLoginItemSettings: electronMocks.setLoginItemSettings,
   },
+  BrowserWindow: {
+    getAllWindows: electronMocks.getAllWindows,
+  },
+  ipcMain: {
+    handle: electronMocks.ipcMainHandle,
+  },
 }));
 
 describe("SettingsStoreService", () => {
   afterEach(() => {
+    clearIpcWindowRolesForTests();
+    electronMocks.getAllWindows.mockReset();
+    electronMocks.getAllWindows.mockReturnValue([]);
+    electronMocks.ipcMainHandle.mockReset();
     electronMocks.setLoginItemSettings.mockReset();
     vi.restoreAllMocks();
     SettingsStoreService.resetForTests();
@@ -149,6 +166,48 @@ describe("SettingsStoreService", () => {
     }
   });
 
+  it("publishes settings changes to main and overlay windows", () => {
+    const database = DatabaseService.getInstance(":memory:");
+    const service = new SettingsStoreService();
+    const mainWindow = createMockWindow(1, WindowName.Main);
+    const auraOverlay = createMockWindow(2, WindowName.AuraOverlay);
+    const recorderOverlay = createMockWindow(3, WindowName.RecorderOverlay);
+    const clipPreviewOverlay = createMockWindow(
+      4,
+      WindowName.ClipPreviewOverlay,
+    );
+    const destroyedMainWindow = createMockWindow(5, WindowName.Main);
+    destroyedMainWindow.isDestroyed.mockReturnValue(true);
+    electronMocks.getAllWindows.mockReturnValue([
+      mainWindow,
+      auraOverlay,
+      recorderOverlay,
+      clipPreviewOverlay,
+      destroyedMainWindow,
+    ]);
+
+    try {
+      const updatedSettings = service.update({ activeGame: "poe2" });
+
+      expect(mainWindow.webContents.send).toHaveBeenCalledWith(
+        SettingsStoreChannel.Changed,
+        updatedSettings,
+      );
+      expect(auraOverlay.webContents.send).toHaveBeenCalledWith(
+        SettingsStoreChannel.Changed,
+        updatedSettings,
+      );
+      expect(recorderOverlay.webContents.send).toHaveBeenCalledWith(
+        SettingsStoreChannel.Changed,
+        updatedSettings,
+      );
+      expect(clipPreviewOverlay.webContents.send).not.toHaveBeenCalled();
+      expect(destroyedMainWindow.webContents.send).not.toHaveBeenCalled();
+    } finally {
+      database.close();
+    }
+  });
+
   it("keeps settings updates successful when a subscriber throws", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const database = DatabaseService.getInstance(":memory:");
@@ -226,3 +285,16 @@ describe("SettingsStoreService", () => {
     }
   });
 });
+
+function createMockWindow(id: number, role: WindowName) {
+  const window = {
+    isDestroyed: vi.fn(() => false),
+    webContents: {
+      id,
+      send: vi.fn(),
+    },
+  };
+  registerIpcWindowRole(window.webContents, role);
+
+  return window;
+}

@@ -11,7 +11,10 @@ import type {
   ManagedRecorderStatus,
 } from "~/main/modules/managed-recorder/ManagedRecorder.dto";
 import { ManualReplaysOverlayService } from "~/main/modules/manual-replays-overlay";
-import { ProfilesService } from "~/main/modules/profiles";
+import {
+  ProfilesService,
+  resolveRenderableProfileForGame,
+} from "~/main/modules/profiles";
 import { RecordingControlsOverlayService } from "~/main/modules/recording-controls-overlay";
 import { SettingsStoreService } from "~/main/modules/settings-store";
 import { logInfo } from "~/main/utils/app-log";
@@ -23,7 +26,7 @@ import {
 } from "~/main/utils/ipc-validation";
 import { registerGuardedIpcHandler } from "~/main/utils/ipc-window-roles";
 
-import type { AppSettings, Profile, ReplayClip } from "~/types";
+import type { AppSettings, ReplayClip } from "~/types";
 import { GameOverlayCoordinator } from "./GameOverlayCoordinator";
 import { OverlayWindowsChannel } from "./OverlayWindows.channels";
 import type {
@@ -426,11 +429,12 @@ class OverlayWindowsService {
     );
   }
 
-  private resolveRenderableAuraProfile(): Profile | null {
-    return (
-      ProfilesService.getInstance()
-        .list()
-        .find((profile) => hasRenderableAuraPlacements(profile)) ?? null
+  private resolveRenderableAuraProfile() {
+    const { activeGame } = SettingsStoreService.getInstance().get();
+
+    return resolveRenderableProfileForGame(
+      ProfilesService.getInstance().list(),
+      activeGame,
     );
   }
 
@@ -528,14 +532,6 @@ class OverlayWindowsService {
 
     void this.recordingControlsOverlay.restoreRequestedOverlay();
   }
-}
-
-function hasRenderableAuraPlacements(profile: Profile): boolean {
-  const cropRegionIds = new Set(profile.cropRegions.map((crop) => crop.id));
-
-  return profile.overlayPlacements.some((placement) =>
-    cropRegionIds.has(placement.cropRegionId),
-  );
 }
 
 function parseOptionalShowAuraProfileId(

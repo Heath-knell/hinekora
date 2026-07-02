@@ -31,36 +31,61 @@ function App() {
   const startProfilesListener = useBoundStore(
     (state) => state.profiles.startListening,
   );
-  const refreshCapturePreview = useBoundStore(
-    (state) => state.capturePreview.refresh,
+  const hydrateSettings = useBoundStore((state) => state.settings.hydrate);
+  const startSettingsListener = useBoundStore(
+    (state) => state.settings.startListening,
+  );
+  const hydratePoeProcess = useBoundStore((state) => state.poeProcess.hydrate);
+  const startPoeProcessListener = useBoundStore(
+    (state) => state.poeProcess.startListening,
+  );
+  const startCapturePreviewListener = useBoundStore(
+    (state) => state.capturePreview.startListening,
   );
 
   useEffect(() => {
     const unsubscribers: Array<() => void> = [];
+    let disposed = false;
 
     if (isRecorderOverlay) {
-      void Promise.all([
-        hydrateManagedRecorder(),
-        hydrateProfiles(),
-        hydrateReplayClips(),
-      ]);
+      void (async () => {
+        await hydrateSettings();
+        await Promise.all([
+          hydrateManagedRecorder(),
+          hydrateProfiles(),
+          hydrateReplayClips(),
+        ]);
+      })();
       unsubscribers.push(
         startManagedRecorderListener(),
         startProfilesListener(),
         startReplayClipsListener(),
+        startSettingsListener(),
       );
     } else if (isClipPreviewOverlay) {
       void hydrateReplayClips();
       unsubscribers.push(startReplayClipsListener());
     } else if (isAuraOverlay) {
       void (async () => {
-        await hydrateProfiles();
-        await refreshCapturePreview();
+        await hydrateSettings();
+        await Promise.all([hydrateProfiles(), hydratePoeProcess()]);
+        if (disposed) {
+          return;
+        }
+
+        unsubscribers.push(
+          startCapturePreviewListener({ refreshOnStart: true }),
+        );
       })();
-      unsubscribers.push(startProfilesListener());
+      unsubscribers.push(
+        startPoeProcessListener(),
+        startProfilesListener(),
+        startSettingsListener(),
+      );
     }
 
     return () => {
+      disposed = true;
       for (const unsubscribe of unsubscribers) {
         unsubscribe();
       }
@@ -68,14 +93,18 @@ function App() {
   }, [
     hydrateManagedRecorder,
     hydrateProfiles,
+    hydratePoeProcess,
     hydrateReplayClips,
+    hydrateSettings,
     isClipPreviewOverlay,
     isAuraOverlay,
     isRecorderOverlay,
-    refreshCapturePreview,
+    startCapturePreviewListener,
     startManagedRecorderListener,
+    startPoeProcessListener,
     startProfilesListener,
     startReplayClipsListener,
+    startSettingsListener,
   ]);
 
   if (isRecorderOverlay) {

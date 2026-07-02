@@ -215,7 +215,7 @@ describe("RecordingControlsOverlayService", () => {
     electronMocks.browserWindowFactory.mockReturnValue(recorderWindow);
     settingsStoreMocks.get.mockReturnValue({
       ...createDefaultSettings(),
-      recorderOverlayBounds: { x: 1200, y: 64, width: 236, height: 42 },
+      recorderOverlayBounds: { x: 1200, y: 64, width: 216, height: 42 },
     });
     const coordinator = new GameOverlayCoordinator();
     const service = new RecordingControlsOverlayService(coordinator);
@@ -229,7 +229,7 @@ describe("RecordingControlsOverlayService", () => {
       expect.objectContaining({
         x: 1200,
         y: 64,
-        width: 236,
+        width: 216,
         height: 42,
       }),
     );
@@ -615,9 +615,9 @@ describe("RecordingControlsOverlayService", () => {
     expect(recorderWindow.setBounds).not.toHaveBeenCalled();
     expect(service.setMode("minimized")).toBe("minimized");
     expect(recorderWindow.setBounds).toHaveBeenCalledWith({
-      x: 1664,
+      x: 1684,
       y: 24,
-      width: 236,
+      width: 216,
       height: 42,
     });
     expect(recorderWindow.webContents.send).toHaveBeenCalledWith(
@@ -626,9 +626,9 @@ describe("RecordingControlsOverlayService", () => {
     );
 
     recorderWindow.getBounds.mockReturnValue({
-      x: 1664,
+      x: 1684,
       y: 24,
-      width: 236,
+      width: 216,
       height: 42,
     });
 
@@ -648,9 +648,9 @@ describe("RecordingControlsOverlayService", () => {
     expect(service.setMode("minimized")).toBe("minimized");
     expect(service.getMode()).toBe("minimized");
     expect(service.createAnchorBounds()).toEqual({
-      x: 1664,
+      x: 1684,
       y: 24,
-      width: 236,
+      width: 216,
       height: 42,
     });
     expect(electronMocks.BrowserWindow).not.toHaveBeenCalled();

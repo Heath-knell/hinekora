@@ -225,7 +225,7 @@ export function createCoordinateReferenceDimensions(
 export const ProfileSchema = z.object({
   id: z.string().min(1).max(128),
   name: z.string().min(1).max(80),
-  game: GameIdSchema,
+  game: GameIdSchema.nullable(),
   targetFps: z.number().int().min(1).max(240),
   captureTarget: CaptureTargetSchema.nullable(),
   cropRegions: z.array(CropRegionSchema).max(256),
@@ -237,13 +237,14 @@ export type Profile = z.infer<typeof ProfileSchema>;
 
 export const ProfileCreateInputSchema = z.object({
   name: z.string().min(1).max(80),
-  game: GameIdSchema.default("poe1"),
+  game: GameIdSchema.nullable().default(null),
 });
-export type ProfileCreateInput = z.infer<typeof ProfileCreateInputSchema>;
+export type ProfileCreateInput = z.input<typeof ProfileCreateInputSchema>;
 
 export const ProfileUpdateInputSchema = z.object({
   id: z.string().min(1).max(128),
   name: z.string().min(1).max(80).optional(),
+  game: GameIdSchema.nullable().optional(),
   targetFps: z.number().int().min(1).max(240).optional(),
   captureTarget: CaptureTargetSchema.nullable().optional(),
   cropRegions: z.array(CropRegionSchema).max(256).optional(),
@@ -618,7 +619,7 @@ export function createDefaultProfile(input: ProfileCreateInput): Profile {
   return {
     id: crypto.randomUUID(),
     name: input.name,
-    game: input.game,
+    game: input.game ?? null,
     targetFps: 30,
     captureTarget: null,
     cropRegions: [],

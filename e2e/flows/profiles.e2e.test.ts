@@ -393,16 +393,7 @@ test("covers capture profile game switching, source sync, field persistence, and
   await lockCaptureProfile(page);
   const updateCountAfterLock = (await getDashboardE2ECalls(page))
     .captureProfileUpdates.length;
-  await page.getByRole("button", { name: "60 FPS" }).click();
-  await expect
-    .poll(async () => {
-      const calls = await getDashboardE2ECalls(page);
-
-      return calls.settingsUpdates;
-    })
-    .toEqual(
-      expect.arrayContaining([expect.objectContaining({ recordingFps: 60 })]),
-    );
+  await expect(page.getByRole("button", { name: "60 FPS" })).toBeDisabled();
   await flushDashboardAsyncWork(page);
   const callsAfterLockedSettingsUpdate = await getDashboardE2ECalls(page);
   expect(callsAfterLockedSettingsUpdate.captureProfileUpdates).toHaveLength(
@@ -502,8 +493,15 @@ for (const profileCase of settingsProfileCases) {
 
     const auraProfilesPanel = getProfilePanel(page, "Aura Profiles");
     await expect(
-      auraProfilesPanel.getByRole("button", { name: /^PoE [12]$/ }),
-    ).toHaveText(["PoE 1", "PoE 2"]);
+      auraProfilesPanel.getByRole("combobox", {
+        name: /^Game scope for /,
+      }),
+    ).toHaveCount(2);
+    await expect(
+      auraProfilesPanel.getByRole("combobox", {
+        name: `Game scope for ${profileCase.existingAuraName}`,
+      }),
+    ).toHaveValue("all");
     await expect(
       getProfileRow(auraProfilesPanel, profileCase.existingAuraName),
     ).toHaveClass(/border-primary/);
@@ -528,11 +526,16 @@ for (const profileCase of settingsProfileCases) {
       .toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            game: profileCase.game,
+            game: null,
             name: profileCase.auraName,
           }),
         ]),
       );
+    await expect(
+      auraProfilesPanel.getByRole("combobox", {
+        name: `Game scope for ${profileCase.auraName}`,
+      }),
+    ).toHaveValue("all");
 
     await auraProfilesPanel
       .getByRole("button", {

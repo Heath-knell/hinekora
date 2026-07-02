@@ -205,7 +205,10 @@ export function resolveCapturePreviewSourceId(
 ): string | null {
   const unavailableSelectedGame =
     getUnavailableGameWindowSourceGame(selectedSourceId);
-  if (unavailableSelectedGame) {
+  if (
+    unavailableSelectedGame &&
+    (!activeGame || unavailableSelectedGame === activeGame)
+  ) {
     const liveSelectedGameSource = findAvailableGameWindowSource(
       sources,
       unavailableSelectedGame,
@@ -219,7 +222,10 @@ export function resolveCapturePreviewSourceId(
     captureTarget,
     sources,
   );
-  if (profileSource) {
+  if (
+    profileSource &&
+    isCapturePreviewSourceCompatibleWithGame(profileSource, activeGame)
+  ) {
     return profileSource.id;
   }
 

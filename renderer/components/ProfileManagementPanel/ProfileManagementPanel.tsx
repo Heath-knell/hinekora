@@ -1,10 +1,10 @@
 import clsx from "clsx";
-import type { ChangeEvent, MouseEvent } from "react";
+import type { ChangeEvent, MouseEvent, ReactNode } from "react";
 import { useState } from "react";
 import { FiPlus as Plus, FiTrash2 as Trash } from "react-icons/fi";
 
 interface ProfileManagementPanelItem {
-  columns: string[];
+  columns: ReactNode[];
   deleteDisabledTitle?: string;
   id: string;
   isDeleteDisabled: boolean;

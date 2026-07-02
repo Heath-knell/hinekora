@@ -135,6 +135,7 @@ const poe2AltProfile = createProfile({
 describe("CaptureProfiles slice", () => {
   let captureProfilesChanged: ((profiles: CaptureProfile[]) => void) | null =
     null;
+  const createCaptureProfile = vi.fn();
   const deleteCaptureProfile = vi.fn();
   const listCaptureProfiles = vi.fn();
   const updateCaptureProfile = vi.fn();
@@ -142,6 +143,7 @@ describe("CaptureProfiles slice", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    createCaptureProfile.mockResolvedValue(poe1Profile);
     deleteCaptureProfile.mockResolvedValue(undefined);
     listCaptureProfiles.mockResolvedValue([
       poe1Profile,
@@ -155,6 +157,7 @@ describe("CaptureProfiles slice", () => {
       configurable: true,
       value: {
         captureProfiles: {
+          create: createCaptureProfile,
           delete: deleteCaptureProfile,
           list: listCaptureProfiles,
           onChanged: (callback: (profiles: CaptureProfile[]) => void) => {
@@ -238,6 +241,238 @@ describe("CaptureProfiles slice", () => {
         activeGame: "poe2",
         selectedCaptureProfileId: "poe2",
       }),
+    );
+  });
+
+  it("stores hydrate errors", async () => {
+    listCaptureProfiles.mockRejectedValueOnce(
+      new Error("profiles unavailable"),
+    );
+    const store = createTestStore();
+
+    await store.getState().captureProfiles.hydrate();
+
+    expect(store.getState().captureProfiles).toMatchObject({
+      error: "profiles unavailable",
+      isLoading: false,
+    });
+  });
+
+  it("stores fallback hydrate errors for unknown failures", async () => {
+    listCaptureProfiles.mockRejectedValueOnce("blocked");
+    const store = createTestStore();
+
+    await store.getState().captureProfiles.hydrate();
+
+    expect(store.getState().captureProfiles).toMatchObject({
+      error: "Load failed",
+      isLoading: false,
+    });
+  });
+
+  it("hydrates with default game fallback when settings are not loaded", async () => {
+    const store = createTestStore();
+    store.setState((state) => ({
+      settings: {
+        ...state.settings,
+        value: null,
+      },
+    }));
+
+    await store.getState().captureProfiles.hydrate();
+
+    expect(store.getState().captureProfiles.selectedProfileId).toBe(
+      poe1Profile.id,
+    );
+    expect(updateSettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        activeGame: "poe1",
+        selectedCaptureProfileId: poe1Profile.id,
+      }),
+    );
+  });
+
+  it("ignores invalid persisted per-game profile memory while hydrating", async () => {
+    const store = createTestStore();
+    store.setState((state) => ({
+      settings: {
+        ...state.settings,
+        value: {
+          ...state.settings.value!,
+          activeGame: "poe2",
+          selectedCaptureProfileId: null,
+          selectedCaptureProfileIdsByGame: {
+            poe1: null,
+            poe2: "missing-profile",
+          },
+        },
+      },
+    }));
+
+    await store.getState().captureProfiles.hydrate();
+
+    expect(store.getState().captureProfiles.selectedProfileId).toBe(
+      poe2Profile.id,
+    );
+  });
+
+  it("hydrates with a cross-game fallback when the active game has no profile", async () => {
+    listCaptureProfiles.mockResolvedValueOnce([poe1Profile]);
+    const store = createTestStore();
+    store.setState((state) => ({
+      settings: {
+        ...state.settings,
+        value: {
+          ...state.settings.value!,
+          activeGame: "poe2",
+          selectedCaptureProfileId: null,
+        },
+      },
+    }));
+
+    await store.getState().captureProfiles.hydrate();
+
+    expect(store.getState().captureProfiles.selectedProfileId).toBe(
+      poe1Profile.id,
+    );
+  });
+
+  it("hydrates with no selected profile when no profiles exist", async () => {
+    listCaptureProfiles.mockResolvedValueOnce([]);
+    const store = createTestStore();
+
+    await store.getState().captureProfiles.hydrate();
+
+    expect(store.getState().captureProfiles.selectedProfileId).toBeNull();
+  });
+
+  it("creates a profile for the active game and selects it", async () => {
+    const createdProfile = createProfile({
+      game: "poe2",
+      id: "poe2-created",
+      name: "Bossing",
+    });
+    createCaptureProfile.mockResolvedValueOnce(createdProfile);
+    listCaptureProfiles.mockResolvedValueOnce([
+      poe1Profile,
+      poe2Profile,
+      poe2AltProfile,
+      createdProfile,
+    ]);
+    const store = createTestStore();
+    store.setState((state) => ({
+      settings: {
+        ...state.settings,
+        value: {
+          ...state.settings.value!,
+          activeGame: "poe2",
+        },
+      },
+    }));
+
+    await store.getState().captureProfiles.create("Bossing");
+
+    expect(createCaptureProfile).toHaveBeenCalledWith({
+      game: "poe2",
+      name: "Bossing",
+    });
+    expect(store.getState().captureProfiles.selectedProfileId).toBe(
+      "poe2-created",
+    );
+    expect(updateSettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        activeGame: "poe2",
+        selectedCaptureProfileId: "poe2-created",
+      }),
+    );
+  });
+
+  it("creates a profile with the default game when settings are not loaded", async () => {
+    const store = createTestStore();
+    store.setState((state) => ({
+      settings: {
+        ...state.settings,
+        value: null,
+      },
+    }));
+
+    await store.getState().captureProfiles.create("Leveling");
+
+    expect(createCaptureProfile).toHaveBeenCalledWith({
+      game: "poe1",
+      name: "Leveling",
+    });
+  });
+
+  it("updates the selected profile and reapplies its settings", async () => {
+    const updatedProfile = {
+      ...poe1Profile,
+      recordingFps: 30,
+    };
+    updateCaptureProfile.mockResolvedValueOnce(updatedProfile);
+    listCaptureProfiles.mockResolvedValueOnce([
+      updatedProfile,
+      poe2Profile,
+      poe2AltProfile,
+    ]);
+    const store = createTestStore();
+
+    await store
+      .getState()
+      .captureProfiles.update({ id: poe1Profile.id, recordingFps: 30 });
+
+    expect(store.getState().captureProfiles.items[0]?.recordingFps).toBe(30);
+    expect(store.getState().captureProfiles.selectedProfileId).toBe(
+      poe1Profile.id,
+    );
+    expect(updateSettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        recordingFps: 30,
+        selectedCaptureProfileId: poe1Profile.id,
+      }),
+    );
+  });
+
+  it("updates an inactive profile without changing selection", async () => {
+    const updatedProfile = {
+      ...poe2AltProfile,
+      recordingFps: 30,
+    };
+    updateCaptureProfile.mockResolvedValueOnce(updatedProfile);
+    listCaptureProfiles.mockResolvedValueOnce([
+      poe1Profile,
+      poe2Profile,
+      updatedProfile,
+    ]);
+    const store = createTestStore();
+
+    await store
+      .getState()
+      .captureProfiles.update({ id: poe2AltProfile.id, recordingFps: 30 });
+
+    expect(store.getState().captureProfiles.selectedProfileId).toBe(
+      poe1Profile.id,
+    );
+    expect(updateSettings).not.toHaveBeenCalled();
+  });
+
+  it("reports missing profiles for profile-only selection", () => {
+    const store = createTestStore();
+
+    store.getState().captureProfiles.select("missing-profile");
+
+    expect(store.getState().captureProfiles.error).toBe(
+      "Capture profile not found",
+    );
+  });
+
+  it("reports missing profiles for profile and preview-source selection", () => {
+    const store = createTestStore();
+
+    store.getState().captureProfiles.selectWithPreviewSource("missing-profile");
+
+    expect(store.getState().captureProfiles.error).toBe(
+      "Capture profile not found",
     );
   });
 
@@ -326,6 +561,36 @@ describe("CaptureProfiles slice", () => {
     expect(updateSettings).not.toHaveBeenCalled();
   });
 
+  it("restores the persisted selected capture profile even when active game is stale", async () => {
+    const store = createTestStore();
+    store.setState((state) => ({
+      settings: {
+        ...state.settings,
+        value: {
+          ...createDefaultSettings(),
+          activeGame: "poe1",
+          selectedCaptureProfileId: "poe2-alt",
+          selectedCaptureProfileIdsByGame: {
+            poe2: "poe2-alt",
+          },
+        },
+      },
+    }));
+
+    await store.getState().captureProfiles.hydrate();
+
+    expect(store.getState().captureProfiles.selectedProfileId).toBe("poe2-alt");
+    expect(updateSettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        activeGame: "poe2",
+        selectedCaptureProfileId: "poe2-alt",
+        selectedCaptureProfileIdsByGame: {
+          poe2: "poe2-alt",
+        },
+      }),
+    );
+  });
+
   it("removes a deleted inactive profile from persisted per-game memory", async () => {
     const store = createTestStore();
     store.setState((state) => ({
@@ -345,6 +610,51 @@ describe("CaptureProfiles slice", () => {
     await store.getState().captureProfiles.delete(poe2AltProfile.id);
 
     expect(deleteCaptureProfile).toHaveBeenCalledWith(poe2AltProfile.id);
+    expect(updateSettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        selectedCaptureProfileId: poe1Profile.id,
+        selectedCaptureProfileIdsByGame: {
+          poe1: poe1Profile.id,
+        },
+      }),
+    );
+  });
+
+  it("falls back after deleting the selected profile", async () => {
+    const store = createTestStore();
+    listCaptureProfiles.mockResolvedValueOnce([poe2Profile]);
+
+    await store.getState().captureProfiles.delete(poe1Profile.id);
+
+    expect(store.getState().captureProfiles.selectedProfileId).toBe(
+      poe2Profile.id,
+    );
+  });
+
+  it("clears selection after deleting the last selected profile", async () => {
+    const store = createTestStore();
+    store.setState((state) => ({
+      settings: {
+        ...state.settings,
+        value: null,
+      },
+    }));
+    listCaptureProfiles.mockResolvedValueOnce([]);
+
+    await store.getState().captureProfiles.delete(poe1Profile.id);
+
+    expect(store.getState().captureProfiles.selectedProfileId).toBeNull();
+  });
+
+  it("prunes remembered profiles that disappear from the profile list", async () => {
+    const store = createTestStore();
+
+    store.getState().captureProfiles.select("poe2-alt");
+    store.getState().captureProfiles.select("poe1");
+    listCaptureProfiles.mockResolvedValueOnce([poe1Profile, poe2Profile]);
+
+    await store.getState().captureProfiles.delete(poe2AltProfile.id);
+
     expect(updateSettings).toHaveBeenLastCalledWith(
       expect.objectContaining({
         selectedCaptureProfileId: poe1Profile.id,
@@ -388,6 +698,63 @@ describe("CaptureProfiles slice", () => {
     );
   });
 
+  it("stores game-switch persistence errors", async () => {
+    updateSettings.mockRejectedValueOnce(new Error("settings offline"));
+    const store = createTestStore();
+    store.setState((state) => ({
+      captureProfiles: {
+        ...state.captureProfiles,
+        items: [poe1Profile],
+      },
+    }));
+
+    await store.getState().captureProfiles.selectForGame("poe2");
+
+    expect(store.getState().captureProfiles.error).toBe("settings offline");
+  });
+
+  it("stores fallback game-switch persistence errors", async () => {
+    updateSettings.mockRejectedValueOnce("failed");
+    const store = createTestStore();
+    store.setState((state) => ({
+      captureProfiles: {
+        ...state.captureProfiles,
+        items: [poe1Profile],
+      },
+    }));
+
+    await store.getState().captureProfiles.selectForGame("poe2");
+
+    expect(store.getState().captureProfiles.error).toBe(
+      "Unable to persist selected capture profile",
+    );
+  });
+
+  it("can switch games without loaded settings or a matching profile", async () => {
+    const store = createTestStore();
+    store.setState((state) => ({
+      captureProfiles: {
+        ...state.captureProfiles,
+        items: [poe1Profile],
+      },
+      settings: {
+        ...state.settings,
+        value: null,
+      },
+    }));
+
+    await store.getState().captureProfiles.selectForGame("poe2");
+
+    expect(store.getState().captureProfiles.selectedProfileId).toBeNull();
+    expect(updateSettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        activeGame: "poe2",
+        selectedCaptureProfileId: null,
+        selectedCaptureProfileIdsByGame: {},
+      }),
+    );
+  });
+
   it("saves current settings into the selected profile when unlocked", async () => {
     const store = createTestStore();
     updateCaptureProfile.mockResolvedValue({
@@ -425,9 +792,151 @@ describe("CaptureProfiles slice", () => {
     expect(store.getState().captureProfiles.items[0]?.recordingFps).toBe(30);
   });
 
+  it("saves unlocked profile settings without a capture target when no source is selected", async () => {
+    const store = createTestStore();
+    store.setState((state) => ({
+      capturePreview: {
+        ...state.capturePreview,
+        selectedSourceId: "missing-source",
+      },
+    }));
+
+    store.getState().captureProfiles.setProfileUnlocked(true);
+
+    await vi.waitFor(() => {
+      expect(updateCaptureProfile).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          captureTarget: expect.anything(),
+        }),
+      );
+    });
+  });
+
+  it("saves unlocked profile settings without a target for another game's source", async () => {
+    const store = createTestStore();
+    store.setState((state) => ({
+      capturePreview: {
+        ...state.capturePreview,
+        selectedSourceId: "window:poe2",
+        sources: [
+          ...state.capturePreview.sources,
+          {
+            available: true,
+            displayId: null,
+            game: "poe2",
+            height: 1440,
+            id: "window:poe2",
+            kind: "window",
+            name: "Path of Exile 2",
+            thumbnailDataUrl: null,
+            width: 2560,
+          },
+        ],
+      },
+    }));
+
+    store.getState().captureProfiles.setProfileUnlocked(true);
+
+    await vi.waitFor(() => {
+      expect(updateCaptureProfile).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          captureTarget: expect.anything(),
+        }),
+      );
+    });
+  });
+
+  it("keeps unlocked persistence selection when the updated profile is not listed", async () => {
+    updateCaptureProfile.mockResolvedValueOnce({
+      ...poe1Profile,
+      id: "poe1-recreated",
+    });
+    const store = createTestStore();
+
+    store.getState().captureProfiles.setProfileUnlocked(true);
+
+    await vi.waitFor(() => {
+      expect(store.getState().captureProfiles.selectedProfileId).toBe(
+        "poe1-recreated",
+      );
+    });
+  });
+
+  it("toggles profile lock state", async () => {
+    const store = createTestStore();
+
+    store.getState().captureProfiles.toggleProfileLock();
+
+    await vi.waitFor(() => {
+      expect(updateCaptureProfile).toHaveBeenCalled();
+    });
+    expect(store.getState().captureProfiles.isProfileUnlocked).toBe(true);
+
+    store.getState().captureProfiles.toggleProfileLock();
+
+    expect(store.getState().captureProfiles.isProfileUnlocked).toBe(false);
+  });
+
+  it("skips unlocked persistence when no profile is selected", async () => {
+    const store = createTestStore();
+    store.setState((state) => ({
+      captureProfiles: {
+        ...state.captureProfiles,
+        selectedProfileId: null,
+      },
+    }));
+
+    store.getState().captureProfiles.setProfileUnlocked(true);
+    await Promise.resolve();
+
+    expect(updateCaptureProfile).not.toHaveBeenCalled();
+    expect(store.getState().captureProfiles.isProfileUnlocked).toBe(true);
+  });
+
+  it("skips unlocked persistence when the selected profile is stale", async () => {
+    const store = createTestStore();
+    store.setState((state) => ({
+      captureProfiles: {
+        ...state.captureProfiles,
+        items: [poe2Profile],
+      },
+    }));
+
+    store.getState().captureProfiles.setProfileUnlocked(true);
+    await Promise.resolve();
+
+    expect(updateCaptureProfile).not.toHaveBeenCalled();
+    expect(store.getState().captureProfiles.isProfileUnlocked).toBe(true);
+  });
+
+  it("stores unlocked profile persistence errors", async () => {
+    updateCaptureProfile.mockRejectedValueOnce(new Error("save failed"));
+    const store = createTestStore();
+
+    store.getState().captureProfiles.setProfileUnlocked(true);
+
+    await vi.waitFor(() => {
+      expect(store.getState().captureProfiles.error).toBe("save failed");
+    });
+  });
+
+  it("stores fallback unlocked profile persistence errors", async () => {
+    updateCaptureProfile.mockRejectedValueOnce("failed");
+    const store = createTestStore();
+
+    store.getState().captureProfiles.setProfileUnlocked(true);
+
+    await vi.waitFor(() => {
+      expect(store.getState().captureProfiles.error).toBe(
+        "Unable to update selected capture profile",
+      );
+    });
+  });
+
   it.each([
     ["rewind is active", { bufferActive: true }],
     ["run recording is active", { runRecordingActive: true }],
+    ["recording is active", { recording: true }],
     ["recording is starting", { isStartingRecording: true }],
     ["recording is stopping", { isStoppingRecording: true }],
   ] satisfies Array<
@@ -472,6 +981,71 @@ describe("CaptureProfiles slice", () => {
     expect(store.getState().captureProfiles.items[0]?.recordingFps).toBe(60);
   });
 
+  it("ignores stale selected profile persistence failures", async () => {
+    let rejectFirstUpdate: (error: unknown) => void = () => undefined;
+    const firstUpdate = new Promise<CaptureProfile>((_resolve, reject) => {
+      rejectFirstUpdate = reject;
+    });
+    updateSettings
+      .mockReturnValueOnce(firstUpdate)
+      .mockResolvedValueOnce(undefined);
+    const store = createTestStore();
+
+    store.getState().captureProfiles.select("poe2");
+    store.getState().captureProfiles.select("poe1");
+    rejectFirstUpdate(new Error("stale failure"));
+    await Promise.resolve();
+
+    expect(store.getState().captureProfiles.error).toBeNull();
+  });
+
+  it("stores selected profile persistence errors", async () => {
+    updateSettings.mockRejectedValueOnce(new Error("profile settings failed"));
+    const store = createTestStore();
+
+    store.getState().captureProfiles.select("poe2");
+
+    await vi.waitFor(() => {
+      expect(store.getState().captureProfiles.error).toBe(
+        "profile settings failed",
+      );
+    });
+  });
+
+  it("stores fallback selected profile persistence errors", async () => {
+    updateSettings.mockRejectedValueOnce("failed");
+    const store = createTestStore();
+
+    store.getState().captureProfiles.select("poe2");
+
+    await vi.waitFor(() => {
+      expect(store.getState().captureProfiles.error).toBe(
+        "Unable to persist selected capture profile",
+      );
+    });
+  });
+
+  it("applies selected profile settings when settings are not loaded", async () => {
+    const store = createTestStore();
+    store.setState((state) => ({
+      settings: {
+        ...state.settings,
+        value: null,
+      },
+    }));
+
+    store.getState().captureProfiles.select("poe2");
+
+    await vi.waitFor(() => {
+      expect(updateSettings).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          activeGame: "poe2",
+          selectedCaptureProfileId: "poe2",
+        }),
+      );
+    });
+  });
+
   it("keeps the current selected profile when profile changes arrive before settings catch up", async () => {
     const store = createTestStore();
     store.setState((state) => ({
@@ -513,5 +1087,81 @@ describe("CaptureProfiles slice", () => {
         }),
       );
     });
+  });
+
+  it("falls back to the active game profile when the selected profile disappears", async () => {
+    const store = createTestStore();
+    store.setState((state) => ({
+      captureProfiles: {
+        ...state.captureProfiles,
+        selectedProfileId: poe2AltProfile.id,
+      },
+      settings: {
+        ...state.settings,
+        value: {
+          ...state.settings.value!,
+          activeGame: "poe2",
+          selectedCaptureProfileId: poe2AltProfile.id,
+        },
+      },
+    }));
+    store.getState().captureProfiles.startListening();
+
+    captureProfilesChanged?.([poe1Profile, poe2Profile]);
+
+    expect(store.getState().captureProfiles.selectedProfileId).toBe(
+      poe2Profile.id,
+    );
+    await vi.waitFor(() => {
+      expect(updateSettings).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          selectedCaptureProfileId: poe2Profile.id,
+        }),
+      );
+    });
+  });
+
+  it("clears selection when changed profiles contain no fallback", () => {
+    const store = createTestStore();
+    store.setState((state) => ({
+      captureProfiles: {
+        ...state.captureProfiles,
+        selectedProfileId: poe2AltProfile.id,
+      },
+      settings: {
+        ...state.settings,
+        value: {
+          ...state.settings.value!,
+          activeGame: "poe2",
+          selectedCaptureProfileId: poe2AltProfile.id,
+        },
+      },
+    }));
+    store.getState().captureProfiles.startListening();
+
+    captureProfilesChanged?.([]);
+
+    expect(store.getState().captureProfiles.selectedProfileId).toBeNull();
+  });
+
+  it("uses default game fallback when profile changes arrive before settings load", () => {
+    const store = createTestStore();
+    store.setState((state) => ({
+      captureProfiles: {
+        ...state.captureProfiles,
+        selectedProfileId: "missing-profile",
+      },
+      settings: {
+        ...state.settings,
+        value: null,
+      },
+    }));
+    store.getState().captureProfiles.startListening();
+
+    captureProfilesChanged?.([poe1Profile]);
+
+    expect(store.getState().captureProfiles.selectedProfileId).toBe(
+      poe1Profile.id,
+    );
   });
 });

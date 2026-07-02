@@ -434,6 +434,8 @@ async function setupEditorE2E(page: Page) {
         recordingStatus,
       } = fixture;
       const settings = { ...fixture.settings };
+      let settingsChangedListener: ((settings: AppSettings) => void) | null =
+        null;
       const secondaryProject = fixture.secondaryProject;
       const unsubscribe = () => undefined;
       const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
@@ -896,9 +898,15 @@ async function setupEditorE2E(page: Page) {
           "settings",
           {
             get: async () => clone(settings),
+            onChanged: (callback) => {
+              settingsChangedListener = callback;
+
+              return unsubscribe;
+            },
             update: async (input: Partial<typeof settings>) => {
               state.settingsUpdates.push(clone(input));
               Object.assign(settings, input);
+              settingsChangedListener?.(clone(settings));
 
               return clone(settings);
             },

@@ -49,6 +49,7 @@ class PoeProcessService {
     );
     this.setupPollerListeners();
     this.setupHandlers();
+    this.setupSettingsListener();
     this.setupPowerMonitor();
   }
 
@@ -149,9 +150,25 @@ class PoeProcessService {
   private setupHandlers(): void {
     registerGuardedIpcHandler(
       PoeProcessChannel.IsRunning,
-      [WindowName.Main],
+      [WindowName.Main, WindowName.AuraOverlay],
       () => this.getState(),
     );
+  }
+
+  private setupSettingsListener(): void {
+    const settingsStore = SettingsStoreService.getInstance();
+    let previousActiveGame = settingsStore.get().activeGame;
+
+    settingsStore.onDidChange((settings) => {
+      if (settings.activeGame === previousActiveGame) {
+        return;
+      }
+
+      previousActiveGame = settings.activeGame;
+      this.syncGameRunningConsumers();
+      this.sendToRenderer(PoeProcessChannel.GetState, this.currentState);
+      this.requestCapturePreviewRefresh();
+    });
   }
 
   private setupPowerMonitor(): void {

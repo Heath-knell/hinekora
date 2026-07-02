@@ -18,6 +18,7 @@ import {
 } from "./bridge-fixture";
 
 interface AuraOverlayE2ECalls {
+  captureConstraintSourceIds: string[];
   profileUpdates: ProfileUpdateInput[];
   selectCropRegionCalls: SelectCropRegionOptions[];
   settingsReads: number;
@@ -34,6 +35,8 @@ interface AuraOverlayE2EFixture {
 }
 
 interface AuraOverlayE2EOptions {
+  captureSources?: CapturePreviewSource[];
+  noCaptureTarget?: boolean;
   overlapHelpWithArchedAura?: boolean;
   withArchedAura?: boolean;
 }
@@ -85,16 +88,19 @@ function createAuraOverlayE2EProfile(options: AuraOverlayE2EOptions): Profile {
       : [];
 
   return {
-    captureTarget: {
-      height: 1080,
-      id: "1",
-      kind: "display",
-      label: "Screen 1 (Display Model)",
-      width: 1920,
-    },
+    captureTarget:
+      options.noCaptureTarget === true
+        ? null
+        : {
+            height: 1080,
+            id: "1",
+            kind: "display",
+            label: "Screen 1 (Display Model)",
+            width: 1920,
+          },
     createdAt: auraOverlayE2ENow,
     cropRegions,
-    game: "poe2",
+    game: null,
     id: "profile-1",
     name: "PoE 2",
     overlayPlacements,
@@ -107,7 +113,7 @@ function createAuraOverlayE2EFixture(
   options: AuraOverlayE2EOptions = {},
 ): AuraOverlayE2EFixture {
   return {
-    captureSources: [
+    captureSources: options.captureSources ?? [
       {
         displayId: "1",
         height: 1080,
@@ -196,6 +202,7 @@ async function setupAuraOverlayE2E(
       let profile = clone(fixture.profile);
       let settings = clone(fixture.settings);
       const calls: AuraOverlayE2ECalls = {
+        captureConstraintSourceIds: [],
         profileUpdates: [],
         selectCropRegionCalls: [],
         settingsReads: 0,
@@ -209,6 +216,7 @@ async function setupAuraOverlayE2E(
         }) => void;
         auraLock?: (locked: boolean) => void;
         profilesChanged?: (profiles: Profile[]) => void;
+        settingsChanged?: (settings: AppSettings) => void;
       } = {};
       const createBridgeDomain = <TBridge extends object>(
         domain: string,
@@ -224,7 +232,16 @@ async function setupAuraOverlayE2E(
       Object.defineProperty(navigator, "mediaDevices", {
         configurable: true,
         value: {
-          getUserMedia: async () => new MediaStream(),
+          getUserMedia: async (constraints: MediaStreamConstraints) => {
+            const sourceId = (
+              constraints.video as {
+                mandatory?: { chromeMediaSourceId?: string };
+              }
+            )?.mandatory?.chromeMediaSourceId;
+            calls.captureConstraintSourceIds.push(sourceId ?? "");
+
+            return new MediaStream();
+          },
         },
       });
       HTMLMediaElement.prototype.play = async function play() {
@@ -270,6 +287,23 @@ async function setupAuraOverlayE2E(
             listeners.auraLock?.(locked);
           },
         }),
+        poeProcess: createBridgeDomain<AuraOverlayE2EElectron["poeProcess"]>(
+          "poeProcess",
+          {
+            getState: async () => ({
+              game: settings.activeGame,
+              isRunning: true,
+              processName:
+                settings.activeGame === "poe2"
+                  ? "PathOfExileSteam.exe"
+                  : "PathOfExile.exe",
+            }),
+            onError: () => unsubscribe,
+            onStart: () => unsubscribe,
+            onState: () => unsubscribe,
+            onStop: () => unsubscribe,
+          },
+        ),
         profiles: createBridgeDomain<AuraOverlayE2EElectron["profiles"]>(
           "profiles",
           {
@@ -305,12 +339,18 @@ async function setupAuraOverlayE2E(
 
               return clone(settings);
             },
+            onChanged: (callback) => {
+              listeners.settingsChanged = callback;
+
+              return unsubscribe;
+            },
             update: async (input) => {
               calls.settingsUpdates.push(clone(input));
               settings = {
                 ...settings,
                 ...input,
               };
+              listeners.settingsChanged?.(clone(settings));
 
               return clone(settings);
             },

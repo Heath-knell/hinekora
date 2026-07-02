@@ -1,4 +1,4 @@
-import { expect, type Locator, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 
 import type { PoeProcessState } from "../../main/modules/poe-process/PoeProcess.dto";
 import type { CapturePreviewSource, GameId } from "../../types";
@@ -115,6 +115,21 @@ async function openLivePreviewSourceSelect(sourceSelect: Locator) {
   );
 }
 
+async function unlockCaptureProfile(page: Page): Promise<void> {
+  const settingsPanel = page.locator('[data-onboarding="capture-settings"]');
+  const unlockChip = settingsPanel
+    .getByRole("button", { name: "Unlock capture profile" })
+    .filter({ hasText: "Locked" });
+
+  await expect(unlockChip).toBeVisible();
+  await unlockChip.click();
+  await expect(
+    settingsPanel
+      .getByRole("button", { name: "Lock capture profile" })
+      .filter({ hasText: "Unlocked" }),
+  ).toBeVisible();
+}
+
 test.afterEach(async ({ page }) => {
   await expectNoUnexpectedDashboardBridgeCalls(page);
 });
@@ -212,6 +227,7 @@ test("covers unavailable PoE live preview sources and auto-start alerts", async 
   const recordingSettingsTabs = page.getByRole("tablist", {
     name: "Recording settings",
   });
+  await unlockCaptureProfile(page);
   await recordingSettingsTabs.getByRole("tab", { name: "Rewind" }).click();
   await page.getByLabel("Start rewind automatically").check();
   await expect(
@@ -466,6 +482,7 @@ test("covers recorder mode, capture settings, and audio settings interactions", 
     })
     .toBe(1);
 
+  await unlockCaptureProfile(page);
   await page
     .getByRole("combobox", { name: /^Resolution/ })
     .selectOption("1920x1080");

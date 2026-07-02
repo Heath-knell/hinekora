@@ -5,11 +5,32 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const storeMocks = vi.hoisted(() => ({
   autoStartMode: "off",
   hideOverlaysFromRecording: true,
+  isProfileUnlocked: true,
+  isRewindActive: false,
+  isRunRecordingActive: false,
+  isStartingRecording: false,
+  isStoppingRecording: false,
+  selectedProfileId: "capture-profile-1" as string | null,
   updateSettings: vi.fn(),
   useSettingsShallow: vi.fn(),
 }));
 
 vi.mock("~/renderer/store", () => ({
+  useCaptureProfilesShallow: (selector: (state: unknown) => unknown) =>
+    selector({
+      isProfileUnlocked: storeMocks.isProfileUnlocked,
+      selectedProfileId: storeMocks.selectedProfileId,
+    }),
+  useManagedRecorderShallow: (selector: (state: unknown) => unknown) =>
+    selector({
+      status: {
+        bufferActive: storeMocks.isRewindActive,
+        isStartingRecording: storeMocks.isStartingRecording,
+        isStoppingRecording: storeMocks.isStoppingRecording,
+        recording: storeMocks.isRunRecordingActive,
+        runRecordingActive: storeMocks.isRunRecordingActive,
+      },
+    }),
   useSettingsShallow: storeMocks.useSettingsShallow,
 }));
 
@@ -42,6 +63,12 @@ describe("ManagedRecorderRecordingSettingsFields", () => {
     root = createRoot(container);
     storeMocks.autoStartMode = "off";
     storeMocks.hideOverlaysFromRecording = true;
+    storeMocks.isProfileUnlocked = true;
+    storeMocks.isRewindActive = false;
+    storeMocks.isRunRecordingActive = false;
+    storeMocks.isStartingRecording = false;
+    storeMocks.isStoppingRecording = false;
+    storeMocks.selectedProfileId = "capture-profile-1";
     storeMocks.updateSettings.mockReset();
     storeMocks.updateSettings.mockResolvedValue(undefined);
     storeMocks.useSettingsShallow.mockImplementation((selector) =>
@@ -107,5 +134,33 @@ describe("ManagedRecorderRecordingSettingsFields", () => {
     expect(storeMocks.updateSettings).toHaveBeenCalledWith({
       recordingAutoStartMode: "off",
     });
+  });
+
+  it("disables recording settings while the selected profile is locked", async () => {
+    storeMocks.isProfileUnlocked = false;
+
+    await renderFields();
+
+    expect(getCheckbox("Start recording automatically").disabled).toBe(true);
+    expect(getCheckbox("Hide Hinekora overlays from recording").disabled).toBe(
+      true,
+    );
+
+    await act(async () => {
+      getCheckbox("Start recording automatically").click();
+    });
+
+    expect(storeMocks.updateSettings).not.toHaveBeenCalled();
+  });
+
+  it("disables recording settings while rewind is active", async () => {
+    storeMocks.isRewindActive = true;
+
+    await renderFields();
+
+    expect(getCheckbox("Start recording automatically").disabled).toBe(true);
+    expect(getCheckbox("Hide Hinekora overlays from recording").disabled).toBe(
+      true,
+    );
   });
 });

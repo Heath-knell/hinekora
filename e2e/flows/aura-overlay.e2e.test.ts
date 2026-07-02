@@ -112,6 +112,63 @@ test("edits an arched aura through the overlay workflow", async ({ page }) => {
     .toBe(32);
 });
 
+test("uses the persisted active game source for global aura profiles", async ({
+  page,
+}) => {
+  await setupAuraOverlayE2E(page, {
+    captureSources: [
+      {
+        available: true,
+        displayId: null,
+        game: "poe2",
+        height: 1080,
+        id: "window:poe2:game",
+        kind: "window",
+        name: "Path of Exile 2",
+        thumbnailDataUrl: null,
+        width: 1920,
+      },
+    ],
+    noCaptureTarget: true,
+    withArchedAura: true,
+  });
+
+  await expect
+    .poll(async () => {
+      const calls = await getAuraOverlayE2ECalls(page);
+
+      return calls.captureConstraintSourceIds.at(-1);
+    })
+    .toBe("window:poe2:game");
+});
+
+test("keeps the aura overlay document transparent", async ({ page }) => {
+  await setupAuraOverlayE2E(page, { withArchedAura: true });
+
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const root = document.getElementById("root");
+        const overlay = document.querySelector<HTMLElement>(
+          '[aria-label="Aura overlay"]',
+        );
+
+        return {
+          body: getComputedStyle(document.body).backgroundColor,
+          html: getComputedStyle(document.documentElement).backgroundColor,
+          overlay: overlay ? getComputedStyle(overlay).backgroundColor : null,
+          root: root ? getComputedStyle(root).backgroundColor : null,
+        };
+      }),
+    )
+    .toEqual({
+      body: "rgba(0, 0, 0, 0)",
+      html: "rgba(0, 0, 0, 0)",
+      overlay: "rgba(0, 0, 0, 0)",
+      root: "rgba(0, 0, 0, 0)",
+    });
+});
+
 test("shows aura controls help above selected aura controls", async ({
   page,
 }) => {

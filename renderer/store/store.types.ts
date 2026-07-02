@@ -113,7 +113,7 @@ export interface CapturePreviewSlice {
     getThumbnail: (sourceId: string) => Promise<string | null>;
     refresh: (options?: { force?: boolean }) => Promise<void>;
     select: (id: string) => void;
-    startListening: () => () => void;
+    startListening: (options?: { refreshOnStart?: boolean }) => () => void;
   };
 }
 
@@ -136,6 +136,7 @@ export interface SettingsSlice {
   settings: {
     value: AppSettings | null;
     hydrate: () => Promise<void>;
+    startListening: () => () => void;
     update: (input: Partial<AppSettings>) => Promise<void>;
   };
 }

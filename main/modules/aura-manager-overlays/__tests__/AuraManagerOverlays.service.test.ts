@@ -30,6 +30,9 @@ const electronMocks = vi.hoisted(() => {
     isPackaged: true,
   };
 });
+const settingsStoreMocks = vi.hoisted(() => ({
+  get: vi.fn(),
+}));
 
 vi.mock("electron", () => ({
   app: {
@@ -40,6 +43,14 @@ vi.mock("electron", () => ({
   BrowserWindow: electronMocks.BrowserWindow,
   screen: {
     getPrimaryDisplay: electronMocks.getPrimaryDisplay,
+  },
+}));
+
+vi.mock("~/main/modules/settings-store", () => ({
+  SettingsStoreService: {
+    getInstance: () => ({
+      get: settingsStoreMocks.get,
+    }),
   },
 }));
 
@@ -60,7 +71,7 @@ function createDisplay() {
 
 function createAuraProfile(update: Partial<Profile> = {}): Profile {
   const profile = {
-    ...createDefaultProfile({ name: "Default", game: "poe1" }),
+    ...createDefaultProfile({ name: "Default" }),
     id: "profile-1",
     cropRegions: [
       {
@@ -122,6 +133,7 @@ async function flushTimers(): Promise<void> {
 beforeEach(() => {
   electronMocks.getAllWindows.mockReturnValue([]);
   electronMocks.getPrimaryDisplay.mockReturnValue(createDisplay());
+  settingsStoreMocks.get.mockReturnValue({ activeGame: "poe1" });
 });
 
 afterEach(() => {
@@ -130,6 +142,7 @@ afterEach(() => {
   electronMocks.getAllWindows.mockReset();
   electronMocks.getPrimaryDisplay.mockReset();
   electronMocks.isPackaged = true;
+  settingsStoreMocks.get.mockReset();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -716,10 +729,15 @@ describe("AuraManagerOverlaysService", () => {
     expect(auraWindow.setIgnoreMouseEvents).toHaveBeenCalledWith(true);
   });
 
-  it("uses the first profile when no profile id is provided", async () => {
-    const profile = createAuraProfile();
+  it("uses the first renderable profile when no profile id is provided", async () => {
+    const emptyProfile = createAuraProfile({
+      cropRegions: [],
+      id: "empty-profile",
+      overlayPlacements: [],
+    });
+    const profile = createAuraProfile({ id: "profile-1" });
     vi.spyOn(ProfilesService, "getInstance").mockReturnValue({
-      list: () => [profile],
+      list: () => [emptyProfile, profile],
       update: vi.fn(),
     } as unknown as ProfilesService);
     const auraWindow = createFakeWindow();

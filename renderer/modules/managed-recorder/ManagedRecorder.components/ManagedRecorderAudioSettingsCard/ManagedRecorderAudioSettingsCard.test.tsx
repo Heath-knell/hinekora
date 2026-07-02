@@ -15,18 +15,22 @@ import type { ManagedRecorderAudioDevices } from "~/main/modules/managed-recorde
 import type { ManagedRecorderStatus } from "~/types";
 
 const storeMocks = vi.hoisted(() => ({
+  isProfileUnlocked: true,
+  selectedProfileId: "capture-profile-1" as string | null,
   settingsValue: {
     recordingAudioInputDeviceId: null as string | null,
     recordingAudioOutputDeviceId: null as string | null,
   },
   status: null as ManagedRecorderStatus | null,
   updateSettings: vi.fn(),
-  useManagedRecorderSelector: vi.fn(),
+  useCaptureProfilesShallow: vi.fn(),
+  useManagedRecorderShallow: vi.fn(),
   useSettingsShallow: vi.fn(),
 }));
 
 vi.mock("~/renderer/store", () => ({
-  useManagedRecorderSelector: storeMocks.useManagedRecorderSelector,
+  useCaptureProfilesShallow: storeMocks.useCaptureProfilesShallow,
+  useManagedRecorderShallow: storeMocks.useManagedRecorderShallow,
   useSettingsShallow: storeMocks.useSettingsShallow,
 }));
 
@@ -146,6 +150,8 @@ describe("ManagedRecorderAudioSettingsCard", () => {
       recordingAudioInputDeviceId: null,
       recordingAudioOutputDeviceId: null,
     };
+    storeMocks.isProfileUnlocked = true;
+    storeMocks.selectedProfileId = "capture-profile-1";
     storeMocks.status = createStatus();
     storeMocks.updateSettings.mockReset();
     storeMocks.updateSettings.mockResolvedValue(undefined);
@@ -155,8 +161,14 @@ describe("ManagedRecorderAudioSettingsCard", () => {
         update: storeMocks.updateSettings,
       }),
     );
-    storeMocks.useManagedRecorderSelector.mockImplementation((selector) =>
+    storeMocks.useManagedRecorderShallow.mockImplementation((selector) =>
       selector({ status: storeMocks.status }),
+    );
+    storeMocks.useCaptureProfilesShallow.mockImplementation((selector) =>
+      selector({
+        isProfileUnlocked: storeMocks.isProfileUnlocked,
+        selectedProfileId: storeMocks.selectedProfileId,
+      }),
     );
   });
 
@@ -298,5 +310,23 @@ describe("ManagedRecorderAudioSettingsCard", () => {
     expect(inputSelect.disabled).toBe(true);
     expect(outputSelect.disabled).toBe(true);
     expect(getRefreshButton().disabled).toBe(true);
+  });
+
+  it("disables audio controls while the selected profile is locked", async () => {
+    storeMocks.isProfileUnlocked = false;
+
+    await renderCard();
+
+    const [inputSelect, outputSelect] = getSelects();
+    expect(inputSelect.disabled).toBe(true);
+    expect(outputSelect.disabled).toBe(true);
+    expect(getRefreshButton().disabled).toBe(true);
+
+    await act(async () => {
+      outputSelect.value = "default";
+      outputSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    expect(storeMocks.updateSettings).not.toHaveBeenCalled();
   });
 });

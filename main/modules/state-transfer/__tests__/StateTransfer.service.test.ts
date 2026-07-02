@@ -561,6 +561,29 @@ describe("StateTransferService", () => {
     });
   });
 
+  it("ignores stale imported per-game capture profile memory without a selected profile", () => {
+    expect(
+      sanitizeImportedSettings(
+        {
+          ...createDefaultSettings(),
+          activeGame: "poe2",
+          activeLeague: "Runes of Aldur",
+          poe2SelectedLeague: "Runes of Aldur",
+          selectedCaptureProfileId: null,
+          selectedCaptureProfileIdsByGame: {
+            poe2: "missing-capture-profile",
+          },
+        },
+        [],
+      ),
+    ).toMatchObject({
+      activeGame: "poe2",
+      activeLeague: "Runes of Aldur",
+      selectedCaptureProfileId: null,
+      selectedCaptureProfileIdsByGame: {},
+    });
+  });
+
   it("resets stale imported capture profile selections when no capture profiles are imported", () => {
     expect(
       sanitizeImportedSettings(

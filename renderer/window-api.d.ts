@@ -301,6 +301,7 @@ declare global {
       };
       settings: {
         get: () => Promise<AppSettings>;
+        onChanged: (callback: (settings: AppSettings) => void) => () => void;
         update: (input: Partial<AppSettings>) => Promise<AppSettings>;
       };
       storage: {

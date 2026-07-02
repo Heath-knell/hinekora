@@ -29,7 +29,7 @@ describe("ProfilesService", () => {
     vi.restoreAllMocks();
   });
 
-  it("creates default profiles for both games once and publishes changes", () => {
+  it("creates one global default aura profile once and publishes changes", () => {
     const mainSend = vi.fn();
     const auraSend = vi.fn();
     const recorderSend = vi.fn();
@@ -57,31 +57,24 @@ describe("ProfilesService", () => {
     const existing = service.ensureDefaultProfile();
 
     expect(created).toMatchObject({
-      name: "Default PoE Profile",
-      game: "poe1",
+      name: "Default Aura Profile",
+      game: null,
     });
     expect(existing.id).toBe(created.id);
-    expect(service.list()).toHaveLength(2);
+    expect(service.list()).toHaveLength(1);
     expect(service.list()).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ game: "poe1", name: "Default PoE Profile" }),
-        expect.objectContaining({
-          game: "poe2",
-          name: "Default PoE 2 Profile",
-        }),
+        expect.objectContaining({ game: null, name: "Default Aura Profile" }),
       ]),
     );
-    expect(mainSend).toHaveBeenCalledTimes(2);
-    expect(auraSend).toHaveBeenCalledTimes(2);
-    expect(recorderSend).toHaveBeenCalledTimes(2);
+    expect(mainSend).toHaveBeenCalledTimes(1);
+    expect(auraSend).toHaveBeenCalledTimes(1);
+    expect(recorderSend).toHaveBeenCalledTimes(1);
     expect(unscopedSend).not.toHaveBeenCalled();
     expect(destroyedSend).not.toHaveBeenCalled();
     expect(mainSend).toHaveBeenLastCalledWith(
       ProfilesChannel.Changed,
-      expect.arrayContaining([
-        expect.objectContaining({ game: "poe1" }),
-        expect.objectContaining({ game: "poe2" }),
-      ]),
+      expect.arrayContaining([expect.objectContaining({ game: null })]),
     );
   });
 
@@ -183,6 +176,54 @@ describe("ProfilesService", () => {
     service.delete("replacement");
     expect(service.list()).toEqual([]);
     expect(send).toHaveBeenCalledTimes(5);
+  });
+
+  it("resolves active and renderable aura profiles through service helpers", () => {
+    DatabaseService.getInstance(":memory:");
+    electronMocks.getAllWindows.mockReturnValue([]);
+    const service = new ProfilesService();
+    const profile = service.create({ name: "Global" });
+    const poe1OnlyProfile = service.create({
+      name: "PoE 1 only",
+      game: "poe1",
+    });
+    const renderableProfile = service.update({
+      id: profile.id,
+      cropRegions: [
+        {
+          id: "crop-1",
+          label: "Aura",
+          x: 0,
+          y: 0,
+          width: 10,
+          height: 10,
+        },
+      ],
+      overlayPlacements: [
+        {
+          id: "placement-1",
+          cropRegionId: "crop-1",
+          x: 0,
+          y: 0,
+          scale: 1,
+          opacity: 1,
+        },
+      ],
+    });
+
+    expect(service.hasRenderableAuraPlacements(renderableProfile)).toBe(true);
+    expect(service.resolveProfileForGame(renderableProfile.id, "poe2")).toEqual(
+      renderableProfile,
+    );
+    expect(
+      service.resolveProfileForGame(poe1OnlyProfile.id, "poe2"),
+    ).toBeNull();
+    expect(service.resolveProfileForGame(null, "poe2")).toEqual(
+      renderableProfile,
+    );
+    expect(service.resolveRenderableProfileForGame("poe2")).toEqual(
+      renderableProfile,
+    );
   });
 
   it("registers IPC handlers with validation", async () => {

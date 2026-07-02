@@ -21,8 +21,12 @@ const pollerMocks = vi.hoisted(() => ({
 
 const serviceMocks = vi.hoisted(() => ({
   getSettings: vi.fn(),
+  onDidChangeSettings: vi.fn(),
   recorderSetGameRunningState: vi.fn(),
   overlaySetGameRunningActive: vi.fn(),
+  settingsChangeListeners: [] as Array<
+    (settings: { activeGame: "poe1" | "poe2" }) => void
+  >,
 }));
 
 const originalPlatform = process.platform;
@@ -59,6 +63,7 @@ vi.mock("~/main/modules/settings-store", () => ({
   SettingsStoreService: {
     getInstance: () => ({
       get: serviceMocks.getSettings,
+      onDidChange: serviceMocks.onDidChangeSettings,
     }),
   },
 }));
@@ -161,6 +166,18 @@ describe("PoeProcessService", () => {
     electronMocks.powerMonitorOn.mockReset();
     serviceMocks.getSettings.mockReset();
     serviceMocks.getSettings.mockReturnValue({ activeGame: "poe2" });
+    serviceMocks.settingsChangeListeners = [];
+    serviceMocks.onDidChangeSettings.mockReset();
+    serviceMocks.onDidChangeSettings.mockImplementation((listener) => {
+      serviceMocks.settingsChangeListeners.push(listener);
+
+      return () => {
+        serviceMocks.settingsChangeListeners =
+          serviceMocks.settingsChangeListeners.filter(
+            (item) => item !== listener,
+          );
+      };
+    });
     serviceMocks.recorderSetGameRunningState.mockReset();
     serviceMocks.recorderSetGameRunningState.mockResolvedValue(false);
     serviceMocks.overlaySetGameRunningActive.mockReset();
@@ -436,6 +453,29 @@ describe("PoeProcessService", () => {
     window.webContents.send.mockClear();
 
     serviceMocks.getSettings.mockReturnValue({ activeGame: "poe2" });
+    for (const listener of serviceMocks.settingsChangeListeners) {
+      listener({ activeGame: "poe2" });
+    }
+
+    expect(serviceMocks.overlaySetGameRunningActive).toHaveBeenLastCalledWith(
+      true,
+    );
+    expect(serviceMocks.recorderSetGameRunningState).toHaveBeenLastCalledWith(
+      true,
+    );
+    expect(window.webContents.send).toHaveBeenCalledWith(
+      PoeProcessChannel.GetState,
+      {
+        game: "poe2",
+        isRunning: true,
+        processName: "PathOfExileSteam.exe",
+      },
+    );
+    expect(window.webContents.send).toHaveBeenCalledWith(
+      CapturePreviewChannel.RefreshRequested,
+    );
+    window.webContents.send.mockClear();
+
     pollerMocks.pollNow.mockResolvedValue({
       game: "poe2",
       isRunning: true,
@@ -450,6 +490,20 @@ describe("PoeProcessService", () => {
     expect(serviceMocks.recorderSetGameRunningState).toHaveBeenLastCalledWith(
       true,
     );
+    expect(window.webContents.send).not.toHaveBeenCalled();
+  });
+
+  it("ignores settings changes when the active game stays the same", () => {
+    const window = createWindow({});
+    electronMocks.getAllWindows.mockReturnValue([window]);
+    new PoeProcessService();
+
+    for (const listener of serviceMocks.settingsChangeListeners) {
+      listener({ activeGame: "poe2" });
+    }
+
+    expect(serviceMocks.overlaySetGameRunningActive).not.toHaveBeenCalled();
+    expect(serviceMocks.recorderSetGameRunningState).not.toHaveBeenCalled();
     expect(window.webContents.send).not.toHaveBeenCalled();
   });
 

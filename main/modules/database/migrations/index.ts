@@ -7,6 +7,7 @@ import { migration_20260628_000000_editor_project_saved_edit_metadata } from "./
 import { migration_20260630_000000_settings_cleanup } from "./20260630_000000_settings_cleanup";
 import { migration_20260630_010000_recording_storage_path_migrations } from "./20260630_010000_recording_storage_path_migrations";
 import { migration_20260701_000000_capture_profiles } from "./20260701_000000_capture_profiles";
+import { migration_20260702_000000_aura_profiles_global_scope } from "./20260702_000000_aura_profiles_global_scope";
 import type { Migration } from "./Migration.interface";
 
 const migrations: Migration[] = [
@@ -19,6 +20,7 @@ const migrations: Migration[] = [
   migration_20260630_000000_settings_cleanup,
   migration_20260630_010000_recording_storage_path_migrations,
   migration_20260701_000000_capture_profiles,
+  migration_20260702_000000_aura_profiles_global_scope,
 ];
 
 export type { Migration } from "./Migration.interface";

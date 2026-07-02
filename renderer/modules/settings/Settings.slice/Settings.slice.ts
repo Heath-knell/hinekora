@@ -45,6 +45,12 @@ export const createSettingsSlice: BoundStoreStateCreator<SettingsSlice> = (
           state.settings.value = value;
         });
       },
+      startListening: () =>
+        window.electron.settings.onChanged((value) => {
+          set((state) => {
+            state.settings.value = value;
+          });
+        }),
       update: async (input: Partial<AppSettings>) => {
         const requestVersion = ++settingsRequestVersion;
         const value = await window.electron.settings.update(input);
