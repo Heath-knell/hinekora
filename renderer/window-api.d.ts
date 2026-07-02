@@ -58,6 +58,7 @@ import type {
   SavedEditsLibraryPage,
   SavedEditsLibraryQuery,
 } from "~/main/modules/saved-edits/SavedEdits.dto";
+import type { SettingsStoreOverlaySnapshot } from "~/main/modules/settings-store/SettingsStore.dto";
 import type {
   StateImportResult,
   StateTransferResult,
@@ -250,6 +251,7 @@ declare global {
         create: (input: ProfileCreateInput) => Promise<Profile>;
         update: (input: ProfileUpdateInput) => Promise<Profile>;
         delete: (id: string) => Promise<void>;
+        select: (id: string) => Promise<void>;
         onChanged: (callback: (profiles: Profile[]) => void) => () => void;
       };
       recordingStorage: {
@@ -300,9 +302,14 @@ declare global {
         ) => Promise<SavedEditFileActionResult>;
       };
       settings: {
-        get: () => Promise<AppSettings>;
-        onChanged: (callback: (settings: AppSettings) => void) => () => void;
-        update: (input: Partial<AppSettings>) => Promise<AppSettings>;
+        scope: "full" | "overlay";
+        get: () => Promise<AppSettings | SettingsStoreOverlaySnapshot>;
+        onChanged: (
+          callback: (
+            settings: AppSettings | SettingsStoreOverlaySnapshot,
+          ) => void,
+        ) => () => void;
+        update?: (input: Partial<AppSettings>) => Promise<AppSettings>;
       };
       storage: {
         getInfo: () => Promise<StorageInfo>;

@@ -28,6 +28,7 @@ import {
 } from "../../types";
 import {
   type E2EBridgeDomainFactory,
+  type E2EBridgeDomainMethods,
   e2eBridgeDomainFactorySource,
 } from "./bridge-fixture";
 
@@ -604,7 +605,7 @@ async function setupEditorE2E(page: Page) {
       });
       const createBridgeDomain = <TBridge extends object>(
         domain: string,
-        methods: Partial<TBridge>,
+        methods: E2EBridgeDomainMethods<TBridge>,
       ): TBridge =>
         createBridgeDomainFactory(
           domain,

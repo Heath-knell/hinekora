@@ -3,6 +3,7 @@ enum ProfilesChannel {
   Create = "profiles:create",
   Update = "profiles:update",
   Delete = "profiles:delete",
+  Select = "profiles:select",
   Changed = "profiles:changed",
 }
 

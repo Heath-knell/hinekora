@@ -28,6 +28,15 @@ function createTestStore() {
   );
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+
+  return { promise, resolve };
+}
+
 describe("PoeProcess slice", () => {
   const listeners: {
     start?: (state: PoeProcessState) => void;
@@ -142,5 +151,30 @@ describe("PoeProcess slice", () => {
     expect(unsubscribers.stop).toHaveBeenCalled();
     expect(unsubscribers.state).toHaveBeenCalled();
     expect(unsubscribers.error).toHaveBeenCalled();
+  });
+
+  it("does not let a late hydrate overwrite process change events", async () => {
+    const hydrate = createDeferred<PoeProcessState>();
+    getState.mockReturnValueOnce(hydrate.promise);
+    const store = createTestStore();
+    store.getState().poeProcess.startListening();
+
+    const hydrateRequest = store.getState().poeProcess.hydrate();
+    listeners.state?.({
+      game: "poe2",
+      isRunning: true,
+      processName: "PathOfExileSteam.exe",
+    });
+    hydrate.resolve({
+      isRunning: false,
+      processName: "",
+    });
+    await hydrateRequest;
+
+    expect(store.getState().poeProcess.state).toEqual({
+      game: "poe2",
+      isRunning: true,
+      processName: "PathOfExileSteam.exe",
+    });
   });
 });

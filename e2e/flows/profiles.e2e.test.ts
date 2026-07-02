@@ -550,14 +550,12 @@ for (const profileCase of settingsProfileCases) {
       .poll(async () => {
         const calls = await getDashboardE2ECalls(page);
 
-        return calls.settingsUpdates;
+        return calls.profileSelects;
       })
       .toEqual(
         expect.arrayContaining([
-          expect.objectContaining({
-            selectedProfileId: profileCase.existingAuraId,
-          }),
-          expect.objectContaining({ selectedProfileId: createdAuraProfileId }),
+          profileCase.existingAuraId,
+          createdAuraProfileId,
         ]),
       );
 

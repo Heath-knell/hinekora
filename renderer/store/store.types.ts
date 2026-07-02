@@ -16,6 +16,7 @@ import type {
   ReplayClipLibraryPage,
   ReplayClipLibraryQuery,
 } from "~/main/modules/replay-clips";
+import type { SettingsStoreOverlaySnapshot } from "~/main/modules/settings-store/SettingsStore.dto";
 import type { AppMenuSlice } from "~/renderer/modules/app-menu/AppMenu.slice/AppMenu.slice";
 import type { AuraOverlaySlice } from "~/renderer/modules/aura-overlay/AuraOverlay.slice/AuraOverlay.slice";
 import type { ChangelogSlice } from "~/renderer/modules/changelog/Changelog.slice/Changelog.slice";
@@ -134,7 +135,7 @@ export interface ManagedRecorderSlice {
 
 export interface SettingsSlice {
   settings: {
-    value: AppSettings | null;
+    value: AppSettings | SettingsStoreOverlaySnapshot | null;
     hydrate: () => Promise<void>;
     startListening: () => () => void;
     update: (input: Partial<AppSettings>) => Promise<void>;

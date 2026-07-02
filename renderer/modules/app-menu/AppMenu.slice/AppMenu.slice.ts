@@ -55,7 +55,7 @@ type AppMenuStateUpdate = Partial<
 >;
 
 async function persistLastSeenAppVersion(version: string): Promise<void> {
-  await window.electron.settings.update({ lastSeenAppVersion: version });
+  await window.electron.settings.update?.({ lastSeenAppVersion: version });
 }
 
 export const createAppMenuSlice: BoundStoreStateCreator<AppMenuSlice> = (

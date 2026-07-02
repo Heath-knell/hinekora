@@ -128,6 +128,27 @@ describe("Settings slice", () => {
     expect(analyticsMocks.trackEvent).toHaveBeenCalledWith("settings-updated");
   });
 
+  it("rejects settings updates when the current window exposes read-only settings", async () => {
+    Object.defineProperty(window, "electron", {
+      configurable: true,
+      value: {
+        captureProfiles: {
+          update: updateCaptureProfile,
+        },
+        settings: {
+          get: getSettings,
+          onChanged: onSettingsChanged,
+        },
+      },
+    });
+    const store = createTestStore();
+
+    await expect(
+      store.getState().settings.update({ activeLeague: "Hardcore" }),
+    ).rejects.toThrow("Settings updates are not available in this window");
+    expect(updateSettings).not.toHaveBeenCalled();
+  });
+
   it("ignores stale settings hydrate responses", async () => {
     const firstHydrate = createDeferred<AppSettings>();
     const secondHydrate = createDeferred<AppSettings>();
@@ -143,6 +164,29 @@ describe("Settings slice", () => {
     await secondRequest;
     firstHydrate.resolve({ ...settings, activeLeague: "Standard" });
     await firstRequest;
+
+    expect(store.getState().settings.value?.activeLeague).toBe("Hardcore");
+  });
+
+  it("ignores settings hydrate responses after a change event wins the race", async () => {
+    const hydrate = createDeferred<AppSettings>();
+    const settingsChangedListeners: Array<(nextSettings: AppSettings) => void> =
+      [];
+    getSettings.mockReturnValueOnce(hydrate.promise);
+    onSettingsChanged.mockImplementation(
+      (callback: (nextSettings: AppSettings) => void) => {
+        settingsChangedListeners.push(callback);
+
+        return vi.fn();
+      },
+    );
+    const store = createTestStore();
+    store.getState().settings.startListening();
+
+    const hydrateRequest = store.getState().settings.hydrate();
+    settingsChangedListeners[0]?.({ ...settings, activeLeague: "Hardcore" });
+    hydrate.resolve({ ...settings, activeLeague: "Standard" });
+    await hydrateRequest;
 
     expect(store.getState().settings.value?.activeLeague).toBe("Hardcore");
   });
@@ -167,6 +211,47 @@ describe("Settings slice", () => {
 
     stopListening();
     expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it("syncs changed capture settings events into the unlocked profile", async () => {
+    const settingsChangedListeners: Array<(nextSettings: AppSettings) => void> =
+      [];
+    onSettingsChanged.mockImplementation(
+      (callback: (nextSettings: AppSettings) => void) => {
+        settingsChangedListeners.push(callback);
+
+        return vi.fn();
+      },
+    );
+    updateCaptureProfile.mockResolvedValue({
+      ...captureProfile,
+      recordingFps: 30,
+    });
+    const store = createTestStore(true);
+    store.setState((state) => ({
+      settings: {
+        ...state.settings,
+        value: {
+          ...settings,
+          recordingFps: 60,
+          selectedCaptureProfileId: captureProfile.id,
+        },
+      },
+    }));
+
+    store.getState().settings.startListening();
+    settingsChangedListeners[0]?.({
+      ...settings,
+      recordingFps: 30,
+      selectedCaptureProfileId: captureProfile.id,
+    });
+
+    await vi.waitFor(() => {
+      expect(updateCaptureProfile).toHaveBeenCalledWith({
+        id: captureProfile.id,
+        recordingFps: 30,
+      });
+    });
   });
 
   it("does not track character-name-only settings updates", async () => {
@@ -235,6 +320,59 @@ describe("Settings slice", () => {
       recordingFps: 30,
     });
     expect(store.getState().captureProfiles.items[0]?.recordingFps).toBe(30);
+  });
+
+  it("does not resync a local settings update after its change event was handled", async () => {
+    const settingsChangedListeners: Array<(nextSettings: AppSettings) => void> =
+      [];
+    const settingsUpdate = createDeferred<AppSettings>();
+    onSettingsChanged.mockImplementation(
+      (callback: (nextSettings: AppSettings) => void) => {
+        settingsChangedListeners.push(callback);
+
+        return vi.fn();
+      },
+    );
+    updateSettings.mockReturnValueOnce(settingsUpdate.promise);
+    updateCaptureProfile.mockResolvedValue({
+      ...captureProfile,
+      recordingFps: 30,
+    });
+    const store = createTestStore(true);
+    store.setState((state) => ({
+      settings: {
+        ...state.settings,
+        value: {
+          ...settings,
+          recordingFps: 60,
+          selectedCaptureProfileId: captureProfile.id,
+        },
+      },
+    }));
+    store.getState().settings.startListening();
+
+    const updateRequest = store
+      .getState()
+      .settings.update({ recordingFps: 30 });
+    settingsChangedListeners[0]?.({
+      ...settings,
+      recordingFps: 30,
+      selectedCaptureProfileId: captureProfile.id,
+    });
+    await vi.waitFor(() => {
+      expect(updateCaptureProfile).toHaveBeenCalledTimes(1);
+    });
+
+    settingsUpdate.resolve({
+      ...settings,
+      recordingFps: 30,
+      selectedCaptureProfileId: captureProfile.id,
+    });
+    await updateRequest;
+
+    expect(updateCaptureProfile).toHaveBeenCalledTimes(1);
+    expect(store.getState().settings.value?.recordingFps).toBe(30);
+    expect(analyticsMocks.trackEvent).toHaveBeenCalledTimes(1);
   });
 
   it("keeps synced profile selection when the profile list is stale", async () => {

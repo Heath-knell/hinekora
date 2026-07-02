@@ -7,7 +7,7 @@ import {
   registerIpcWindowRole,
 } from "~/main/utils/ipc-window-roles";
 
-import { createDefaultSettings } from "~/types";
+import { type AppSettings, createDefaultSettings } from "~/types";
 import { DatabaseService } from "../../database";
 import { SettingsStoreChannel } from "../SettingsStore.channels";
 import { SettingsStoreRepository } from "../SettingsStore.repository";
@@ -166,7 +166,7 @@ describe("SettingsStoreService", () => {
     }
   });
 
-  it("publishes settings changes to main and overlay windows", () => {
+  it("publishes full settings to main and scoped settings to overlays", () => {
     const database = DatabaseService.getInstance(":memory:");
     const service = new SettingsStoreService();
     const mainWindow = createMockWindow(1, WindowName.Main);
@@ -194,12 +194,38 @@ describe("SettingsStoreService", () => {
         updatedSettings,
       );
       expect(auraOverlay.webContents.send).toHaveBeenCalledWith(
-        SettingsStoreChannel.Changed,
-        updatedSettings,
+        SettingsStoreChannel.OverlayChanged,
+        {
+          activeGame: "poe2",
+          deathClipSeconds: updatedSettings.deathClipSeconds,
+          selectedCaptureProfileId: updatedSettings.selectedCaptureProfileId,
+          selectedCaptureProfileIdsByGame:
+            updatedSettings.selectedCaptureProfileIdsByGame,
+          selectedProfileId: updatedSettings.selectedProfileId,
+          telemetryCrashReporting: updatedSettings.telemetryCrashReporting,
+          telemetryUsageAnalytics: updatedSettings.telemetryUsageAnalytics,
+        },
       );
       expect(recorderOverlay.webContents.send).toHaveBeenCalledWith(
+        SettingsStoreChannel.OverlayChanged,
+        {
+          activeGame: "poe2",
+          deathClipSeconds: updatedSettings.deathClipSeconds,
+          selectedCaptureProfileId: updatedSettings.selectedCaptureProfileId,
+          selectedCaptureProfileIdsByGame:
+            updatedSettings.selectedCaptureProfileIdsByGame,
+          selectedProfileId: updatedSettings.selectedProfileId,
+          telemetryCrashReporting: updatedSettings.telemetryCrashReporting,
+          telemetryUsageAnalytics: updatedSettings.telemetryUsageAnalytics,
+        },
+      );
+      expect(auraOverlay.webContents.send).not.toHaveBeenCalledWith(
         SettingsStoreChannel.Changed,
-        updatedSettings,
+        expect.anything(),
+      );
+      expect(recorderOverlay.webContents.send).not.toHaveBeenCalledWith(
+        SettingsStoreChannel.Changed,
+        expect.anything(),
       );
       expect(clipPreviewOverlay.webContents.send).not.toHaveBeenCalled();
       expect(destroyedMainWindow.webContents.send).not.toHaveBeenCalled();
@@ -261,21 +287,65 @@ describe("SettingsStoreService", () => {
     const { handlers } = mockIpcMainHandlers();
     const database = DatabaseService.getInstance(":memory:");
     new SettingsStoreService();
+    const mainEvent = createIpcEvent(10, WindowName.Main);
+    const auraEvent = createIpcEvent(11, WindowName.AuraOverlay);
+    const recorderEvent = createIpcEvent(12, WindowName.RecorderOverlay);
+    const clipPreviewEvent = createIpcEvent(13, WindowName.ClipPreviewOverlay);
 
     try {
-      expect(await handlers.get(SettingsStoreChannel.Get)?.({})).toMatchObject({
+      const fullSettings = (await handlers.get(SettingsStoreChannel.Get)?.(
+        mainEvent,
+      )) as AppSettings;
+      expect(fullSettings).toMatchObject({
         activeGame: "poe1",
       });
+      expect(() => handlers.get(SettingsStoreChannel.Get)?.(auraEvent)).toThrow(
+        "settings-store:get is not available from this window",
+      );
+      const expectedOverlaySnapshot = {
+        activeGame: fullSettings.activeGame,
+        deathClipSeconds: fullSettings.deathClipSeconds,
+        selectedCaptureProfileId: fullSettings.selectedCaptureProfileId,
+        selectedCaptureProfileIdsByGame:
+          fullSettings.selectedCaptureProfileIdsByGame,
+        selectedProfileId: fullSettings.selectedProfileId,
+      };
       expect(
-        await handlers.get(SettingsStoreChannel.Update)?.(
-          {},
-          { activeGame: "poe2" },
+        await handlers.get(SettingsStoreChannel.GetOverlaySnapshot)?.(
+          auraEvent,
         ),
+      ).toMatchObject(expectedOverlaySnapshot);
+      expect(
+        await handlers.get(SettingsStoreChannel.GetOverlaySnapshot)?.(
+          recorderEvent,
+        ),
+      ).toMatchObject(expectedOverlaySnapshot);
+      expect(() =>
+        handlers.get(SettingsStoreChannel.GetOverlaySnapshot)?.(mainEvent),
+      ).toThrow(
+        "settings-store:get-overlay-snapshot is not available from this window",
+      );
+      expect(() =>
+        handlers.get(SettingsStoreChannel.GetOverlaySnapshot)?.(
+          clipPreviewEvent,
+        ),
+      ).toThrow(
+        "settings-store:get-overlay-snapshot is not available from this window",
+      );
+      expect(
+        await handlers.get(SettingsStoreChannel.Update)?.(mainEvent, {
+          activeGame: "poe2",
+        }),
       ).toMatchObject({
         activeGame: "poe2",
       });
+      expect(() =>
+        handlers.get(SettingsStoreChannel.Update)?.(recorderEvent, {
+          activeGame: "poe1",
+        }),
+      ).toThrow("settings-store:update is not available from this window");
       expect(
-        await handlers.get(SettingsStoreChannel.Update)?.({}, null),
+        await handlers.get(SettingsStoreChannel.Update)?.(mainEvent, null),
       ).toEqual({
         ok: false,
         error: "settings must be an object",
@@ -297,4 +367,14 @@ function createMockWindow(id: number, role: WindowName) {
   registerIpcWindowRole(window.webContents, role);
 
   return window;
+}
+
+function createIpcEvent(
+  id: number,
+  role: WindowName,
+): Electron.IpcMainInvokeEvent {
+  const webContents = { id };
+  registerIpcWindowRole(webContents, role);
+
+  return { sender: webContents } as Electron.IpcMainInvokeEvent;
 }

@@ -13,6 +13,10 @@ export const createProfilesSlice: BoundStoreStateCreator<ProfilesSlice> = (
   get,
 ) => {
   const persistSelectedProfileId = createSelectedProfileIdPersister(set, get);
+  let profilesChangeVersion = 0;
+  const markProfilesChanged = () => {
+    profilesChangeVersion += 1;
+  };
 
   return {
     profiles: {
@@ -21,12 +25,20 @@ export const createProfilesSlice: BoundStoreStateCreator<ProfilesSlice> = (
       error: null,
       selectedProfileId: null,
       hydrate: async () => {
+        const changeVersion = profilesChangeVersion;
         set((state) => {
           state.profiles.isLoading = true;
           state.profiles.error = null;
         });
         try {
           const items = await window.electron.profiles.list();
+          if (changeVersion !== profilesChangeVersion) {
+            set((state) => {
+              state.profiles.isLoading = false;
+            });
+            return;
+          }
+
           const persistedProfileId = getPersistedSelectedProfileId(get);
           let selectedProfileId: string | null = null;
           set((state) => {
@@ -56,6 +68,7 @@ export const createProfilesSlice: BoundStoreStateCreator<ProfilesSlice> = (
         }
       },
       create: async (name: string) => {
+        markProfilesChanged();
         const created = await window.electron.profiles.create({ name });
         const items = await window.electron.profiles.list();
         set((state) => {
@@ -68,6 +81,7 @@ export const createProfilesSlice: BoundStoreStateCreator<ProfilesSlice> = (
         });
       },
       update: async (input: ProfileUpdateInput) => {
+        markProfilesChanged();
         const updated = await window.electron.profiles.update(input);
         const items = await window.electron.profiles.list();
         set((state) => {
@@ -78,6 +92,7 @@ export const createProfilesSlice: BoundStoreStateCreator<ProfilesSlice> = (
         trackEvent("profile-updated");
       },
       delete: async (id: string) => {
+        markProfilesChanged();
         await window.electron.profiles.delete(id);
         const items = await window.electron.profiles.list();
         const selectedProfileId = resolveSelectedProfileId(
@@ -96,6 +111,7 @@ export const createProfilesSlice: BoundStoreStateCreator<ProfilesSlice> = (
         trackEvent("profile-deleted");
       },
       select: (id: string) => {
+        markProfilesChanged();
         set((state) => {
           state.profiles.error = null;
           state.profiles.selectedProfileId = id;
@@ -105,6 +121,7 @@ export const createProfilesSlice: BoundStoreStateCreator<ProfilesSlice> = (
       },
       startListening: () =>
         window.electron.profiles.onChanged((items) => {
+          markProfilesChanged();
           const previousSelectedProfileId = get().profiles.selectedProfileId;
           let selectedProfileId: string | null = null;
           set((state) => {
@@ -158,11 +175,20 @@ function createSelectedProfileIdPersister(
 
   return (selectedProfileId) => {
     const settings = getSettings(get);
-    if (!settings || typeof window.electron.settings?.update !== "function") {
+    const selectProfile = window.electron.profiles.select;
+    const updateSettings = window.electron.settings?.update;
+    const persistSelection =
+      selectedProfileId !== null && typeof selectProfile === "function"
+        ? () => selectProfile(selectedProfileId)
+        : typeof updateSettings === "function"
+          ? () => updateSettings({ selectedProfileId })
+          : null;
+    if (!persistSelection) {
       return;
     }
 
-    const previousSelectedProfileId = settings.value?.selectedProfileId ?? null;
+    const previousSelectedProfileId =
+      settings?.value?.selectedProfileId ?? null;
     if (
       previousSelectedProfileId === selectedProfileId &&
       pendingSelectedProfileId === undefined
@@ -173,8 +199,7 @@ function createSelectedProfileIdPersister(
     pendingSelectedProfileId = selectedProfileId;
     requestVersion += 1;
     const currentRequestVersion = requestVersion;
-    void settings
-      .update({ selectedProfileId })
+    void persistSelection()
       .then(() => {
         if (requestVersion === currentRequestVersion) {
           pendingSelectedProfileId = undefined;

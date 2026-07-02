@@ -2,10 +2,16 @@ import { ipcRenderer } from "electron";
 
 import type { AppSettings } from "~/types";
 import { SettingsStoreChannel } from "./SettingsStore.channels";
-import type { SettingsUpdateInput } from "./SettingsStore.dto";
+import type {
+  SettingsStoreOverlaySnapshot,
+  SettingsUpdateInput,
+} from "./SettingsStore.dto";
 
 const SettingsStoreAPI = {
+  scope: "full" as const,
   get: (): Promise<AppSettings> => ipcRenderer.invoke(SettingsStoreChannel.Get),
+  getOverlaySnapshot: (): Promise<SettingsStoreOverlaySnapshot> =>
+    ipcRenderer.invoke(SettingsStoreChannel.GetOverlaySnapshot),
   onChanged: (callback: (settings: AppSettings) => void): (() => void) => {
     const listener = (
       _event: Electron.IpcRendererEvent,
@@ -18,6 +24,21 @@ const SettingsStoreAPI = {
 
     return () =>
       ipcRenderer.removeListener(SettingsStoreChannel.Changed, listener);
+  },
+  onOverlayChanged: (
+    callback: (settings: SettingsStoreOverlaySnapshot) => void,
+  ): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      settings: SettingsStoreOverlaySnapshot,
+    ) => {
+      callback(settings);
+    };
+
+    ipcRenderer.on(SettingsStoreChannel.OverlayChanged, listener);
+
+    return () =>
+      ipcRenderer.removeListener(SettingsStoreChannel.OverlayChanged, listener);
   },
   update: (input: SettingsUpdateInput): Promise<AppSettings> =>
     ipcRenderer.invoke(SettingsStoreChannel.Update, input),

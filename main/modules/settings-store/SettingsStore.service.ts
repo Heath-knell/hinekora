@@ -15,12 +15,13 @@ import {
 
 import { type AppSettings, AppSettingsSchema } from "~/types";
 import { SettingsStoreChannel } from "./SettingsStore.channels";
+import { createSettingsStoreOverlaySnapshot } from "./SettingsStore.dto";
 import { SettingsStoreRepository } from "./SettingsStore.repository";
 
 const START_MINIMIZED_ARG = "--hidden";
 const SETTINGS_STORE_SCOPE = "settings-store";
-const settingsStoreChangeWindowRoles = new Set([
-  WindowName.Main,
+const settingsStoreFullChangeWindowRoles = new Set([WindowName.Main]);
+const settingsStoreOverlayChangeWindowRoles = new Set([
   WindowName.AuraOverlay,
   WindowName.RecorderOverlay,
 ]);
@@ -102,10 +103,13 @@ class SettingsStoreService {
   }
 
   private setupHandlers(): void {
+    registerGuardedIpcHandler(SettingsStoreChannel.Get, [WindowName.Main], () =>
+      this.get(),
+    );
     registerGuardedIpcHandler(
-      SettingsStoreChannel.Get,
-      [WindowName.Main, WindowName.AuraOverlay, WindowName.RecorderOverlay],
-      () => this.get(),
+      SettingsStoreChannel.GetOverlaySnapshot,
+      [WindowName.AuraOverlay, WindowName.RecorderOverlay],
+      () => createSettingsStoreOverlaySnapshot(this.get()),
     );
     registerGuardedIpcHandler(
       SettingsStoreChannel.Update,
@@ -144,8 +148,14 @@ class SettingsStoreService {
       }
 
       const role = getIpcWindowRole({ sender: window.webContents });
-      if (role && settingsStoreChangeWindowRoles.has(role)) {
+      if (role && settingsStoreFullChangeWindowRoles.has(role)) {
         window.webContents.send(SettingsStoreChannel.Changed, settings);
+      }
+      if (role && settingsStoreOverlayChangeWindowRoles.has(role)) {
+        window.webContents.send(
+          SettingsStoreChannel.OverlayChanged,
+          createSettingsStoreOverlaySnapshot(settings),
+        );
       }
     }
   }

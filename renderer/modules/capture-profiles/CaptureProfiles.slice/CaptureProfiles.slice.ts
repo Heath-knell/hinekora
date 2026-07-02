@@ -60,7 +60,7 @@ export const createCaptureProfilesSlice: BoundStoreStateCreator<
   };
 
   const seedRememberedProfiles = (
-    settings: AppSettings | null | undefined,
+    settings: Partial<AppSettings> | null | undefined,
     items: CaptureProfile[],
   ) => {
     const persistedSelections = settings?.selectedCaptureProfileIdsByGame ?? {};
@@ -229,7 +229,7 @@ export const createCaptureProfilesSlice: BoundStoreStateCreator<
         const selectedProfile = resolveCaptureProfileForGame(
           items,
           selectedProfileIdsByGame[game] ??
-            get().settings.value?.selectedCaptureProfileIdsByGame[game] ??
+            get().settings.value?.selectedCaptureProfileIdsByGame?.[game] ??
             get().captureProfiles.selectedProfileId,
           game,
         );
@@ -395,7 +395,7 @@ async function applyGameSettings(
   const selectedCaptureProfileIdsByGame = currentSettings
     ? createValidSelectedProfileIdsByGame(
         get().captureProfiles.items,
-        currentSettings.selectedCaptureProfileIdsByGame,
+        currentSettings.selectedCaptureProfileIdsByGame ?? {},
       )
     : {};
   delete selectedCaptureProfileIdsByGame[game];
@@ -435,7 +435,7 @@ function createSelectedProfileSettingsApplier(
           ...currentSettings,
           selectedCaptureProfileIdsByGame: createValidSelectedProfileIdsByGame(
             get().captureProfiles.items,
-            currentSettings.selectedCaptureProfileIdsByGame,
+            currentSettings.selectedCaptureProfileIdsByGame ?? {},
             getSelectedProfileIdsByGame(),
             { [profile.game]: profile.id },
           ),
@@ -499,7 +499,7 @@ function createValidSelectedProfileIdsByGame(
 }
 
 function shouldApplyCaptureProfileSettings(
-  currentSettings: AppSettings,
+  currentSettings: Partial<AppSettings>,
   settingsUpdate: Partial<AppSettings>,
 ): boolean {
   return (Object.keys(settingsUpdate) as Array<keyof AppSettings>).some(
@@ -514,7 +514,7 @@ function shouldApplyCaptureProfileSettings(
 
 function isCaptureProfileSettingValueEqual(
   key: keyof AppSettings,
-  currentValue: AppSettings[keyof AppSettings],
+  currentValue: AppSettings[keyof AppSettings] | undefined,
   nextValue: AppSettings[keyof AppSettings] | undefined,
 ): boolean {
   if (key !== "selectedCaptureProfileIdsByGame") {

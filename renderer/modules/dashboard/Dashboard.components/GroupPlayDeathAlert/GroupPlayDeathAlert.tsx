@@ -20,10 +20,10 @@ function GroupPlayDeathAlert() {
   }
 
   const characterNames: Record<GameId, string> = {
-    poe1: settingsValue.poe1CharacterName,
-    poe2: settingsValue.poe2CharacterName,
+    poe1: settingsValue.poe1CharacterName ?? "",
+    poe2: settingsValue.poe2CharacterName ?? "",
   };
-  const needsCharacterName = settingsValue.installedGames.some(
+  const needsCharacterName = (settingsValue.installedGames ?? []).some(
     (game) => characterNames[game].trim().length === 0,
   );
 

@@ -1,16 +1,20 @@
 import { ipcRenderer } from "electron";
 
+import { unwrapIpcResult } from "~/main/utils/ipc-api";
+
 import type { Profile, ProfileCreateInput, ProfileUpdateInput } from "~/types";
 import { ProfilesChannel } from "./Profiles.channels";
 
 const ProfilesAPI = {
   list: (): Promise<Profile[]> => ipcRenderer.invoke(ProfilesChannel.List),
   create: (input: ProfileCreateInput): Promise<Profile> =>
-    ipcRenderer.invoke(ProfilesChannel.Create, input),
+    ipcRenderer.invoke(ProfilesChannel.Create, input).then(unwrapIpcResult),
   update: (input: ProfileUpdateInput): Promise<Profile> =>
-    ipcRenderer.invoke(ProfilesChannel.Update, input),
+    ipcRenderer.invoke(ProfilesChannel.Update, input).then(unwrapIpcResult),
   delete: (id: string): Promise<void> =>
-    ipcRenderer.invoke(ProfilesChannel.Delete, id),
+    ipcRenderer.invoke(ProfilesChannel.Delete, id).then(unwrapIpcResult),
+  select: (id: string): Promise<void> =>
+    ipcRenderer.invoke(ProfilesChannel.Select, id).then(unwrapIpcResult),
   onChanged: (callback: (profiles: Profile[]) => void): (() => void) => {
     const listener = (
       _event: Electron.IpcRendererEvent,

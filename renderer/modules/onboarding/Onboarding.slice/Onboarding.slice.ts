@@ -61,7 +61,7 @@ const createOnboardingSlice: BoundStoreStateCreator<OnboardingSlice> = (
         }
 
         try {
-          await window.electron.settings.update({
+          await window.electron.settings.update?.({
             onboardingDismissedBeacons: nextDismissed,
           });
 
@@ -118,7 +118,7 @@ const createOnboardingSlice: BoundStoreStateCreator<OnboardingSlice> = (
 
           if (!areArraysEqual(persistedDismissed, sanitizedDismissed)) {
             try {
-              await window.electron.settings.update({
+              await window.electron.settings.update?.({
                 onboardingDismissedBeacons: sanitizedDismissed,
               });
             } catch (error) {

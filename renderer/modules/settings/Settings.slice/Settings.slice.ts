@@ -1,3 +1,4 @@
+import type { SettingsStoreOverlaySnapshot } from "~/main/modules/settings-store/SettingsStore.dto";
 import { pickCaptureProfileSettingsUpdate } from "~/renderer/modules/capture-profiles/CaptureProfiles.utils/CaptureProfiles.utils";
 import { trackEvent } from "~/renderer/modules/umami";
 import type {
@@ -6,7 +7,7 @@ import type {
   SettingsSlice,
 } from "~/renderer/store/store.types";
 
-import type { AppSettings } from "~/types";
+import { type AppSettings, captureProfileSettingKeys } from "~/types";
 
 const untrackedSettingsUpdateKeys = new Set<keyof AppSettings>([
   "poe1CharacterName",
@@ -30,14 +31,19 @@ export const createSettingsSlice: BoundStoreStateCreator<SettingsSlice> = (
   get,
 ) => {
   let settingsRequestVersion = 0;
+  let settingsChangeVersion = 0;
 
   return {
     settings: {
       value: null,
       hydrate: async () => {
         const requestVersion = ++settingsRequestVersion;
+        const changeVersion = settingsChangeVersion;
         const value = await window.electron.settings.get();
-        if (requestVersion !== settingsRequestVersion) {
+        if (
+          requestVersion !== settingsRequestVersion ||
+          changeVersion !== settingsChangeVersion
+        ) {
           return;
         }
 
@@ -47,27 +53,52 @@ export const createSettingsSlice: BoundStoreStateCreator<SettingsSlice> = (
       },
       startListening: () =>
         window.electron.settings.onChanged((value) => {
+          const previousValue = get().settings.value;
+          const captureSettingsUpdate = createCaptureSettingsUpdateDelta(
+            previousValue,
+            value,
+          );
+          settingsChangeVersion += 1;
+          const changeVersion = settingsChangeVersion;
           set((state) => {
             state.settings.value = value;
           });
+          void syncSelectedCaptureProfileFromSettingsUpdate(
+            captureSettingsUpdate,
+            value,
+            set,
+            get,
+            () => changeVersion === settingsChangeVersion,
+          );
         }),
       update: async (input: Partial<AppSettings>) => {
+        const updateSettings = window.electron.settings.update;
+        if (!updateSettings) {
+          throw new Error("Settings updates are not available in this window");
+        }
+
         const requestVersion = ++settingsRequestVersion;
-        const value = await window.electron.settings.update(input);
+        const changeVersion = settingsChangeVersion;
+        const value = await updateSettings(input);
         if (requestVersion !== settingsRequestVersion) {
           return;
         }
 
-        set((state) => {
-          state.settings.value = value;
-        });
-        await syncSelectedCaptureProfileFromSettingsUpdate(
-          input,
-          value,
-          set,
-          get,
-          () => requestVersion === settingsRequestVersion,
-        );
+        const wasHandledByChangeEvent = changeVersion !== settingsChangeVersion;
+        if (!wasHandledByChangeEvent) {
+          set((state) => {
+            state.settings.value = value;
+          });
+          await syncSelectedCaptureProfileFromSettingsUpdate(
+            input,
+            value,
+            set,
+            get,
+            () =>
+              requestVersion === settingsRequestVersion &&
+              changeVersion === settingsChangeVersion,
+          );
+        }
         if (requestVersion !== settingsRequestVersion) {
           return;
         }
@@ -82,7 +113,7 @@ export const createSettingsSlice: BoundStoreStateCreator<SettingsSlice> = (
 
 async function syncSelectedCaptureProfileFromSettingsUpdate(
   input: Partial<AppSettings>,
-  settings: AppSettings,
+  settings: SettingsStoreOverlaySnapshot,
   set: Parameters<BoundStoreStateCreator<SettingsSlice>>[0],
   get: () => BoundStore,
   isCurrentRequest: () => boolean,
@@ -132,6 +163,21 @@ async function syncSelectedCaptureProfileFromSettingsUpdate(
           : "Unable to update selected capture profile";
     });
   }
+}
+
+function createCaptureSettingsUpdateDelta(
+  previous: SettingsStoreOverlaySnapshot | null,
+  next: SettingsStoreOverlaySnapshot,
+): Partial<AppSettings> {
+  const input: Partial<AppSettings> = {};
+
+  for (const key of captureProfileSettingKeys) {
+    if (Object.hasOwn(next, key) && previous?.[key] !== next[key]) {
+      input[key] = next[key] as never;
+    }
+  }
+
+  return input;
 }
 
 export { shouldTrackSettingsUpdate };

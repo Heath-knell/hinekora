@@ -14,6 +14,7 @@ import {
 } from "../../types";
 import {
   type E2EBridgeDomainFactory,
+  type E2EBridgeDomainMethods,
   e2eBridgeDomainFactorySource,
 } from "./bridge-fixture";
 
@@ -21,8 +22,6 @@ interface AuraOverlayE2ECalls {
   captureConstraintSourceIds: string[];
   profileUpdates: ProfileUpdateInput[];
   selectCropRegionCalls: SelectCropRegionOptions[];
-  settingsReads: number;
-  settingsUpdates: Array<Partial<AppSettings>>;
   unexpectedBridgeCalls: string[];
 }
 
@@ -200,13 +199,11 @@ async function setupAuraOverlayE2E(
         `"use strict"; return (${input.bridgeFactorySource});`,
       )() as E2EBridgeDomainFactory;
       let profile = clone(fixture.profile);
-      let settings = clone(fixture.settings);
+      const settings = clone(fixture.settings);
       const calls: AuraOverlayE2ECalls = {
         captureConstraintSourceIds: [],
         profileUpdates: [],
         selectCropRegionCalls: [],
-        settingsReads: 0,
-        settingsUpdates: [],
         unexpectedBridgeCalls: [],
       };
       const listeners: {
@@ -220,7 +217,7 @@ async function setupAuraOverlayE2E(
       } = {};
       const createBridgeDomain = <TBridge extends object>(
         domain: string,
-        methods: Partial<TBridge>,
+        methods: E2EBridgeDomainMethods<TBridge>,
       ): TBridge =>
         createBridgeDomainFactory(
           domain,
@@ -313,6 +310,7 @@ async function setupAuraOverlayE2E(
 
               return unsubscribe;
             },
+            select: undefined,
             update: async (input) => {
               calls.profileUpdates.push(clone(input));
               profile = {
@@ -334,26 +332,13 @@ async function setupAuraOverlayE2E(
         settings: createBridgeDomain<AuraOverlayE2EElectron["settings"]>(
           "settings",
           {
-            get: async () => {
-              calls.settingsReads += 1;
-
-              return clone(settings);
-            },
+            get: async () => clone(settings),
             onChanged: (callback) => {
               listeners.settingsChanged = callback;
 
               return unsubscribe;
             },
-            update: async (input) => {
-              calls.settingsUpdates.push(clone(input));
-              settings = {
-                ...settings,
-                ...input,
-              };
-              listeners.settingsChanged?.(clone(settings));
-
-              return clone(settings);
-            },
+            update: undefined,
           },
         ),
       } as unknown as AuraOverlayE2EElectron;

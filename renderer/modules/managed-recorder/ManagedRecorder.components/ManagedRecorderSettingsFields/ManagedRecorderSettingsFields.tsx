@@ -149,12 +149,11 @@ function ManagedRecorderSettingsFields() {
           {recordingFpsOptions.map((fps) => (
             <button
               aria-pressed={selectedFps === fps}
-              className={clsx(
-                "btn join-item btn-sm min-w-0 flex-1",
-                selectedFps === fps
-                  ? "btn-primary"
-                  : "btn-outline border-base-content/20 bg-base-200",
-              )}
+              className={clsx("btn join-item btn-sm min-w-0 flex-1", {
+                "btn-primary": selectedFps === fps,
+                "btn-outline border-base-content/20 bg-base-200":
+                  selectedFps !== fps,
+              })}
               data-fps={fps}
               disabled={disabled}
               key={fps}

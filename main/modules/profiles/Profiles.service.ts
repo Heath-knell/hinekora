@@ -7,6 +7,7 @@ import {
   assertObject,
   assertString,
   handleValidationError,
+  IpcValidationError,
   safeErrorMessage,
 } from "~/main/utils/ipc-validation";
 import {
@@ -16,12 +17,17 @@ import {
 
 import {
   type GameId,
+  hasRenderableAuraPlacements,
+  isProfileAvailableForGame,
   type Profile,
   type ProfileCreateInput,
   ProfileCreateInputSchema,
   type ProfileUpdateInput,
   ProfileUpdateInputSchema,
+  resolveActiveGameProfile,
+  resolveRenderableProfileForGame,
 } from "~/types";
+import { SettingsStoreService } from "../settings-store/SettingsStore.service";
 import { ProfilesChannel } from "./Profiles.channels";
 import { ProfilesRepository } from "./Profiles.repository";
 
@@ -95,6 +101,20 @@ class ProfilesService {
   delete(id: string): void {
     this.repository.delete(id);
     this.publishProfilesChanged();
+  }
+
+  select(id: string): void {
+    const settingsStore = SettingsStoreService.getInstance();
+    const activeGame = settingsStore.get().activeGame;
+    const profile = this.list().find((item) => item.id === id) ?? null;
+    if (!profile || !isProfileAvailableForGame(profile, activeGame)) {
+      throw new IpcValidationError(
+        ProfilesChannel.Select,
+        "profile is not available for the active game",
+      );
+    }
+
+    settingsStore.update({ selectedProfileId: id });
   }
 
   replaceAll(profiles: Profile[]): void {
@@ -197,11 +217,22 @@ class ProfilesService {
         }
       },
     );
+    registerGuardedIpcHandler(
+      ProfilesChannel.Select,
+      [WindowName.Main, WindowName.RecorderOverlay],
+      (_event, id: unknown) => {
+        try {
+          assertString(id, "id", ProfilesChannel.Select, {
+            min: 1,
+            max: 128,
+          });
+          this.select(id);
+        } catch (error) {
+          return handleValidationError(error);
+        }
+      },
+    );
   }
-}
-
-function isProfileAvailableForGame(profile: Profile, game: GameId): boolean {
-  return profile.game === null || profile.game === game;
 }
 
 function resolveProfileForGame(
@@ -209,38 +240,7 @@ function resolveProfileForGame(
   profileId: string | null | undefined,
   game: GameId,
 ): Profile | null {
-  if (profileId) {
-    const profile = profiles.find((item) => item.id === profileId) ?? null;
-
-    return profile && isProfileAvailableForGame(profile, game) ? profile : null;
-  }
-
-  return (
-    resolveRenderableProfileForGame(profiles, game) ??
-    profiles.find((profile) => isProfileAvailableForGame(profile, game)) ??
-    null
-  );
-}
-
-function resolveRenderableProfileForGame(
-  profiles: Profile[],
-  game: GameId,
-): Profile | null {
-  return (
-    profiles.find(
-      (profile) =>
-        isProfileAvailableForGame(profile, game) &&
-        hasRenderableAuraPlacements(profile),
-    ) ?? null
-  );
-}
-
-function hasRenderableAuraPlacements(profile: Profile): boolean {
-  const cropRegionIds = new Set(profile.cropRegions.map((crop) => crop.id));
-
-  return profile.overlayPlacements.some((placement) =>
-    cropRegionIds.has(placement.cropRegionId),
-  );
+  return resolveActiveGameProfile(profiles, profileId, game);
 }
 
 export {

@@ -13,7 +13,7 @@ import {
 } from "../../MediaLibrary.utils/MediaLibrary.utils";
 
 function createMediaLibraryScopeFromSettings(
-  settings: AppSettings | null,
+  settings: Partial<AppSettings> | null,
 ): MediaLibraryScope {
   if (!settings) {
     return {
@@ -22,7 +22,7 @@ function createMediaLibraryScopeFromSettings(
     };
   }
 
-  const activeGame = settings.activeGame;
+  const activeGame = settings.activeGame ?? "poe1";
   return {
     game: activeGame,
     league: normalizeLeagueForGame(
@@ -33,7 +33,7 @@ function createMediaLibraryScopeFromSettings(
 }
 
 function syncMediaLibraryScopeWithSettings(
-  settings: AppSettings,
+  settings: Partial<AppSettings> & Pick<AppSettings, "activeGame">,
   currentScope: MediaLibraryScope,
 ): MediaLibraryScope {
   const activeGame = settings.activeGame;

@@ -1,6 +1,10 @@
+type E2EBridgeDomainMethods<TBridge extends object> = {
+  [K in keyof TBridge]?: TBridge[K] | undefined;
+};
+
 type E2EBridgeDomainFactory = <TBridge extends object>(
   domain: string,
-  methods: Partial<TBridge>,
+  methods: E2EBridgeDomainMethods<TBridge>,
   unexpectedBridgeCalls: string[],
   label: string,
 ) => TBridge;
@@ -9,7 +13,7 @@ const e2eBridgeDomainFactorySource = String(function createBridgeDomain<
   TBridge extends object,
 >(
   domain: string,
-  methods: Partial<TBridge>,
+  methods: E2EBridgeDomainMethods<TBridge>,
   unexpectedBridgeCalls: string[],
   label: string,
 ): TBridge {
@@ -28,7 +32,7 @@ const e2eBridgeDomainFactorySource = String(function createBridgeDomain<
         };
       }
 
-      if (value !== undefined) {
+      if (Reflect.has(target, property)) {
         return value;
       }
 
@@ -40,4 +44,8 @@ const e2eBridgeDomainFactorySource = String(function createBridgeDomain<
   }) as TBridge;
 });
 
-export { type E2EBridgeDomainFactory, e2eBridgeDomainFactorySource };
+export {
+  type E2EBridgeDomainFactory,
+  type E2EBridgeDomainMethods,
+  e2eBridgeDomainFactorySource,
+};

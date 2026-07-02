@@ -30,6 +30,7 @@ import {
 } from "../../types";
 import {
   type E2EBridgeDomainFactory,
+  type E2EBridgeDomainMethods,
   e2eBridgeDomainFactorySource,
 } from "./bridge-fixture";
 
@@ -48,6 +49,7 @@ interface DashboardE2ECalls {
   mainWindowActions: string[];
   profileCreates: Array<{ game: GameId | null; id: string; name: string }>;
   profileDeletes: string[];
+  profileSelects: string[];
   profileUpdates: ProfileUpdateInput[];
   recorderOverlayToggles: number;
   recorderVisibilityEvents: boolean[];
@@ -385,6 +387,7 @@ async function setupDashboardE2E(
         mainWindowActions: [],
         profileCreates: [],
         profileDeletes: [],
+        profileSelects: [],
         profileUpdates: [],
         recorderOverlayToggles: 0,
         recorderVisibilityEvents: [],
@@ -398,7 +401,7 @@ async function setupDashboardE2E(
       };
       const createBridgeDomain = <TBridge extends object>(
         domain: string,
-        methods: Partial<TBridge>,
+        methods: E2EBridgeDomainMethods<TBridge>,
       ): TBridge =>
         createBridgeDomainFactory(
           domain,
@@ -766,6 +769,11 @@ async function setupDashboardE2E(
               listeners.profileChanged = callback;
 
               return unsubscribe;
+            },
+            select: async (id) => {
+              calls.profileSelects.push(id);
+              settings = { ...settings, selectedProfileId: id };
+              listeners.settingsChanged?.(clone(settings));
             },
             update: async (input) => {
               calls.profileUpdates.push(clone(input));

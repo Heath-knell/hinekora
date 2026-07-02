@@ -43,8 +43,18 @@ const fullApi = {
 };
 
 type ElectronAPI = typeof fullApi;
+type ScopedSettingsAPI = {
+  scope: "full" | "overlay";
+  get: typeof SettingsStoreAPI.get | typeof SettingsStoreAPI.getOverlaySnapshot;
+  onChanged:
+    | typeof SettingsStoreAPI.onChanged
+    | typeof SettingsStoreAPI.onOverlayChanged;
+  update?: typeof SettingsStoreAPI.update;
+};
 type ScopedElectronAPI = {
-  [K in keyof ElectronAPI]?: Partial<ElectronAPI[K]>;
+  [K in keyof ElectronAPI]?: K extends "settings"
+    ? ScopedSettingsAPI
+    : Partial<ElectronAPI[K]>;
 };
 
 function createScopedApi(hash: string): ElectronAPI | ScopedElectronAPI {
@@ -73,11 +83,13 @@ function createScopedApi(hash: string): ElectronAPI | ScopedElectronAPI {
       },
       profiles: {
         list: ProfilesAPI.list,
+        select: ProfilesAPI.select,
         onChanged: ProfilesAPI.onChanged,
       },
       settings: {
-        get: SettingsStoreAPI.get,
-        onChanged: SettingsStoreAPI.onChanged,
+        scope: "overlay",
+        get: SettingsStoreAPI.getOverlaySnapshot,
+        onChanged: SettingsStoreAPI.onOverlayChanged,
       },
       replayClips: {
         list: ReplayClipsAPI.list,
@@ -132,8 +144,9 @@ function createScopedApi(hash: string): ElectronAPI | ScopedElectronAPI {
         onChanged: ProfilesAPI.onChanged,
       },
       settings: {
-        get: SettingsStoreAPI.get,
-        onChanged: SettingsStoreAPI.onChanged,
+        scope: "overlay",
+        get: SettingsStoreAPI.getOverlaySnapshot,
+        onChanged: SettingsStoreAPI.onOverlayChanged,
       },
     };
   }

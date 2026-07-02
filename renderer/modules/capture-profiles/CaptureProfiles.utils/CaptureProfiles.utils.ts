@@ -112,7 +112,7 @@ function resolveCaptureProfileForGame(
 
 function createSettingsUpdateFromCaptureProfile(
   profile: CaptureProfile,
-  currentSettings?: AppSettings | null,
+  currentSettings?: Partial<AppSettings> | null,
 ): Partial<AppSettings> {
   const leagueKey = getLeagueSettingKey(profile.game);
   const activeLeague = currentSettings

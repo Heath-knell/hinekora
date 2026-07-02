@@ -8,6 +8,7 @@ import {
 } from "~/main/utils/ipc-window-roles";
 
 import { DatabaseService } from "../../database";
+import { SettingsStoreService } from "../../settings-store/SettingsStore.service";
 import { ProfilesChannel } from "../Profiles.channels";
 import { ProfilesService } from "../Profiles.service";
 
@@ -25,6 +26,7 @@ describe("ProfilesService", () => {
   afterEach(() => {
     electronMocks.getAllWindows.mockReset();
     clearIpcWindowRolesForTests();
+    SettingsStoreService.resetForTests();
     DatabaseService.resetForTests();
     vi.restoreAllMocks();
   });
@@ -215,9 +217,9 @@ describe("ProfilesService", () => {
     expect(service.resolveProfileForGame(renderableProfile.id, "poe2")).toEqual(
       renderableProfile,
     );
-    expect(
-      service.resolveProfileForGame(poe1OnlyProfile.id, "poe2"),
-    ).toBeNull();
+    expect(service.resolveProfileForGame(poe1OnlyProfile.id, "poe2")).toEqual(
+      renderableProfile,
+    );
     expect(service.resolveProfileForGame(null, "poe2")).toEqual(
       renderableProfile,
     );
@@ -243,9 +245,25 @@ describe("ProfilesService", () => {
     ]);
 
     const id = (created as { id: string }).id;
+    SettingsStoreService.getInstance().update({ activeGame: "poe2" });
+    expect(await handlers.get(ProfilesChannel.Select)?.({}, id)).toEqual({
+      ok: false,
+      error: "profile is not available for the active game",
+    });
+    SettingsStoreService.getInstance().update({ activeGame: "poe1" });
+    expect(
+      await handlers.get(ProfilesChannel.Select)?.({}, "missing-profile"),
+    ).toEqual({
+      ok: false,
+      error: "profile is not available for the active game",
+    });
+
     expect(
       await handlers.get(ProfilesChannel.Update)?.({}, { id, name: "Updated" }),
     ).toMatchObject({ id, name: "Updated" });
+
+    await handlers.get(ProfilesChannel.Select)?.({}, id);
+    expect(SettingsStoreService.getInstance().get().selectedProfileId).toBe(id);
 
     await handlers.get(ProfilesChannel.Delete)?.({}, id);
     expect(await handlers.get(ProfilesChannel.List)?.({})).toEqual([]);
@@ -258,6 +276,10 @@ describe("ProfilesService", () => {
       error: "profile must be an object",
     });
     expect(await handlers.get(ProfilesChannel.Delete)?.({}, "")).toEqual({
+      ok: false,
+      error: "id is too short",
+    });
+    expect(await handlers.get(ProfilesChannel.Select)?.({}, "")).toEqual({
       ok: false,
       error: "id is too short",
     });
