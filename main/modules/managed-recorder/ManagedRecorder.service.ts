@@ -166,6 +166,7 @@ class ManagedRecorderService {
   private status: ManagedRecorderStatus = {
     available: false,
     gameRunning: false,
+    activeGame: null,
     initialized: false,
     bufferActive: false,
     recording: false,
@@ -370,7 +371,7 @@ class ManagedRecorderService {
 
     try {
       if (!(await this.ensureActiveGameRunning())) {
-        this.setStatus({ isStartingRecording: false });
+        this.setStatus({ isStartingRecording: false, activeGame: null });
         return this.status;
       }
 
@@ -428,6 +429,7 @@ class ManagedRecorderService {
         bufferActive: false,
         recording: false,
         isStartingRecording: false,
+        activeGame: null,
         activeSessionDirectory: null,
         recordingStartedAt: null,
         error: safeErrorMessage(error),
@@ -464,6 +466,7 @@ class ManagedRecorderService {
         bufferActive: false,
         recording: false,
         isStoppingRecording: false,
+        activeGame: null,
         activeSessionDirectory: null,
         recordingStartedAt: null,
         error: null,
@@ -503,7 +506,7 @@ class ManagedRecorderService {
 
     try {
       if (!(await this.ensureActiveGameRunning())) {
-        this.setStatus({ isStartingRecording: false });
+        this.setStatus({ isStartingRecording: false, activeGame: null });
         return this.status;
       }
 
@@ -548,6 +551,7 @@ class ManagedRecorderService {
         isStartingRecording: false,
         runRecordingActive: false,
         runRecordingPath: null,
+        activeGame: null,
         activeSessionDirectory: null,
         recordingStartedAt: null,
         runRecordingStartedAt: null,
@@ -570,6 +574,7 @@ class ManagedRecorderService {
 
     try {
       let savedPath: string | null = null;
+      const sessionGame = this.status.activeGame ?? null;
       const outputDirectory = this.status.activeSessionDirectory;
       const runRecordingStartedAt = this.status.runRecordingStartedAt;
       const modifiedAfterMs = this.status.runRecordingStartedAt
@@ -602,6 +607,7 @@ class ManagedRecorderService {
         isStoppingRecording: false,
         runRecordingActive: false,
         runRecordingPath: savedPath ?? this.status.runRecordingPath,
+        activeGame: null,
         activeSessionDirectory: null,
         recordingStartedAt: null,
         runRecordingStartedAt: null,
@@ -614,7 +620,8 @@ class ManagedRecorderService {
       });
       if (savedPath && runRecordingStartedAt) {
         const settings = SettingsStoreService.getInstance().get();
-        const configuredGame = this.resolveConfiguredGame(settings);
+        const configuredGame =
+          sessionGame ?? this.resolveConfiguredGame(settings);
         RecordingStorageService.getInstance().registerRunRecording({
           path: savedPath,
           startedAt: runRecordingStartedAt,
@@ -854,6 +861,8 @@ class ManagedRecorderService {
       if (!this.status.bufferActive) {
         throw new Error("Managed replay buffer is not active");
       }
+      const sessionGame =
+        this.status.activeGame ?? this.resolveConfiguredGame();
 
       logInfo(MANAGED_RECORDER_LOG_SCOPE, "Saving replay from active buffer", {
         kind,
@@ -867,6 +876,7 @@ class ManagedRecorderService {
       this.setStatus({
         bufferActive: true,
         recording: true,
+        activeGame: sessionGame,
         lastRecordingPath: path,
         error: null,
       });
@@ -1725,6 +1735,7 @@ class ManagedRecorderService {
       options.kind,
     );
     const recordingStartedAt = this.status.recordingStartedAt;
+    const activeGame = this.status.activeGame ?? this.resolveConfiguredGame();
     const requestedSeconds = Math.max(
       1,
       Math.min(maxRewindSaveSeconds, Math.round(seconds)),
@@ -1794,7 +1805,11 @@ class ManagedRecorderService {
         : detectedPath;
 
     if (options.restartBufferAfterSave) {
-      this.restartReplayBufferAfterSave(sessionDirectory, recordingStartedAt);
+      this.restartReplayBufferAfterSave(
+        sessionDirectory,
+        recordingStartedAt,
+        activeGame,
+      );
     }
 
     return savedPath;
@@ -1879,6 +1894,7 @@ class ManagedRecorderService {
   private restartReplayBufferAfterSave(
     sessionDirectory: string,
     recordingStartedAt: string | null,
+    activeGame: GameId | null,
   ): void {
     if (!this.noobs) {
       return;
@@ -1890,6 +1906,7 @@ class ManagedRecorderService {
       bufferActive: true,
       recording: true,
       runRecordingActive: false,
+      activeGame,
       activeSessionDirectory: sessionDirectory,
       recordingStartedAt,
       error: null,
@@ -2330,6 +2347,7 @@ class ManagedRecorderService {
         bufferActive: false,
         recording: false,
         runRecordingActive: false,
+        activeGame: null,
         error: null,
       });
     }
@@ -2446,7 +2464,11 @@ class ManagedRecorderService {
     }
 
     this.startingRecordingMode = mode;
-    this.setStatus({ isStartingRecording: true, error: null });
+    this.setStatus({
+      isStartingRecording: true,
+      activeGame: this.resolveConfiguredGame(),
+      error: null,
+    });
     return true;
   }
 

@@ -4,6 +4,7 @@ import {
   getCaptureProfileDisplayName,
   sortCaptureProfilesForDisplay,
 } from "~/renderer/modules/capture-profiles/CaptureProfiles.utils/CaptureProfiles.utils";
+import { useManagedRecorderActive } from "~/renderer/modules/managed-recorder/ManagedRecorder.hooks/useManagedRecorderActive/useManagedRecorderActive";
 import { useCaptureProfilesShallow } from "~/renderer/store";
 
 import { CaptureProfileLockToggle } from "../CaptureProfileLockToggle/CaptureProfileLockToggle";
@@ -15,8 +16,13 @@ function CaptureProfileSelect() {
       selectedProfileId: captureProfiles.selectedProfileId,
       selectProfileWithPreviewSource: captureProfiles.selectWithPreviewSource,
     }));
+  const isRecorderActive = useManagedRecorderActive();
 
   const handleProfileChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    if (isRecorderActive) {
+      return;
+    }
+
     if (event.target.value) {
       selectProfileWithPreviewSource(event.target.value);
     }
@@ -27,7 +33,7 @@ function CaptureProfileSelect() {
       <select
         aria-label="Capture profile"
         className="join-item select select-bordered select-sm w-48 bg-base-200 focus:outline-none focus-visible:outline-none"
-        disabled={items.length === 0}
+        disabled={items.length === 0 || isRecorderActive}
         value={selectedProfileId ?? ""}
         onChange={handleProfileChange}
       >

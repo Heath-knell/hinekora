@@ -1,9 +1,6 @@
-import {
-  useCaptureProfilesShallow,
-  useManagedRecorderShallow,
-} from "~/renderer/store";
+import { useCaptureProfilesShallow } from "~/renderer/store";
 
-import { isManagedRecorderStatusActive } from "../../ManagedRecorder.utils/ManagedRecorder.utils";
+import { useManagedRecorderActive } from "../useManagedRecorderActive/useManagedRecorderActive";
 
 function useManagedRecorderSettingsDisabled(): boolean {
   const isProfileLocked = useCaptureProfilesShallow(
@@ -11,9 +8,7 @@ function useManagedRecorderSettingsDisabled(): boolean {
       captureProfiles.selectedProfileId !== null &&
       !captureProfiles.isProfileUnlocked,
   );
-  const isRecorderActive = useManagedRecorderShallow((managedRecorder) =>
-    isManagedRecorderStatusActive(managedRecorder.status),
-  );
+  const isRecorderActive = useManagedRecorderActive();
 
   return isProfileLocked || isRecorderActive;
 }

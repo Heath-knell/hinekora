@@ -4,8 +4,10 @@ import {
   createCaptureTargetFromPreviewSource,
   sourceMatchesCaptureTarget,
 } from "~/renderer/modules/capture-preview/CapturePreview.utils/CapturePreview.utils";
+import { isManagedRecorderStatusActive } from "~/renderer/modules/managed-recorder/ManagedRecorder.utils/ManagedRecorder.utils";
 import {
   useCaptureProfilesShallow,
+  useManagedRecorderShallow,
   useSettingsShallow,
 } from "~/renderer/store";
 
@@ -36,6 +38,9 @@ function useCapturePreviewSourcePersistence(
     activeGame: settings.value?.activeGame ?? "poe1",
     updateSettings: settings.update,
   }));
+  const isRecorderActive = useManagedRecorderShallow((managedRecorder) =>
+    isManagedRecorderStatusActive(managedRecorder.status),
+  );
 
   const selectedSourceProfile = useMemo(
     () =>
@@ -52,6 +57,10 @@ function useCapturePreviewSourcePersistence(
 
   const persistCaptureTarget = useCallback(
     (source: CapturePreviewSource) => {
+      if (isRecorderActive) {
+        return;
+      }
+
       const targetProfile = resolveCaptureTargetProfile(
         profileItems,
         selectedProfileId,
@@ -87,6 +96,7 @@ function useCapturePreviewSourcePersistence(
     [
       activeGame,
       isProfileUnlocked,
+      isRecorderActive,
       profileItems,
       selectedProfileId,
       selectProfile,

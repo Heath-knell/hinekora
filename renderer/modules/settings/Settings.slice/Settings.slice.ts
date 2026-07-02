@@ -1,5 +1,6 @@
 import type { SettingsStoreOverlaySnapshot } from "~/main/modules/settings-store/SettingsStore.dto";
 import { pickCaptureProfileSettingsUpdate } from "~/renderer/modules/capture-profiles/CaptureProfiles.utils/CaptureProfiles.utils";
+import { isManagedRecorderStatusActive } from "~/renderer/modules/managed-recorder/ManagedRecorder.utils/ManagedRecorder.utils";
 import { trackEvent } from "~/renderer/modules/umami";
 import type {
   BoundStore,
@@ -122,6 +123,10 @@ async function syncSelectedCaptureProfileFromSettingsUpdate(
     return;
   }
 
+  if (isManagedRecorderStatusActive(get().managedRecorder?.status)) {
+    return;
+  }
+
   const selectedCaptureProfileId = settings.selectedCaptureProfileId;
   if (!selectedCaptureProfileId) {
     return;
@@ -137,7 +142,10 @@ async function syncSelectedCaptureProfileFromSettingsUpdate(
       id: selectedCaptureProfileId,
       ...captureProfileUpdate,
     });
-    if (!isCurrentRequest()) {
+    if (
+      !isCurrentRequest() ||
+      isManagedRecorderStatusActive(get().managedRecorder?.status)
+    ) {
       return;
     }
 
@@ -152,7 +160,10 @@ async function syncSelectedCaptureProfileFromSettingsUpdate(
       state.captureProfiles.selectedProfileId = updatedProfile.id;
     });
   } catch (error) {
-    if (!isCurrentRequest()) {
+    if (
+      !isCurrentRequest() ||
+      isManagedRecorderStatusActive(get().managedRecorder?.status)
+    ) {
       return;
     }
 

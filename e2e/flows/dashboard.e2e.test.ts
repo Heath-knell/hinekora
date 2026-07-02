@@ -117,6 +117,13 @@ async function openLivePreviewSourceSelect(sourceSelect: Locator) {
 
 async function unlockCaptureProfile(page: Page): Promise<void> {
   const settingsPanel = page.locator('[data-onboarding="capture-settings"]');
+  const unlockedChip = settingsPanel
+    .getByRole("button", { name: "Lock capture profile" })
+    .filter({ hasText: "Unlocked" });
+  if (await unlockedChip.isVisible()) {
+    return;
+  }
+
   const unlockChip = settingsPanel
     .getByRole("button", { name: "Unlock capture profile" })
     .filter({ hasText: "Locked" });
@@ -143,6 +150,7 @@ test("prevents Live Preview refresh loops and covers source preview controls", a
     name: /^Capture source$/,
   });
   await expect(sourceSelect).toHaveValue("screen:1:0");
+  await expect(sourceSelect).toBeDisabled();
   await expect(page.getByText("Preview stopped")).toBeVisible();
 
   const callsBeforeRefresh = await getDashboardE2ECalls(page);
@@ -170,11 +178,25 @@ test("prevents Live Preview refresh loops and covers source preview controls", a
   );
   expect(callsAfterRefresh.captureSourceRequests.at(-1)).toBe(true);
 
+  await unlockCaptureProfile(page);
+  const updatesBeforeSourceChange = (await getDashboardE2ECalls(page))
+    .captureProfileUpdates.length;
   await sourceSelect.selectOption("window:poe2:1");
   await expect(sourceSelect).toHaveValue("window:poe2:1");
-  expect((await getDashboardE2ECalls(page)).captureProfileUpdates).toHaveLength(
-    0,
-  );
+  expect(
+    (await getDashboardE2ECalls(page)).captureProfileUpdates.slice(
+      updatesBeforeSourceChange,
+    ),
+  ).toEqual([
+    expect.objectContaining({
+      captureTarget: expect.objectContaining({
+        game: "poe2",
+        id: "window:poe2:1",
+        kind: "window",
+      }),
+      id: "capture-profile-1",
+    }),
+  ]);
 
   await page.getByRole("button", { name: "Show Preview" }).click();
   await expect(
@@ -205,6 +227,7 @@ test("covers unavailable PoE live preview sources and auto-start alerts", async 
   const sourceSelect = page.getByRole("combobox", {
     name: /^Capture source$/,
   });
+  await unlockCaptureProfile(page);
   await expect
     .poll(async () => openLivePreviewSourceSelect(sourceSelect))
     .toContainEqual({
@@ -220,14 +243,22 @@ test("covers unavailable PoE live preview sources and auto-start alerts", async 
     page.getByRole("button", { name: "Show Preview" }),
   ).toBeDisabled();
   await expect(sourceSelect).toHaveValue("missing-window:poe2");
-  expect((await getDashboardE2ECalls(page)).captureProfileUpdates).toHaveLength(
-    0,
+  expect(
+    (await getDashboardE2ECalls(page)).captureProfileUpdates,
+  ).toContainEqual(
+    expect.objectContaining({
+      captureTarget: expect.objectContaining({
+        game: "poe2",
+        id: "missing-window:poe2",
+        kind: "window",
+      }),
+      id: "capture-profile-1",
+    }),
   );
 
   const recordingSettingsTabs = page.getByRole("tablist", {
     name: "Recording settings",
   });
-  await unlockCaptureProfile(page);
   await recordingSettingsTabs.getByRole("tab", { name: "Rewind" }).click();
   await page.getByLabel("Start rewind automatically").check();
   await expect(
@@ -264,6 +295,7 @@ test("updates appbar and live preview sources for PoE process variants", async (
   const poe1Button = page.getByRole("button", { name: /Path of Exile 1/ });
   const poe2Button = page.getByRole("button", { name: /Path of Exile 2/ });
 
+  await unlockCaptureProfile(page);
   await setDashboardCaptureSources(page, [dashboardScreenSource]);
   await emitDashboardPoeProcessStop(page);
   await expect(poe1Button).toContainText("Offline");
@@ -360,6 +392,7 @@ test("retries live preview source refresh when the game window appears after pro
     throw new Error("PoE2 source fixture missing");
   }
 
+  await unlockCaptureProfile(page);
   await setDashboardCaptureSources(page, [dashboardScreenSource]);
   await emitDashboardPoeProcessStop(page);
   await expect(poe2Button).toContainText("Offline");
@@ -436,7 +469,18 @@ test("covers recorder mode, capture settings, and audio settings interactions", 
   const recordingSettingsTabs = page.getByRole("tablist", {
     name: "Recording settings",
   });
+  const captureProfileSelect = page.getByRole("combobox", {
+    name: "Capture profile",
+  });
+  const sourceSelect = page.getByRole("combobox", {
+    name: /^Capture source$/,
+  });
+  const settingsPanel = page.locator('[data-onboarding="capture-settings"]');
+  const inactiveGameButton = page.getByRole("button", {
+    name: /Path of Exile 1/,
+  });
 
+  await unlockCaptureProfile(page);
   await captureModeTabs.getByRole("tab", { name: "Session Recording" }).click();
   await expect
     .poll(async () => {
@@ -455,6 +499,14 @@ test("covers recorder mode, capture settings, and audio settings interactions", 
       return calls.startRunRecordingCount;
     })
     .toBe(1);
+  await expect(captureProfileSelect).toBeDisabled();
+  await expect(sourceSelect).toBeDisabled();
+  await expect(
+    settingsPanel
+      .getByRole("button", { name: "Unlock capture profile" })
+      .filter({ hasText: "Locked" }),
+  ).toBeDisabled();
+  await expect(inactiveGameButton).toBeDisabled();
   await page.getByRole("button", { name: "Stop & Save Recording" }).click();
   await expect
     .poll(async () => {
@@ -473,6 +525,9 @@ test("covers recorder mode, capture settings, and audio settings interactions", 
       return calls.startBufferCount;
     })
     .toBe(1);
+  await expect(captureProfileSelect).toBeDisabled();
+  await expect(sourceSelect).toBeDisabled();
+  await expect(inactiveGameButton).toBeDisabled();
   await page.getByRole("button", { name: "Disable Rewind" }).click();
   await expect
     .poll(async () => {

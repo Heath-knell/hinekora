@@ -1,11 +1,8 @@
 import clsx from "clsx";
 import { FiLock as Lock, FiUnlock as Unlock } from "react-icons/fi";
 
-import { isManagedRecorderStatusActive } from "~/renderer/modules/managed-recorder/ManagedRecorder.utils/ManagedRecorder.utils";
-import {
-  useCaptureProfilesShallow,
-  useManagedRecorderShallow,
-} from "~/renderer/store";
+import { useManagedRecorderActive } from "~/renderer/modules/managed-recorder/ManagedRecorder.hooks/useManagedRecorderActive/useManagedRecorderActive";
+import { useCaptureProfilesShallow } from "~/renderer/store";
 
 interface CaptureProfileLockToggleProps {
   attached?: boolean;
@@ -24,22 +21,20 @@ function CaptureProfileLockToggle({
       selectedProfileId: captureProfiles.selectedProfileId,
       toggleProfileLock: captureProfiles.toggleProfileLock,
     }));
-  const isRecorderActive = useManagedRecorderShallow((managedRecorder) =>
-    isManagedRecorderStatusActive(managedRecorder.status),
-  );
-  const Icon = isProfileUnlocked ? Unlock : Lock;
-  const label = isProfileUnlocked ? "Unlocked" : "Locked";
-  const ariaLabel = isProfileUnlocked
+  const isRecorderActive = useManagedRecorderActive();
+  const isEffectivelyUnlocked = isProfileUnlocked && !isRecorderActive;
+  const Icon = isEffectivelyUnlocked ? Unlock : Lock;
+  const label = isEffectivelyUnlocked ? "Unlocked" : "Locked";
+  const ariaLabel = isEffectivelyUnlocked
     ? "Lock capture profile"
     : "Unlock capture profile";
-  const isUnlockBlocked = !isProfileUnlocked && isRecorderActive;
-  const isDisabled = selectedProfileId === null || isUnlockBlocked;
+  const isDisabled = selectedProfileId === null || isRecorderActive;
   let title = ariaLabel;
 
   if (selectedProfileId === null) {
     title = "Select a capture profile first";
-  } else if (isUnlockBlocked) {
-    title = "Stop recording or rewind before unlocking the profile";
+  } else if (isRecorderActive) {
+    title = "Stop recording or rewind before changing the profile lock";
   }
 
   if (variant === "chip") {
@@ -51,7 +46,7 @@ function CaptureProfileLockToggle({
           size === "xs"
             ? "badge-xs h-5 gap-1 px-2 text-[0.6875rem]"
             : "h-7 gap-1.5 px-2.5 text-[0.75rem]",
-          isProfileUnlocked
+          isEffectivelyUnlocked
             ? "border-primary bg-primary text-primary-content"
             : "border-base-content/20 bg-base-200 text-base-content/75 hover:border-primary hover:text-primary",
         )}
@@ -71,7 +66,7 @@ function CaptureProfileLockToggle({
       aria-label={ariaLabel}
       className={clsx(
         "btn btn-square btn-sm border-base-content/15 bg-base-200 text-base-content/70 disabled:cursor-not-allowed disabled:opacity-45",
-        isProfileUnlocked
+        isEffectivelyUnlocked
           ? "border-primary bg-primary text-primary-content hover:border-primary hover:bg-primary hover:text-primary-content"
           : "hover:border-primary hover:text-primary",
         attached && "join-item rounded-l-none",

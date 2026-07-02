@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { createCaptureProfileTestFixture } from "~/renderer/modules/capture-profiles/CaptureProfiles.test-utils";
+import { createManagedRecorderStatusTestFixture as createManagedRecorderStatus } from "~/renderer/modules/managed-recorder/ManagedRecorder.test-utils";
 import type { BoundStore } from "~/renderer/store/store.types";
 import { createBoundStoreForTests } from "~/renderer/test/createBoundStoreForTests";
 
@@ -7,6 +9,7 @@ import {
   type AppSettings,
   type CaptureProfile,
   createDefaultSettings,
+  type ManagedRecorderStatus,
 } from "~/types";
 
 const analyticsMocks = vi.hoisted(() => ({
@@ -30,28 +33,16 @@ const settings: AppSettings = {
   lastSeenAppVersion: null,
 };
 
-const captureProfile: CaptureProfile = {
-  captureTarget: null,
-  createdAt: "2026-07-01T00:00:00.000Z",
-  deathClipSeconds: 10,
+const captureProfile = createCaptureProfileTestFixture({
   game: "poe2",
   id: "capture-profile-1",
-  isDefault: false,
   name: "PoE 2 Capture",
-  recordingAudioInputDeviceId: null,
-  recordingAudioOutputDeviceId: null,
-  recordingAutoStartMode: "off",
-  recordingClipQuality: "high",
-  recordingEncoder: "hardware_h264",
-  recordingFps: 60,
-  recordingHideOverlaysFromRecording: true,
-  recordingHideOverlaysFromRewind: true,
-  recordingOutputResolution: "native",
-  recordingRunQuality: "moderate",
-  updatedAt: "2026-07-01T00:00:00.000Z",
-};
+});
 
-function createTestStore(isProfileUnlocked = false) {
+function createTestStore(
+  isProfileUnlocked = false,
+  managedRecorderStatus: ManagedRecorderStatus | null = null,
+) {
   return createBoundStoreForTests(
     (set, get, api) =>
       ({
@@ -72,6 +63,18 @@ function createTestStore(isProfileUnlocked = false) {
           startListening: vi.fn(),
           toggleProfileLock: vi.fn(),
           update: vi.fn(),
+        },
+        managedRecorder: {
+          captureMode: "rewind",
+          hydrate: vi.fn(),
+          saveReplay: vi.fn(),
+          setCaptureMode: vi.fn(),
+          startBuffer: vi.fn(),
+          startListening: vi.fn(),
+          startRunRecording: vi.fn(),
+          status: managedRecorderStatus,
+          stopBuffer: vi.fn(),
+          stopRunRecording: vi.fn(),
         },
       }) as unknown as BoundStore,
   );
@@ -320,6 +323,54 @@ describe("Settings slice", () => {
       recordingFps: 30,
     });
     expect(store.getState().captureProfiles.items[0]?.recordingFps).toBe(30);
+  });
+
+  it("keeps unlocked capture profile settings unchanged while recording or rewind is active", async () => {
+    updateSettings.mockResolvedValue({
+      ...settings,
+      recordingFps: 30,
+      selectedCaptureProfileId: captureProfile.id,
+    });
+    const store = createTestStore(
+      true,
+      createManagedRecorderStatus({ runRecordingActive: true }),
+    );
+
+    await store.getState().settings.update({ recordingFps: 30 });
+
+    expect(updateCaptureProfile).not.toHaveBeenCalled();
+  });
+
+  it("ignores capture profile sync results when recording starts before completion", async () => {
+    const profileUpdate = createDeferred<CaptureProfile>();
+    updateSettings.mockResolvedValue({
+      ...settings,
+      recordingFps: 30,
+      selectedCaptureProfileId: captureProfile.id,
+    });
+    updateCaptureProfile.mockReturnValueOnce(profileUpdate.promise);
+    const store = createTestStore(true);
+
+    const update = store.getState().settings.update({ recordingFps: 30 });
+    await Promise.resolve();
+    expect(updateCaptureProfile).toHaveBeenCalledWith({
+      id: captureProfile.id,
+      recordingFps: 30,
+    });
+
+    store.setState((state) => ({
+      managedRecorder: {
+        ...state.managedRecorder,
+        status: createManagedRecorderStatus({ runRecordingActive: true }),
+      },
+    }));
+    profileUpdate.resolve({
+      ...captureProfile,
+      recordingFps: 30,
+    });
+    await update;
+
+    expect(store.getState().captureProfiles.items[0]?.recordingFps).toBe(60);
   });
 
   it("does not resync a local settings update after its change event was handled", async () => {

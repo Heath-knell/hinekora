@@ -12,6 +12,7 @@ import {
   isCapturePreviewSourceCompatibleWithGame,
 } from "~/renderer/modules/capture-preview/CapturePreview.utils/CapturePreview.utils";
 import { CaptureProfileLockToggle } from "~/renderer/modules/capture-profiles/CaptureProfiles.components/CaptureProfileLockToggle/CaptureProfileLockToggle";
+import { useManagedRecorderSettingsDisabled } from "~/renderer/modules/managed-recorder/ManagedRecorder.hooks/useManagedRecorderSettingsDisabled/useManagedRecorderSettingsDisabled";
 import {
   useCapturePreviewShallow,
   useSettingsSelector,
@@ -47,6 +48,7 @@ function CapturePreviewSourceControls({
   const activeGame = useSettingsSelector(
     (settings) => settings.value?.activeGame ?? "poe1",
   );
+  const isSettingsDisabled = useManagedRecorderSettingsDisabled();
   const selectedSource = useMemo(
     () => sources.find((source) => source.id === selectedSourceId) ?? null,
     [selectedSourceId, sources],
@@ -57,6 +59,10 @@ function CapturePreviewSourceControls({
     !canPreviewSelectedSource && !isPreviewing && previewSourceId === null;
 
   const handleSourceChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    if (isSettingsDisabled) {
+      return;
+    }
+
     const sourceId = event.target.value;
     onSourceChange(
       sourceId,
@@ -75,7 +81,7 @@ function CapturePreviewSourceControls({
           <select
             aria-label="Capture source"
             className="join-item select select-bordered select-sm min-w-0 flex-1 focus:outline-none focus-visible:outline-none"
-            disabled={isLoading}
+            disabled={isLoading || isSettingsDisabled}
             value={selectedSourceId ?? ""}
             onChange={handleSourceChange}
           >

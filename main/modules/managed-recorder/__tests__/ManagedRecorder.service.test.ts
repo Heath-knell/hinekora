@@ -32,6 +32,7 @@ import {
   type CaptureProfile,
   createDefaultCaptureProfile,
   createDefaultSettings,
+  type GameId,
   type ManagedRecorderStatus,
 } from "~/types";
 import { ManagedRecorderChannel } from "../ManagedRecorder.channels";
@@ -82,11 +83,11 @@ vi.mock("~/main/pollers", () => ({
   detectPoeProcessState: pollerMocks.detectPoeProcessState,
   isPoeProcessStateForGame: (
     state: {
-      game?: "poe1" | "poe2" | null;
+      game?: GameId | null;
       isRunning: boolean;
       processName: string;
     },
-    game: "poe1" | "poe2",
+    game: GameId,
   ) => {
     if (!state.isRunning) {
       return false;
@@ -452,6 +453,7 @@ describe("ManagedRecorderService", () => {
     };
     internals.status = {
       ...service.getStatus(),
+      activeGame: "poe2",
       bufferActive: true,
       recording: true,
     };
@@ -489,6 +491,7 @@ describe("ManagedRecorderService", () => {
       bufferActive: true,
       recording: true,
       isStartingRecording: false,
+      activeGame: "poe1",
       activeSessionDirectory: join(directory, "Death Clips"),
       outputResolution: "1920x1080",
       encoder: "h264_texture_amf",
@@ -993,10 +996,36 @@ describe("ManagedRecorderService", () => {
       recording: true,
       runRecordingActive: true,
       bufferActive: false,
+      activeGame: "poe1",
       activeSessionDirectory: join(directory, "Full Recordings"),
       error: null,
     });
     const runStartedAt = service.getStatus().runRecordingStartedAt;
+    vi.spyOn(SettingsStoreService, "getInstance").mockReturnValue({
+      get: () => ({
+        ...createDefaultSettings(),
+        activeGame: "poe2",
+        activeLeague: "Runes of Aldur",
+        recordingStoragePath: directory,
+        recordingFps: 60,
+        recordingOutputResolution: "1920x1080",
+        recordingEncoder: "hardware_h264",
+      }),
+    } as unknown as SettingsStoreService);
+    vi.spyOn(CaptureProfilesService, "getInstance").mockReturnValue({
+      list: () => [
+        {
+          ...createDefaultCaptureProfile({ name: "Default", game: "poe2" }),
+          captureTarget: {
+            kind: "display",
+            id: "primary",
+            label: "Primary display",
+            width: 1920,
+            height: 1080,
+          },
+        },
+      ],
+    } as unknown as CaptureProfilesService);
     (service as unknown as { status: ManagedRecorderStatus }).status = {
       ...service.getStatus(),
       initialized: true,
@@ -1005,6 +1034,7 @@ describe("ManagedRecorderService", () => {
     await expect(service.stopRunRecording()).resolves.toMatchObject({
       recording: false,
       runRecordingActive: false,
+      activeGame: null,
       lastRecordingPath: savedPath,
       runRecordingPath: savedPath,
       error: null,
@@ -1018,7 +1048,69 @@ describe("ManagedRecorderService", () => {
         path: savedPath,
         startedAt: runStartedAt,
         sourceGame: "poe1",
-        sourceLeague: "Standard",
+        sourceLeague: "Runes of Aldur",
+      }),
+    );
+    expect(cleanup).toHaveBeenCalledWith({
+      protectedDirectories: [],
+      protectedPaths: [savedPath],
+    });
+  });
+
+  it("registers saved run recordings with the configured game when session game is missing", async () => {
+    const savedPath = join(directory, "run-fallback.mp4");
+    const startedAt = new Date(Date.now() - 30_000).toISOString();
+    const service = createService();
+    const noobs = createNoobsApi();
+    const registerRunRecording = vi.fn();
+    const cleanup = vi.fn();
+    vi.spyOn(RecordingStorageService, "getInstance").mockReturnValue({
+      cleanup,
+      registerRunRecording,
+    } as unknown as RecordingStorageService);
+    vi.spyOn(SettingsStoreService, "getInstance").mockReturnValue({
+      get: () => ({
+        ...createDefaultSettings(),
+        activeGame: "poe2",
+        activeLeague: "Runes of Aldur",
+        recordingStoragePath: directory,
+        recordingFps: 60,
+        recordingOutputResolution: "1920x1080",
+        recordingEncoder: "hardware_h264",
+      }),
+    } as unknown as SettingsStoreService);
+    const internals = service as unknown as {
+      noobs: ReturnType<typeof createNoobsApi>;
+      status: ManagedRecorderStatus;
+      waitForRecordingStop(): Promise<void>;
+      waitForSavedRecording(): Promise<string | null>;
+    };
+    internals.noobs = noobs;
+    internals.status = {
+      ...service.getStatus(),
+      activeGame: null,
+      activeSessionDirectory: directory,
+      initialized: true,
+      recording: true,
+      runRecordingActive: true,
+      runRecordingStartedAt: startedAt,
+    };
+    internals.waitForRecordingStop = vi.fn().mockResolvedValue(undefined);
+    internals.waitForSavedRecording = vi.fn().mockResolvedValue(savedPath);
+
+    await expect(service.stopRunRecording()).resolves.toMatchObject({
+      activeGame: null,
+      recording: false,
+      runRecordingActive: false,
+      runRecordingPath: savedPath,
+    });
+
+    expect(registerRunRecording).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: savedPath,
+        sourceGame: "poe2",
+        sourceLeague: "Runes of Aldur",
+        startedAt,
       }),
     );
     expect(cleanup).toHaveBeenCalledWith({
@@ -1045,6 +1137,7 @@ describe("ManagedRecorderService", () => {
     internals.status = {
       ...service.getStatus(),
       activeSessionDirectory: directory,
+      activeGame: "poe1",
       bufferActive: true,
       initialized: true,
       lastRecordingPath: previousPath,
@@ -1057,6 +1150,7 @@ describe("ManagedRecorderService", () => {
       bufferActive: false,
       recording: false,
       lastRecordingPath: previousPath,
+      activeGame: null,
       activeSessionDirectory: null,
       error: null,
     });
@@ -2228,6 +2322,7 @@ describe("ManagedRecorderService", () => {
     internals.saveBufferedReplay = vi.fn().mockResolvedValue(savedPath);
     internals.status = {
       ...service.getStatus(),
+      activeGame: "poe2",
       bufferActive: true,
       recording: true,
     };
@@ -2245,8 +2340,53 @@ describe("ManagedRecorderService", () => {
     expect(service.getStatus()).toMatchObject({
       bufferActive: true,
       recording: true,
+      activeGame: "poe2",
       lastRecordingPath: savedPath,
       error: null,
+    });
+  });
+
+  it("uses the configured game when saving replay buffers without a session game", async () => {
+    const savedPath = join(directory, "clip-fallback.mp4");
+    const service = createService();
+    vi.spyOn(SettingsStoreService, "getInstance").mockReturnValue({
+      get: () => ({
+        ...createDefaultSettings(),
+        activeGame: "poe2",
+        recordingStoragePath: directory,
+        recordingFps: 60,
+        recordingOutputResolution: "1920x1080",
+        recordingEncoder: "hardware_h264",
+      }),
+    } as unknown as SettingsStoreService);
+    const internals = service as unknown as {
+      initialize(): Promise<void>;
+      saveBufferedReplay(
+        seconds: number,
+        options: { kind: "death" | "manual"; restartBufferAfterSave: boolean },
+      ): Promise<string>;
+      status: ManagedRecorderStatus;
+    };
+    internals.initialize = vi.fn().mockResolvedValue(undefined);
+    internals.saveBufferedReplay = vi.fn().mockResolvedValue(savedPath);
+    internals.status = {
+      ...service.getStatus(),
+      activeGame: null,
+      bufferActive: true,
+      recording: true,
+    };
+
+    await expect(service.saveReplay(12)).resolves.toEqual({
+      ok: true,
+      path: savedPath,
+      error: null,
+    });
+
+    expect(service.getStatus()).toMatchObject({
+      activeGame: "poe2",
+      bufferActive: true,
+      recording: true,
+      lastRecordingPath: savedPath,
     });
   });
 
@@ -2260,6 +2400,7 @@ describe("ManagedRecorderService", () => {
       restartReplayBufferAfterSave(
         sessionDirectory: string,
         recordingStartedAt: string | null,
+        activeGame: GameId | null,
       ): void;
       saveBufferedReplay(
         seconds: number,
@@ -2282,6 +2423,7 @@ describe("ManagedRecorderService", () => {
     internals.noobs = noobs;
     internals.status = {
       ...service.getStatus(),
+      activeGame: "poe2",
       activeSessionDirectory: directory,
       recordingStartedAt,
       outputResolution: "1920x1080",
@@ -2327,6 +2469,7 @@ describe("ManagedRecorderService", () => {
     expect(restartReplayBufferAfterSave).toHaveBeenCalledWith(
       directory,
       recordingStartedAt,
+      "poe2",
     );
   });
 
@@ -2393,6 +2536,7 @@ describe("ManagedRecorderService", () => {
       restartReplayBufferAfterSave(
         sessionDirectory: string,
         recordingStartedAt: string | null,
+        activeGame: GameId | null,
       ): void;
       saveBufferedReplay(
         seconds: number,
@@ -3941,6 +4085,7 @@ describe("ManagedRecorderService", () => {
       restartReplayBufferAfterSave(
         sessionDirectory: string,
         recordingStartedAt: string | null,
+        activeGame: GameId | null,
       ): void;
       status: ManagedRecorderStatus;
       waitForRecordingStop(): Promise<void>;
@@ -3972,7 +4117,7 @@ describe("ManagedRecorderService", () => {
       recordingStartedAt: null,
     };
     internals.noobs = null;
-    internals.restartReplayBufferAfterSave(directory, null);
+    internals.restartReplayBufferAfterSave(directory, null, null);
     expect(service.getStatus()).toMatchObject({
       bufferActive: true,
       recording: true,

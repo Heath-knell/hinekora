@@ -7,9 +7,14 @@ import {
   isDefaultCaptureProfile,
   sortCaptureProfilesForDisplay,
 } from "~/renderer/modules/capture-profiles/CaptureProfiles.utils/CaptureProfiles.utils";
+import { useManagedRecorderActive } from "~/renderer/modules/managed-recorder/ManagedRecorder.hooks/useManagedRecorderActive/useManagedRecorderActive";
 import { useCaptureProfilesShallow } from "~/renderer/store";
 
+const lockedProfileControlsTitle =
+  "Stop recording or rewind before changing capture profiles";
+
 function CaptureProfilesPanel() {
+  const isRecorderActive = useManagedRecorderActive();
   const {
     createProfile,
     deleteProfile,
@@ -56,6 +61,8 @@ function CaptureProfilesPanel() {
   return (
     <ProfileManagementPanel
       count={items.length}
+      disabled={isRecorderActive}
+      disabledTitle={lockedProfileControlsTitle}
       emptyMessage="Default profile will be recreated automatically."
       initialName="Default Capture"
       inputLabel="Capture profile name"

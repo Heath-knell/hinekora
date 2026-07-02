@@ -14,6 +14,8 @@ interface ProfileManagementPanelItem {
 
 interface ProfileManagementPanelProps {
   count: number;
+  disabled?: boolean;
+  disabledTitle?: string;
   emptyMessage: string;
   initialName: string;
   inputLabel: string;
@@ -27,6 +29,8 @@ interface ProfileManagementPanelProps {
 
 function ProfileManagementPanel({
   count,
+  disabled = false,
+  disabledTitle,
   emptyMessage,
   initialName,
   inputLabel,
@@ -40,21 +44,37 @@ function ProfileManagementPanel({
   const [name, setName] = useState(initialName);
 
   const handleNameChange = (event: ChangeEvent<HTMLInputElement>) => {
+    if (disabled) {
+      return;
+    }
+
     setName(event.target.value);
   };
   const handleCreate = () => {
+    if (disabled) {
+      return;
+    }
+
     const trimmedName = name.trim();
     if (trimmedName) {
       onCreate(trimmedName);
     }
   };
   const handleSelectProfile = (event: MouseEvent<HTMLButtonElement>) => {
+    if (disabled) {
+      return;
+    }
+
     const profileId = event.currentTarget.dataset.profileId;
     if (profileId) {
       onSelect(profileId);
     }
   };
   const handleDeleteProfile = (event: MouseEvent<HTMLButtonElement>) => {
+    if (disabled) {
+      return;
+    }
+
     const profileId = event.currentTarget.dataset.profileId;
     if (profileId) {
       onDelete(profileId);
@@ -71,11 +91,15 @@ function ProfileManagementPanel({
         <input
           aria-label={inputLabel}
           className="input input-bordered min-w-0 flex-1"
+          disabled={disabled}
+          title={disabledTitle}
           value={name}
           onChange={handleNameChange}
         />
         <button
           className="btn btn-primary btn-sm"
+          disabled={disabled}
+          title={disabledTitle}
           type="button"
           onClick={handleCreate}
         >
@@ -97,8 +121,10 @@ function ProfileManagementPanel({
             key={item.id}
           >
             <button
-              className="min-w-0 truncate text-left"
+              className="min-w-0 truncate text-left disabled:cursor-not-allowed disabled:opacity-50"
               data-profile-id={item.id}
+              disabled={disabled}
+              title={disabledTitle}
               type="button"
               onClick={handleSelectProfile}
             >
@@ -111,8 +137,8 @@ function ProfileManagementPanel({
               aria-label={`Delete ${item.name}`}
               className="btn btn-ghost btn-xs h-7 min-h-0 w-7 p-0 text-error"
               data-profile-id={item.id}
-              disabled={item.isDeleteDisabled}
-              title={item.deleteDisabledTitle}
+              disabled={disabled || item.isDeleteDisabled}
+              title={disabled ? disabledTitle : item.deleteDisabledTitle}
               type="button"
               onClick={handleDeleteProfile}
             >

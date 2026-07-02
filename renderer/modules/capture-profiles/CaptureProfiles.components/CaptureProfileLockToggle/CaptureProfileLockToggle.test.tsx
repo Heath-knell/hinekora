@@ -115,7 +115,7 @@ describe("CaptureProfileLockToggle", () => {
     );
     expect(button?.disabled).toBe(true);
     expect(button?.title).toBe(
-      "Stop recording or rewind before unlocking the profile",
+      "Stop recording or rewind before changing the profile lock",
     );
 
     await act(async () => {
@@ -156,22 +156,28 @@ describe("CaptureProfileLockToggle", () => {
     ).toBe(true);
   });
 
-  it("allows locking while recording or rewind is active", async () => {
+  it("shows a runtime locked state while an unlocked profile is recording", async () => {
     storeMocks.isProfileUnlocked = true;
     storeMocks.isRewindActive = true;
 
-    await renderToggle();
+    await renderToggle({ variant: "chip" });
 
     const button = container.querySelector<HTMLButtonElement>(
-      "button[aria-label='Lock capture profile']",
+      "button[aria-label='Unlock capture profile']",
     );
-    expect(button?.disabled).toBe(false);
+
+    expect(container.textContent).toContain("Locked");
+    expect(container.textContent).not.toContain("Unlocked");
+    expect(button?.disabled).toBe(true);
+    expect(button?.title).toBe(
+      "Stop recording or rewind before changing the profile lock",
+    );
 
     await act(async () => {
       button?.click();
     });
 
-    expect(storeMocks.toggleProfileLock).toHaveBeenCalled();
+    expect(storeMocks.toggleProfileLock).not.toHaveBeenCalled();
   });
 
   it("can render as an attached dropdown control", async () => {

@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createCaptureProfilesSlice } from "~/renderer/modules/capture-profiles/CaptureProfiles.slice/CaptureProfiles.slice";
+import { createCaptureProfileTestFixture as createProfile } from "~/renderer/modules/capture-profiles/CaptureProfiles.test-utils";
+import { createManagedRecorderStatusTestFixture as createManagedRecorderStatus } from "~/renderer/modules/managed-recorder/ManagedRecorder.test-utils";
 import type { BoundStore } from "~/renderer/store/store.types";
 import { createBoundStoreForTests } from "~/renderer/test/createBoundStoreForTests";
 
@@ -44,60 +46,6 @@ const poe2AltSource: CapturePreviewSource = {
   thumbnailDataUrl: null,
   width: 2560,
 };
-
-function createProfile(
-  overrides: Partial<CaptureProfile> = {},
-): CaptureProfile {
-  return {
-    captureTarget: null,
-    createdAt: "2026-07-01T00:00:00.000Z",
-    deathClipSeconds: 10,
-    game: "poe1",
-    id: "poe1",
-    isDefault: false,
-    name: "PoE 1 Capture",
-    recordingAudioInputDeviceId: null,
-    recordingAudioOutputDeviceId: null,
-    recordingAutoStartMode: "off",
-    recordingClipQuality: "high",
-    recordingEncoder: "hardware_h264",
-    recordingFps: 60,
-    recordingHideOverlaysFromRecording: true,
-    recordingHideOverlaysFromRewind: true,
-    recordingOutputResolution: "native",
-    recordingRunQuality: "moderate",
-    updatedAt: "2026-07-01T00:00:00.000Z",
-    ...overrides,
-  };
-}
-
-function createManagedRecorderStatus(
-  overrides: Partial<ManagedRecorderStatus> = {},
-): ManagedRecorderStatus {
-  return {
-    activeSessionDirectory: null,
-    available: true,
-    bufferActive: false,
-    encoder: "h264",
-    error: null,
-    fps: 60,
-    gameRunning: true,
-    initialized: true,
-    isStartingRecording: false,
-    isStoppingRecording: false,
-    lastRecordingPath: null,
-    outputDirectory: "C:\\Videos",
-    outputResolution: "1920x1080",
-    recording: false,
-    recordingStartedAt: null,
-    runRecordingActive: false,
-    runRecordingPath: null,
-    runRecordingStartedAt: null,
-    runtime: "packaged_obs",
-    runtimePath: "obs.exe",
-    ...overrides,
-  };
-}
 
 const poe1Profile = createProfile({
   captureTarget: {
@@ -225,6 +173,17 @@ describe("CaptureProfiles slice", () => {
     }));
 
     return store;
+  }
+
+  function createDeferred<T>() {
+    let resolve!: (value: T) => void;
+    let reject!: (error: unknown) => void;
+    const promise = new Promise<T>((next, fail) => {
+      resolve = next;
+      reject = fail;
+    });
+
+    return { promise, reject, resolve };
   }
 
   it("switches to the requested game's profile and capture target", async () => {
@@ -491,6 +450,119 @@ describe("CaptureProfiles slice", () => {
         selectedCaptureProfileId: "poe2-alt",
       }),
     );
+  });
+
+  it.each([
+    "profile-only selection",
+    "profile and preview-source selection",
+    "game selection",
+  ] as const)("blocks %s while recording or rewind is active", async (label) => {
+    const store = createTestStore();
+    store.setState((state) => ({
+      managedRecorder: {
+        ...state.managedRecorder,
+        status: createManagedRecorderStatus({ runRecordingActive: true }),
+      },
+    }));
+
+    if (label === "profile-only selection") {
+      store.getState().captureProfiles.select("poe2-alt");
+    } else if (label === "profile and preview-source selection") {
+      store.getState().captureProfiles.selectWithPreviewSource("poe2-alt");
+    } else {
+      await store.getState().captureProfiles.selectForGame("poe2");
+    }
+
+    expect(store.getState().captureProfiles.selectedProfileId).toBe("poe1");
+    expect(store.getState().capturePreview.selectedSourceId).toBe(
+      poe1Source.id,
+    );
+    expect(updateSettings).not.toHaveBeenCalled();
+  });
+
+  it("blocks profile creation while recording or rewind is active", async () => {
+    const store = createTestStore();
+    store.setState((state) => ({
+      managedRecorder: {
+        ...state.managedRecorder,
+        status: createManagedRecorderStatus({ runRecordingActive: true }),
+      },
+    }));
+
+    await store.getState().captureProfiles.create("Bossing");
+
+    expect(createCaptureProfile).not.toHaveBeenCalled();
+    expect(listCaptureProfiles).not.toHaveBeenCalled();
+    expect(store.getState().captureProfiles.selectedProfileId).toBe("poe1");
+    expect(updateSettings).not.toHaveBeenCalled();
+  });
+
+  it("blocks profile updates while recording or rewind is active", async () => {
+    const store = createTestStore();
+    store.setState((state) => ({
+      managedRecorder: {
+        ...state.managedRecorder,
+        status: createManagedRecorderStatus({ runRecordingActive: true }),
+      },
+    }));
+
+    await store
+      .getState()
+      .captureProfiles.update({ id: poe1Profile.id, recordingFps: 30 });
+
+    expect(updateCaptureProfile).not.toHaveBeenCalled();
+    expect(listCaptureProfiles).not.toHaveBeenCalled();
+    expect(store.getState().captureProfiles.items[0]?.recordingFps).toBe(60);
+    expect(updateSettings).not.toHaveBeenCalled();
+  });
+
+  it("ignores profile update results when recording starts before completion", async () => {
+    const updateDeferred = createDeferred<CaptureProfile>();
+    updateCaptureProfile.mockReturnValueOnce(updateDeferred.promise);
+    const store = createTestStore();
+
+    const update = store
+      .getState()
+      .captureProfiles.update({ id: poe1Profile.id, recordingFps: 30 });
+    expect(updateCaptureProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: poe1Profile.id,
+        recordingFps: 30,
+      }),
+    );
+
+    store.setState((state) => ({
+      managedRecorder: {
+        ...state.managedRecorder,
+        status: createManagedRecorderStatus({ runRecordingActive: true }),
+      },
+    }));
+    updateDeferred.resolve({
+      ...poe1Profile,
+      recordingFps: 30,
+    });
+    await update;
+
+    expect(listCaptureProfiles).not.toHaveBeenCalled();
+    expect(store.getState().captureProfiles.items[0]?.recordingFps).toBe(60);
+    expect(updateSettings).not.toHaveBeenCalled();
+  });
+
+  it("blocks profile deletion while recording or rewind is active", async () => {
+    const store = createTestStore();
+    store.setState((state) => ({
+      managedRecorder: {
+        ...state.managedRecorder,
+        status: createManagedRecorderStatus({ runRecordingActive: true }),
+      },
+    }));
+
+    await store.getState().captureProfiles.delete(poe1Profile.id);
+
+    expect(deleteCaptureProfile).not.toHaveBeenCalled();
+    expect(listCaptureProfiles).not.toHaveBeenCalled();
+    expect(store.getState().captureProfiles.selectedProfileId).toBe("poe1");
+    expect(updateSettings).not.toHaveBeenCalled();
   });
 
   it("remembers the last selected capture profile for each game", async () => {
@@ -981,6 +1053,36 @@ describe("CaptureProfiles slice", () => {
     expect(store.getState().captureProfiles.items[0]?.recordingFps).toBe(60);
   });
 
+  it("ignores unlock persistence results when recording starts before completion", async () => {
+    const updateDeferred = createDeferred<CaptureProfile>();
+    updateCaptureProfile.mockReturnValueOnce(updateDeferred.promise);
+    const store = createTestStore();
+
+    store.getState().captureProfiles.setProfileUnlocked(true);
+    expect(updateCaptureProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: poe1Profile.id,
+        recordingFps: 30,
+      }),
+    );
+
+    store.setState((state) => ({
+      managedRecorder: {
+        ...state.managedRecorder,
+        status: createManagedRecorderStatus({ runRecordingActive: true }),
+      },
+    }));
+    updateDeferred.resolve({
+      ...poe1Profile,
+      recordingFps: 30,
+    });
+
+    await vi.waitFor(() => {
+      expect(updateCaptureProfile).toHaveBeenCalled();
+    });
+    expect(store.getState().captureProfiles.items[0]?.recordingFps).toBe(60);
+  });
+
   it("ignores stale selected profile persistence failures", async () => {
     let rejectFirstUpdate: (error: unknown) => void = () => undefined;
     const firstUpdate = new Promise<CaptureProfile>((_resolve, reject) => {
@@ -1087,6 +1189,25 @@ describe("CaptureProfiles slice", () => {
         }),
       );
     });
+  });
+
+  it("does not change selection or apply profile settings from profile changes while recording or rewind is active", () => {
+    const store = createTestStore();
+    store.setState((state) => ({
+      managedRecorder: {
+        ...state.managedRecorder,
+        status: createManagedRecorderStatus({ runRecordingActive: true }),
+      },
+    }));
+    store.getState().captureProfiles.startListening();
+
+    captureProfilesChanged?.([poe2Profile]);
+
+    expect(store.getState().captureProfiles.items).toEqual([poe2Profile]);
+    expect(store.getState().captureProfiles.selectedProfileId).toBe(
+      poe1Profile.id,
+    );
+    expect(updateSettings).not.toHaveBeenCalled();
   });
 
   it("falls back to the active game profile when the selected profile disappears", async () => {

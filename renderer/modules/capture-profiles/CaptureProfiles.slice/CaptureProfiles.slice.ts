@@ -124,12 +124,22 @@ export const createCaptureProfilesSlice: BoundStoreStateCreator<
         }
       },
       create: async (name: string) => {
+        if (isCaptureProfileMutationBlocked(get)) {
+          return;
+        }
+
         const activeGame = get().settings.value?.activeGame ?? "poe1";
         const created = await window.electron.captureProfiles.create({
           name,
           game: activeGame,
         });
+        if (isCaptureProfileMutationBlocked(get)) {
+          return;
+        }
         const items = await window.electron.captureProfiles.list();
+        if (isCaptureProfileMutationBlocked(get)) {
+          return;
+        }
         set((state) => {
           state.captureProfiles.items = items;
           state.captureProfiles.selectedProfileId = created.id;
@@ -142,8 +152,18 @@ export const createCaptureProfilesSlice: BoundStoreStateCreator<
         });
       },
       update: async (input: CaptureProfileUpdateInput) => {
+        if (isCaptureProfileMutationBlocked(get)) {
+          return;
+        }
+
         const updated = await window.electron.captureProfiles.update(input);
+        if (isCaptureProfileMutationBlocked(get)) {
+          return;
+        }
         const items = await window.electron.captureProfiles.list();
+        if (isCaptureProfileMutationBlocked(get)) {
+          return;
+        }
         const wasSelected =
           get().captureProfiles.selectedProfileId === updated.id;
         set((state) => {
@@ -160,8 +180,18 @@ export const createCaptureProfilesSlice: BoundStoreStateCreator<
         trackEvent("capture-profile-updated");
       },
       delete: async (id: string) => {
+        if (isCaptureProfileMutationBlocked(get)) {
+          return;
+        }
+
         await window.electron.captureProfiles.delete(id);
+        if (isCaptureProfileMutationBlocked(get)) {
+          return;
+        }
         const items = await window.electron.captureProfiles.list();
+        if (isCaptureProfileMutationBlocked(get)) {
+          return;
+        }
         pruneRememberedProfiles(items);
         const settingsValue = get().settings.value;
         const selectedProfile = resolveActiveGameCaptureProfile(
@@ -183,6 +213,10 @@ export const createCaptureProfilesSlice: BoundStoreStateCreator<
         trackEvent("capture-profile-deleted");
       },
       select: (id: string) => {
+        if (isCaptureProfileMutationBlocked(get)) {
+          return;
+        }
+
         const profile =
           get().captureProfiles.items.find((item) => item.id === id) ?? null;
         if (!profile) {
@@ -201,6 +235,10 @@ export const createCaptureProfilesSlice: BoundStoreStateCreator<
         trackEvent("capture-profile-selected");
       },
       selectWithPreviewSource: (id: string) => {
+        if (isCaptureProfileMutationBlocked(get)) {
+          return;
+        }
+
         const profile =
           get().captureProfiles.items.find((item) => item.id === id) ?? null;
         if (!profile) {
@@ -225,6 +263,10 @@ export const createCaptureProfilesSlice: BoundStoreStateCreator<
         trackEvent("capture-profile-selected");
       },
       selectForGame: async (game: GameId) => {
+        if (isCaptureProfileMutationBlocked(get)) {
+          return;
+        }
+
         const items = get().captureProfiles.items;
         const selectedProfile = resolveCaptureProfileForGame(
           items,
@@ -246,14 +288,20 @@ export const createCaptureProfilesSlice: BoundStoreStateCreator<
 
         if (selectedProfile) {
           rememberProfileSelection(selectedProfile);
+          if (isCaptureProfileMutationBlocked(get)) {
+            return;
+          }
           await applySelectedProfileSettings(selectedProfile);
         } else {
+          if (isCaptureProfileMutationBlocked(get)) {
+            return;
+          }
           await applyGameSettings(set, get, game);
         }
         trackEvent("capture-profile-game-selected", { game });
       },
       setProfileUnlocked: (isUnlocked: boolean) => {
-        if (isUnlocked && isCaptureProfileUnlockBlocked(get)) {
+        if (isUnlocked && isCaptureProfileMutationBlocked(get)) {
           return;
         }
 
@@ -273,6 +321,13 @@ export const createCaptureProfilesSlice: BoundStoreStateCreator<
       startListening: () =>
         window.electron.captureProfiles.onChanged((items) => {
           pruneRememberedProfiles(items);
+          if (isCaptureProfileMutationBlocked(get)) {
+            set((state) => {
+              state.captureProfiles.items = items;
+            });
+            return;
+          }
+
           const settingsValue = get().settings.value;
           const currentSelectedProfile = resolveSelectedCaptureProfile(
             items,
@@ -299,7 +354,7 @@ export const createCaptureProfilesSlice: BoundStoreStateCreator<
   };
 };
 
-function isCaptureProfileUnlockBlocked(get: () => BoundStore): boolean {
+function isCaptureProfileMutationBlocked(get: () => BoundStore): boolean {
   return isManagedRecorderStatusActive(get().managedRecorder?.status);
 }
 
@@ -338,6 +393,7 @@ async function persistCurrentSettingsToSelectedCaptureProfile(
       ...(captureTarget ? { captureTarget } : {}),
     });
     if (
+      isCaptureProfileMutationBlocked(get) ||
       get().captureProfiles.selectedProfileId !== selectedProfileId ||
       get().captureProfiles.isProfileUnlocked !== true
     ) {
@@ -355,6 +411,10 @@ async function persistCurrentSettingsToSelectedCaptureProfile(
       state.captureProfiles.error = null;
     });
   } catch (error) {
+    if (isCaptureProfileMutationBlocked(get)) {
+      return;
+    }
+
     set((state) => {
       state.captureProfiles.error =
         error instanceof Error
@@ -401,6 +461,10 @@ async function applyGameSettings(
   delete selectedCaptureProfileIdsByGame[game];
 
   try {
+    if (isCaptureProfileMutationBlocked(get)) {
+      return;
+    }
+
     await settings.update({
       activeGame: game,
       activeLeague: nextLeague,
@@ -409,6 +473,10 @@ async function applyGameSettings(
       selectedCaptureProfileIdsByGame,
     });
   } catch (error) {
+    if (isCaptureProfileMutationBlocked(get)) {
+      return;
+    }
+
     set((state) => {
       state.captureProfiles.error =
         error instanceof Error
@@ -446,8 +514,9 @@ function createSelectedProfileSettingsApplier(
       currentSettingsWithProfileMemory,
     );
     if (
-      currentSettings &&
-      !shouldApplyCaptureProfileSettings(currentSettings, settingsUpdate)
+      isCaptureProfileMutationBlocked(get) ||
+      (currentSettings &&
+        !shouldApplyCaptureProfileSettings(currentSettings, settingsUpdate))
     ) {
       return;
     }
@@ -455,9 +524,16 @@ function createSelectedProfileSettingsApplier(
     requestVersion += 1;
     const currentRequestVersion = requestVersion;
     try {
+      if (isCaptureProfileMutationBlocked(get)) {
+        return;
+      }
+
       await settings.update(settingsUpdate);
     } catch (error) {
-      if (requestVersion !== currentRequestVersion) {
+      if (
+        requestVersion !== currentRequestVersion ||
+        isCaptureProfileMutationBlocked(get)
+      ) {
         return;
       }
 

@@ -5,11 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BoundStore } from "~/renderer/store/store.types";
 
 import type { CaptureProfile } from "~/types";
+import { createCaptureProfileTestFixture as createProfile } from "../../CaptureProfiles.test-utils";
 import { CaptureProfilesPanel } from "./CaptureProfilesPanel";
 
 const storeMocks = vi.hoisted(() => ({
   createProfile: vi.fn(),
   deleteProfile: vi.fn(),
+  isRecorderActive: false,
   items: [] as CaptureProfile[],
   selectedProfileId: "poe1" as string | null,
   selectProfileWithPreviewSource: vi.fn(),
@@ -26,34 +28,20 @@ vi.mock("~/renderer/store", () => ({
       selectedProfileId: storeMocks.selectedProfileId,
       selectWithPreviewSource: storeMocks.selectProfileWithPreviewSource,
     } as unknown as BoundStore["captureProfiles"]),
+  useManagedRecorderShallow: <T,>(
+    selector: (managedRecorder: BoundStore["managedRecorder"]) => T,
+  ) =>
+    selector({
+      status: storeMocks.isRecorderActive
+        ? {
+            recording: true,
+          }
+        : null,
+    } as unknown as BoundStore["managedRecorder"]),
 }));
 
 let container: HTMLDivElement;
 let root: Root;
-
-function createProfile(overrides: Partial<CaptureProfile>): CaptureProfile {
-  return {
-    captureTarget: null,
-    createdAt: "2026-07-01T00:00:00.000Z",
-    deathClipSeconds: 10,
-    game: "poe1",
-    id: "poe1",
-    isDefault: false,
-    name: "Default PoE Capture",
-    recordingAudioInputDeviceId: null,
-    recordingAudioOutputDeviceId: null,
-    recordingAutoStartMode: "off",
-    recordingClipQuality: "high",
-    recordingEncoder: "hardware_h264",
-    recordingFps: 60,
-    recordingHideOverlaysFromRecording: true,
-    recordingHideOverlaysFromRewind: true,
-    recordingOutputResolution: "native",
-    recordingRunQuality: "moderate",
-    updatedAt: "2026-07-01T00:00:00.000Z",
-    ...overrides,
-  };
-}
 
 async function renderPanel(): Promise<void> {
   await act(async () => {
@@ -107,6 +95,7 @@ describe("CaptureProfilesPanel", () => {
         name: "Bossing Capture",
       }),
     ];
+    storeMocks.isRecorderActive = false;
     storeMocks.selectedProfileId = "default-capture-poe1";
   });
 
@@ -183,6 +172,36 @@ describe("CaptureProfilesPanel", () => {
         'button[aria-label="Delete Bossing"]',
       )?.disabled,
     ).toBe(true);
+  });
+
+  it("disables profile creation, selection, and deletion while recording or rewind is active", async () => {
+    storeMocks.isRecorderActive = true;
+    await renderPanel();
+
+    const nameInput = getProfileNameInput();
+    const createButton =
+      container.querySelector<HTMLButtonElement>("button.btn-primary");
+    const profileButton = container.querySelector<HTMLButtonElement>(
+      'button[data-profile-id="poe2-bossing"]',
+    );
+    const deleteButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Delete Bossing Capture"]',
+    );
+
+    expect(nameInput.disabled).toBe(true);
+    expect(createButton?.disabled).toBe(true);
+    expect(profileButton?.disabled).toBe(true);
+    expect(deleteButton?.disabled).toBe(true);
+
+    await act(async () => {
+      createButton?.click();
+      profileButton?.click();
+      deleteButton?.click();
+    });
+
+    expect(storeMocks.createProfile).not.toHaveBeenCalled();
+    expect(storeMocks.selectProfileWithPreviewSource).not.toHaveBeenCalled();
+    expect(storeMocks.deleteProfile).not.toHaveBeenCalled();
   });
 
   it("shows the default recreation message when no profiles exist", async () => {

@@ -1,9 +1,6 @@
-import {
-  useCaptureProfilesShallow,
-  useManagedRecorderShallow,
-} from "~/renderer/store";
+import { useCaptureProfilesShallow } from "~/renderer/store";
 
-import { isManagedRecorderStatusActive } from "../../ManagedRecorder.utils/ManagedRecorder.utils";
+import { useManagedRecorderActive } from "../useManagedRecorderActive/useManagedRecorderActive";
 
 interface ManagedRecorderSettingsLockState {
   canUnlock: boolean;
@@ -20,9 +17,7 @@ function useManagedRecorderSettingsLockState(): ManagedRecorderSettingsLockState
       selectedProfileId: captureProfiles.selectedProfileId,
       setProfileUnlocked: captureProfiles.setProfileUnlocked,
     }));
-  const isRecorderActive = useManagedRecorderShallow((managedRecorder) =>
-    isManagedRecorderStatusActive(managedRecorder.status),
-  );
+  const isRecorderActive = useManagedRecorderActive();
   const isProfileLocked = selectedProfileId !== null && !isProfileUnlocked;
 
   const unlockSettings = () => {

@@ -34,6 +34,7 @@ const poe2Source: CapturePreviewSource = {
 const storeMocks = vi.hoisted(() => ({
   activeGame: "poe2" as GameId,
   isLoading: false,
+  isSettingsDisabled: false,
   selectedSourceId: "window:poe2" as string | null,
   sources: [] as CapturePreviewSource[],
 }));
@@ -44,6 +45,13 @@ vi.mock(
     CaptureProfileLockToggle: () => (
       <button type="button" aria-label="Unlock capture profile" />
     ),
+  }),
+);
+
+vi.mock(
+  "~/renderer/modules/managed-recorder/ManagedRecorder.hooks/useManagedRecorderSettingsDisabled/useManagedRecorderSettingsDisabled",
+  () => ({
+    useManagedRecorderSettingsDisabled: () => storeMocks.isSettingsDisabled,
   }),
 );
 
@@ -63,18 +71,26 @@ import { CapturePreviewSourceControls } from "./CapturePreviewSourceControls";
 let container: HTMLDivElement;
 let root: Root;
 
-async function renderControls(): Promise<void> {
+async function renderControls() {
+  const controls = {
+    onRefresh: vi.fn(),
+    onSourceChange: vi.fn(),
+    onTogglePreview: vi.fn(),
+  };
+
   await act(async () => {
     root.render(
       <CapturePreviewSourceControls
         isPreviewing={false}
         previewSourceId={null}
-        onRefresh={vi.fn()}
-        onSourceChange={vi.fn()}
-        onTogglePreview={vi.fn()}
+        onRefresh={controls.onRefresh}
+        onSourceChange={controls.onSourceChange}
+        onTogglePreview={controls.onTogglePreview}
       />,
     );
   });
+
+  return controls;
 }
 
 function getOption(value: string): HTMLOptionElement {
@@ -96,6 +112,7 @@ describe("CapturePreviewSourceControls", () => {
     root = createRoot(container);
     storeMocks.activeGame = "poe2";
     storeMocks.isLoading = false;
+    storeMocks.isSettingsDisabled = false;
     storeMocks.selectedSourceId = poe2Source.id;
     storeMocks.sources = [screenSource, poe1Source, poe2Source];
   });
@@ -121,5 +138,27 @@ describe("CapturePreviewSourceControls", () => {
 
     expect(getOption(poe1Source.id).disabled).toBe(false);
     expect(getOption(poe2Source.id).disabled).toBe(true);
+  });
+
+  it("disables source switching while recorder settings are locked", async () => {
+    storeMocks.isSettingsDisabled = true;
+
+    const controls = await renderControls();
+    const select = container.querySelector<HTMLSelectElement>(
+      "select[aria-label='Capture source']",
+    );
+
+    expect(select?.disabled).toBe(true);
+
+    await act(async () => {
+      if (!select) {
+        throw new Error("Missing capture source select");
+      }
+
+      select.value = screenSource.id;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    expect(controls.onSourceChange).not.toHaveBeenCalled();
   });
 });

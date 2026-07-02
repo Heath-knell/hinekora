@@ -7,6 +7,8 @@ import { createDefaultSettings } from "~/types";
 import { GameSelectorTab } from "./GameSelectorTab";
 
 const storeMocks = vi.hoisted(() => ({
+  isRecorderActive: false,
+  recorderActiveGame: null as GameId | null,
   selectCaptureProfileForGame: vi.fn(),
   setActiveClientLogGame: vi.fn(),
   settingsValue: null as AppSettings | null,
@@ -46,6 +48,17 @@ vi.mock("~/renderer/store", () => ({
     selector({
       setActiveGame: storeMocks.setActiveClientLogGame,
     }),
+  useManagedRecorderShallow: <T,>(
+    selector: (managedRecorder: { status: unknown }) => T,
+  ) =>
+    selector({
+      status: {
+        activeGame: storeMocks.recorderActiveGame,
+        bufferActive: storeMocks.isRecorderActive,
+        recording: storeMocks.isRecorderActive,
+        runRecordingActive: storeMocks.isRecorderActive,
+      },
+    }),
   useSettingsShallow: <T,>(
     selector: (settings: { value: AppSettings | null }) => T,
   ) =>
@@ -68,6 +81,8 @@ describe("GameSelectorTab", () => {
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
+    storeMocks.isRecorderActive = false;
+    storeMocks.recorderActiveGame = null;
     storeMocks.settingsValue = createDefaultSettings();
     storeMocks.selectCaptureProfileForGame.mockResolvedValue(undefined);
     storeMocks.setActiveClientLogGame.mockResolvedValue(undefined);
@@ -106,6 +121,59 @@ describe("GameSelectorTab", () => {
 
     await renderTab("poe1");
 
+    expect(container.querySelector("[role='tab']")?.className).toContain(
+      "tab-active",
+    );
+  });
+
+  it("disables inactive game switching while recording or rewind is active", async () => {
+    storeMocks.isRecorderActive = true;
+    storeMocks.settingsValue = {
+      ...createDefaultSettings(),
+      activeGame: "poe2",
+    };
+
+    await renderTab("poe1");
+
+    const gameButton = container.querySelector<HTMLButtonElement>("button");
+    const leagueSelect = container.querySelector<HTMLSelectElement>("select");
+
+    expect(gameButton?.disabled).toBe(true);
+    expect(gameButton?.title).toBe(
+      "Stop recording or rewind before switching games",
+    );
+    expect(leagueSelect?.disabled).toBe(true);
+
+    await act(async () => {
+      gameButton?.click();
+    });
+
+    expect(storeMocks.selectCaptureProfileForGame).not.toHaveBeenCalled();
+    expect(storeMocks.setActiveClientLogGame).not.toHaveBeenCalled();
+  });
+
+  it("uses the recorder session game instead of mutable settings while recording", async () => {
+    storeMocks.isRecorderActive = true;
+    storeMocks.recorderActiveGame = "poe2";
+    storeMocks.settingsValue = {
+      ...createDefaultSettings(),
+      activeGame: "poe1",
+    };
+
+    await renderTab("poe1");
+
+    expect(container.querySelector<HTMLButtonElement>("button")?.disabled).toBe(
+      true,
+    );
+    expect(container.querySelector("[role='tab']")?.className).not.toContain(
+      "tab-active",
+    );
+
+    await renderTab("poe2");
+
+    expect(container.querySelector<HTMLButtonElement>("button")?.disabled).toBe(
+      false,
+    );
     expect(container.querySelector("[role='tab']")?.className).toContain(
       "tab-active",
     );

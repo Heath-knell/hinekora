@@ -527,6 +527,7 @@ export const appSettingsKeys = Object.freeze(
 export const ManagedRecorderStatusSchema = z.object({
   available: z.boolean(),
   gameRunning: z.boolean(),
+  activeGame: GameIdSchema.nullable().optional(),
   initialized: z.boolean(),
   bufferActive: z.boolean(),
   recording: z.boolean(),

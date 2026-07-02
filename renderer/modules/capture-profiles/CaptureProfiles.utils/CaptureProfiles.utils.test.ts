@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { type CaptureProfile, createDefaultSettings } from "~/types";
+import { createDefaultSettings } from "~/types";
+import { createCaptureProfileTestFixture as createProfile } from "../CaptureProfiles.test-utils";
 import {
   createSettingsUpdateFromCaptureProfile,
   getCaptureProfileDisplayName,
@@ -10,32 +11,6 @@ import {
   resolveSelectedCaptureProfile,
   sortCaptureProfilesForDisplay,
 } from "./CaptureProfiles.utils";
-
-function createProfile(
-  overrides: Partial<CaptureProfile> = {},
-): CaptureProfile {
-  return {
-    captureTarget: null,
-    createdAt: "2026-07-01T00:00:00.000Z",
-    deathClipSeconds: 10,
-    game: "poe1",
-    id: "capture-profile-1",
-    isDefault: false,
-    name: "Default PoE Capture",
-    recordingAudioInputDeviceId: null,
-    recordingAudioOutputDeviceId: null,
-    recordingAutoStartMode: "off",
-    recordingClipQuality: "high",
-    recordingEncoder: "hardware_h264",
-    recordingFps: 30,
-    recordingHideOverlaysFromRecording: true,
-    recordingHideOverlaysFromRewind: true,
-    recordingOutputResolution: "native",
-    recordingRunQuality: "moderate",
-    updatedAt: "2026-07-01T00:00:00.000Z",
-    ...overrides,
-  };
-}
 
 describe("CaptureProfiles utils", () => {
   it("shortens default capture profile names for display", () => {

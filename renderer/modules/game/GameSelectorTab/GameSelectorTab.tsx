@@ -3,9 +3,11 @@ import clsx from "clsx";
 import { gameOptions } from "~/renderer/modules/game/GameScope.constants";
 import { GameStatusBadge } from "~/renderer/modules/game/GameStatusBadge/GameStatusBadge";
 import { LeagueSelect } from "~/renderer/modules/game/LeagueSelect/LeagueSelect";
+import { useManagedRecorderActive } from "~/renderer/modules/managed-recorder/ManagedRecorder.hooks/useManagedRecorderActive/useManagedRecorderActive";
 import {
   useCaptureProfilesShallow,
   useClientLogSelector,
+  useManagedRecorderShallow,
   useSettingsShallow,
 } from "~/renderer/store";
 
@@ -28,11 +30,24 @@ function GameSelectorTab({ game }: GameSelectorTabProps) {
       selectCaptureProfileForGame: captureProfiles.selectForGame,
     }),
   );
+  const isRecorderActive = useManagedRecorderActive();
+  const activeRecorderGame = useManagedRecorderShallow(
+    (managedRecorder) => managedRecorder.status?.activeGame ?? null,
+  );
   const activeGame = settingsValue?.activeGame ?? "poe1";
-  const isActive = activeGame === game;
+  const lockedGame = isRecorderActive
+    ? (activeRecorderGame ?? activeGame)
+    : null;
+  const displayedActiveGame = lockedGame ?? activeGame;
+  const isActive = displayedActiveGame === game;
+  const isGameSwitchDisabled = lockedGame !== null && lockedGame !== game;
   const label = gameOptions.find((option) => option.id === game)?.label ?? game;
 
   const handleGameSelect = async () => {
+    if (isGameSwitchDisabled) {
+      return;
+    }
+
     await selectCaptureProfileForGame(game);
     await setActiveClientLogGame(game, { hydrateSettings: false });
   };
@@ -47,14 +62,20 @@ function GameSelectorTab({ game }: GameSelectorTabProps) {
       role="tab"
     >
       <button
-        className="no-drag btn btn-ghost p-0 hover:bg-transparent focus-visible:bg-transparent"
+        className="no-drag btn btn-ghost p-0 hover:bg-transparent focus-visible:bg-transparent disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={isGameSwitchDisabled}
+        title={
+          isGameSwitchDisabled
+            ? "Stop recording or rewind before switching games"
+            : undefined
+        }
         type="button"
         onClick={handleGameSelect}
       >
         <span className="font-[Fontin]">{label}</span>
         <GameStatusBadge game={game} />
       </button>
-      <LeagueSelect game={game} />
+      <LeagueSelect disabled={isGameSwitchDisabled} game={game} />
     </div>
   );
 }
