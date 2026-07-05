@@ -87,6 +87,13 @@ interface ActivitySessionLocationOffset {
   targetId: string;
 }
 
+interface ActivitySessionLocationLinkRow {
+  bookmark_link_id: string;
+  bookmark_id: string;
+  category: BookmarkCategory;
+  offset_seconds: number;
+}
+
 interface ActivitySessionRow {
   id: string;
   mode: ActivitySessionMode;
@@ -94,6 +101,8 @@ interface ActivitySessionRow {
   source_league: string;
   started_at: string;
   stopped_at: string | null;
+  bookmark_count: number;
+  clip_count: number;
   created_at: string;
   updated_at: string;
 }
@@ -258,8 +267,8 @@ function mapActivitySessionLibraryRow(
 
   return {
     ...session,
-    bookmarkCount: Number(row.bookmark_count ?? 0),
-    clipCount: Number(row.clip_count ?? 0),
+    bookmarkCount: Number(row.bookmark_count),
+    clipCount: Number(row.clip_count),
     durationSeconds: calculateActivitySessionDurationSeconds(session),
   };
 }
@@ -513,43 +522,21 @@ class BookmarksRepository {
   listActivitySessionsPage(
     query: ActivitySessionLibraryQuery = {},
   ): ActivitySessionLibraryPage {
-    const filter: ActivitySessionFilter = {
-      ...(query.game ? { game: query.game } : {}),
-      ...(query.league ? { league: query.league } : {}),
-    };
+    const filter: ActivitySessionFilter = {};
+    if (query.game) {
+      filter.game = query.game;
+    }
+    if (query.league) {
+      filter.league = query.league;
+    }
     const pageIndex = normalizePageIndex(query.pageIndex);
     const pageSize = normalizePageSize(query.pageSize);
     const sortBy = normalizeActivitySessionSortBy(query.sortBy);
     const sortDirection = normalizeActivitySessionSortDirection(
       query.sortDirection,
     );
-    const bookmarkCountsQuery = this.database.kysely
-      .selectFrom("bookmark_links")
-      .select([
-        "target_id as activity_session_id",
-        sql<number>`COUNT(*)`.as("bookmark_count"),
-      ])
-      .where("target_kind", "=", "activity-session")
-      .where("archived", "=", 0)
-      .groupBy("target_id")
-      .as("bookmark_counts");
-    const clipCountsQuery = this.database.kysely
-      .selectFrom("activity_session_clips")
-      .select(["activity_session_id", sql<number>`COUNT(*)`.as("clip_count")])
-      .groupBy("activity_session_id")
-      .as("clip_counts");
     const rows = this.database.queryAll(
       this.createActivitySessionFilterQuery(filter)
-        .leftJoin(
-          bookmarkCountsQuery,
-          "bookmark_counts.activity_session_id",
-          "activity_sessions.id",
-        )
-        .leftJoin(
-          clipCountsQuery,
-          "clip_counts.activity_session_id",
-          "activity_sessions.id",
-        )
         .select([
           "activity_sessions.id as id",
           "activity_sessions.mode as mode",
@@ -559,10 +546,8 @@ class BookmarksRepository {
           "activity_sessions.stopped_at as stopped_at",
           "activity_sessions.created_at as created_at",
           "activity_sessions.updated_at as updated_at",
-          sql<number>`COALESCE(bookmark_counts.bookmark_count, 0)`.as(
-            "bookmark_count",
-          ),
-          sql<number>`COALESCE(clip_counts.clip_count, 0)`.as("clip_count"),
+          "activity_sessions.bookmark_count as bookmark_count",
+          "activity_sessions.clip_count as clip_count",
         ])
         .orderBy(this.getActivitySessionSortExpression(sortBy), sortDirection)
         .orderBy("activity_sessions.started_at", "desc")
@@ -573,9 +558,9 @@ class BookmarksRepository {
 
     return {
       items: rows.map(mapActivitySessionLibraryRow),
-      availableLeagues: this.listActivitySessionLeagues({
-        ...(query.game ? { game: query.game } : {}),
-      }),
+      availableLeagues: this.listActivitySessionLeagues(
+        query.game ? { game: query.game } : {},
+      ),
       pageCount: Math.max(1, Math.ceil(totalCount / pageSize)),
       pageIndex,
       pageSize,
@@ -597,6 +582,8 @@ class BookmarksRepository {
         source_league: input.sourceLeague,
         started_at: input.startedAt,
         stopped_at: null,
+        bookmark_count: 0,
+        clip_count: 0,
         created_at: now,
         updated_at: now,
       }),
@@ -609,17 +596,24 @@ class BookmarksRepository {
     id: string;
     stoppedAt: string;
   }): ActivitySession | null {
-    this.database.runQuery(
-      this.database.kysely
-        .updateTable("activity_sessions")
-        .set({
-          stopped_at: input.stoppedAt,
-          updated_at: new Date().toISOString(),
-        })
-        .where("id", "=", input.id),
-    );
+    return this.database.transaction(() => {
+      this.database.runQuery(
+        this.database.kysely
+          .updateTable("activity_sessions")
+          .set({
+            stopped_at: input.stoppedAt,
+            updated_at: new Date().toISOString(),
+          })
+          .where("id", "=", input.id),
+      );
 
-    return this.getActivitySession(input.id);
+      const session = this.getActivitySession(input.id);
+      if (session) {
+        this.updateActivitySessionLocationDurations(session);
+      }
+
+      return session;
+    });
   }
 
   getActivitySession(id: string): ActivitySession | null {
@@ -693,35 +687,38 @@ class BookmarksRepository {
   }): void {
     const now = new Date().toISOString();
 
-    this.database.runQuery(
-      this.database.kysely
-        .insertInto("bookmark_links")
-        .values({
-          id: randomUUID(),
-          bookmark_id: input.bookmarkId,
-          target_kind: "activity-session",
-          target_id: input.activitySessionId,
-          offset_seconds: input.offsetSeconds,
-          duration_seconds: null,
-          archived: 0,
-          archived_target_title: null,
-          archived_target_duration_seconds: null,
-          created_at: now,
-          updated_at: now,
-        })
-        .onConflict((conflict) =>
-          conflict
-            .columns(["bookmark_id", "target_kind", "target_id"])
-            .doUpdateSet({
-              offset_seconds: input.offsetSeconds,
-              duration_seconds: null,
-              archived: 0,
-              archived_target_title: null,
-              archived_target_duration_seconds: null,
-              updated_at: now,
-            }),
-        ),
-    );
+    this.database.transaction(() => {
+      this.database.runQuery(
+        this.database.kysely
+          .insertInto("bookmark_links")
+          .values({
+            id: randomUUID(),
+            bookmark_id: input.bookmarkId,
+            target_kind: "activity-session",
+            target_id: input.activitySessionId,
+            offset_seconds: input.offsetSeconds,
+            duration_seconds: null,
+            archived: 0,
+            archived_target_title: null,
+            archived_target_duration_seconds: null,
+            created_at: now,
+            updated_at: now,
+          })
+          .onConflict((conflict) =>
+            conflict
+              .columns(["bookmark_id", "target_kind", "target_id"])
+              .doUpdateSet({
+                offset_seconds: input.offsetSeconds,
+                duration_seconds: null,
+                archived: 0,
+                archived_target_title: null,
+                archived_target_duration_seconds: null,
+                updated_at: now,
+              }),
+          ),
+      );
+      this.refreshActivitySessionCounters([input.activitySessionId]);
+    });
   }
 
   linkActivitySessionClip(input: {
@@ -733,29 +730,32 @@ class BookmarksRepository {
   }): void {
     const now = new Date().toISOString();
 
-    this.database.runQuery(
-      this.database.kysely
-        .insertInto("activity_session_clips")
-        .values({
-          id: randomUUID(),
-          activity_session_id: input.activitySessionId,
-          target_kind: input.targetKind,
-          target_id: input.targetId,
-          bookmark_id: input.bookmarkId,
-          offset_seconds: input.offsetSeconds,
-          created_at: now,
-          updated_at: now,
-        })
-        .onConflict((conflict) =>
-          conflict
-            .columns(["activity_session_id", "target_kind", "target_id"])
-            .doUpdateSet({
-              bookmark_id: input.bookmarkId,
-              offset_seconds: input.offsetSeconds,
-              updated_at: now,
-            }),
-        ),
-    );
+    this.database.transaction(() => {
+      this.database.runQuery(
+        this.database.kysely
+          .insertInto("activity_session_clips")
+          .values({
+            id: randomUUID(),
+            activity_session_id: input.activitySessionId,
+            target_kind: input.targetKind,
+            target_id: input.targetId,
+            bookmark_id: input.bookmarkId,
+            offset_seconds: input.offsetSeconds,
+            created_at: now,
+            updated_at: now,
+          })
+          .onConflict((conflict) =>
+            conflict
+              .columns(["activity_session_id", "target_kind", "target_id"])
+              .doUpdateSet({
+                bookmark_id: input.bookmarkId,
+                offset_seconds: input.offsetSeconds,
+                updated_at: now,
+              }),
+          ),
+      );
+      this.refreshActivitySessionCounters([input.activitySessionId]);
+    });
   }
 
   linkRecordingBookmarks(input: RecordingWindowInput): void {
@@ -774,10 +774,13 @@ class BookmarksRepository {
     this.database.transaction(() => {
       for (const [index, bookmark] of sortedBookmarks.entries()) {
         const occurredAtMs = Date.parse(bookmark.occurredAt);
-        const offsetSeconds =
-          Number.isFinite(startedAtMs) && Number.isFinite(occurredAtMs)
-            ? Math.max(0, (occurredAtMs - startedAtMs) / 1_000)
-            : null;
+        /* v8 ignore start -- persisted recording/bookmark timestamps are normalized ISO strings; null only protects corrupt local data. */
+        const hasValidRecordingWindow =
+          Number.isFinite(startedAtMs) && Number.isFinite(occurredAtMs);
+        const offsetSeconds = hasValidRecordingWindow
+          ? Math.max(0, (occurredAtMs - startedAtMs) / 1_000)
+          : null;
+        /* v8 ignore stop */
         const segmentDurationSeconds = isLocationBookmark(bookmark)
           ? this.calculateLocationDurationSeconds({
               durationSeconds,
@@ -860,56 +863,53 @@ class BookmarksRepository {
   }
 
   deleteBookmarksForRecording(recordingId: string): void {
-    const rows = this.database.queryAll(
-      this.database.kysely
-        .selectFrom("bookmark_links")
-        .select("bookmark_id")
-        .where("target_kind", "=", "recording")
-        .where("target_id", "=", recordingId),
-    ) as Array<{ bookmark_id: string }>;
-
     this.database.transaction(() => {
-      for (const row of rows) {
-        this.database.runQuery(
-          this.database.kysely
-            .deleteFrom("bookmarks")
-            .where("id", "=", row.bookmark_id),
-        );
-      }
+      const activitySessionIds =
+        this.listActivitySessionIdsForRecordingBookmarks(recordingId);
+      this.database.db
+        .prepare(
+          `
+          DELETE FROM bookmarks
+          WHERE id IN (
+            SELECT bookmark_id
+            FROM bookmark_links
+            WHERE target_kind = 'recording'
+              AND target_id = ?
+          )
+        `,
+        )
+        .run(recordingId);
+      this.refreshActivitySessionCounters(activitySessionIds);
     });
   }
 
   deleteReplayClipLinks(replayClipId: string): void {
-    const manualReplayBookmarkRows = this.database.queryAll(
-      this.database.kysely
-        .selectFrom("activity_session_clips")
-        .innerJoin(
-          "bookmarks",
-          "bookmarks.id",
-          "activity_session_clips.bookmark_id",
-        )
-        .select("bookmarks.id as id")
-        .where("activity_session_clips.target_kind", "=", "replay-clip")
-        .where("activity_session_clips.target_id", "=", replayClipId)
-        .where("bookmarks.category", "=", "rewind-manual-replay"),
-    ) as Array<{ id: string }>;
-
     this.database.transaction(() => {
+      const activitySessionIds =
+        this.listActivitySessionIdsForReplayClip(replayClipId);
+      this.database.db
+        .prepare(
+          `
+          DELETE FROM bookmarks
+          WHERE category = 'rewind-manual-replay'
+            AND id IN (
+              SELECT bookmark_id
+              FROM activity_session_clips
+              WHERE target_kind = 'replay-clip'
+                AND target_id = ?
+                AND bookmark_id IS NOT NULL
+            )
+        `,
+        )
+        .run(replayClipId);
+
       this.database.runQuery(
         this.database.kysely
           .deleteFrom("activity_session_clips")
           .where("target_kind", "=", "replay-clip")
           .where("target_id", "=", replayClipId),
       );
-
-      for (const row of manualReplayBookmarkRows) {
-        this.database.runQuery(
-          this.database.kysely
-            .deleteFrom("bookmarks")
-            .where("id", "=", row.id)
-            .where("category", "=", "rewind-manual-replay"),
-        );
-      }
+      this.refreshActivitySessionCounters(activitySessionIds);
     });
   }
 
@@ -933,13 +933,17 @@ class BookmarksRepository {
   }
 
   deleteManual(id: string): void {
-    this.database.runQuery(
-      this.database.kysely
-        .deleteFrom("bookmarks")
-        .where("id", "=", id)
-        .where("category", "=", "manual")
-        .where("source", "=", "manual"),
-    );
+    this.database.transaction(() => {
+      const activitySessionIds = this.listActivitySessionIdsForBookmarks([id]);
+      this.database.runQuery(
+        this.database.kysely
+          .deleteFrom("bookmarks")
+          .where("id", "=", id)
+          .where("category", "=", "manual")
+          .where("source", "=", "manual"),
+      );
+      this.refreshActivitySessionCounters(activitySessionIds);
+    });
   }
 
   private listBookmarksInRecordingWindow(
@@ -1108,6 +1112,7 @@ class BookmarksRepository {
           "bookmark_links.bookmark_id as bookmark_id",
           "bookmark_links.target_id as target_id",
           "bookmark_links.offset_seconds as offset_seconds",
+          "bookmark_links.duration_seconds as duration_seconds",
           "bookmarks.category as category",
           sql<number>`COALESCE(strftime('%s', activity_sessions.stopped_at), strftime('%s', 'now')) - strftime('%s', activity_sessions.started_at)`.as(
             "target_duration_seconds",
@@ -1121,13 +1126,24 @@ class BookmarksRepository {
     ) as Array<{
       bookmark_id: string;
       category: BookmarkCategory;
+      duration_seconds: number | null;
       offset_seconds: number | null;
       target_id: string;
       target_duration_seconds: number | null;
     }>;
     const locationOffsetsBySessionId =
       this.listActivitySessionLocationOffsetsBySessionIds(
-        Array.from(new Set(rows.map((row) => row.target_id))),
+        Array.from(
+          new Set(
+            rows
+              .filter(
+                (row) =>
+                  row.duration_seconds === null &&
+                  locationBookmarkCategorySet.has(row.category),
+              )
+              .map((row) => row.target_id),
+          ),
+        ),
       );
 
     const linksByBookmarkId = new Map<
@@ -1141,13 +1157,16 @@ class BookmarksRepository {
 
       linksByBookmarkId.set(row.bookmark_id, {
         bookmarkId: row.bookmark_id,
-        durationSeconds: this.calculateActivitySessionBookmarkDurationSeconds({
-          bookmarkId: row.bookmark_id,
-          category: row.category,
-          locationOffsets: locationOffsetsBySessionId.get(row.target_id) ?? [],
-          offsetSeconds: row.offset_seconds,
-          targetDurationSeconds: row.target_duration_seconds,
-        }),
+        durationSeconds:
+          row.duration_seconds ??
+          this.calculateActivitySessionBookmarkDurationSeconds({
+            bookmarkId: row.bookmark_id,
+            category: row.category,
+            locationOffsets:
+              locationOffsetsBySessionId.get(row.target_id) ?? [],
+            offsetSeconds: row.offset_seconds,
+            targetDurationSeconds: row.target_duration_seconds,
+          }),
         offsetSeconds: row.offset_seconds,
         targetId: row.target_id,
         targetDurationSeconds: row.target_duration_seconds,
@@ -1155,6 +1174,87 @@ class BookmarksRepository {
     }
 
     return linksByBookmarkId;
+  }
+
+  private listActivitySessionIdsForBookmarks(bookmarkIds: string[]): string[] {
+    if (bookmarkIds.length === 0) {
+      return [];
+    }
+
+    const rows = this.database.queryAll(
+      this.database.kysely
+        .selectFrom("bookmark_links")
+        .select("target_id")
+        .distinct()
+        .where("bookmark_id", "in", bookmarkIds)
+        .where("target_kind", "=", "activity-session"),
+    ) as Array<{ target_id: string }>;
+
+    return rows.map((row) => row.target_id);
+  }
+
+  private listActivitySessionIdsForRecordingBookmarks(
+    recordingId: string,
+  ): string[] {
+    const rows = this.database.db
+      .prepare(
+        `
+        SELECT DISTINCT activity_links.target_id AS id
+        FROM bookmark_links AS recording_links
+        INNER JOIN bookmark_links AS activity_links
+          ON activity_links.bookmark_id = recording_links.bookmark_id
+        WHERE recording_links.target_kind = 'recording'
+          AND recording_links.target_id = ?
+          AND activity_links.target_kind = 'activity-session'
+      `,
+      )
+      .all(recordingId) as Array<{ id: string }>;
+
+    return rows.map((row) => row.id);
+  }
+
+  private listActivitySessionIdsForReplayClip(replayClipId: string): string[] {
+    const rows = this.database.queryAll(
+      this.database.kysely
+        .selectFrom("activity_session_clips")
+        .select("activity_session_id")
+        .distinct()
+        .where("target_kind", "=", "replay-clip")
+        .where("target_id", "=", replayClipId),
+    ) as Array<{ activity_session_id: string }>;
+
+    return rows.map((row) => row.activity_session_id);
+  }
+
+  private refreshActivitySessionCounters(activitySessionIds: string[]): void {
+    const uniqueActivitySessionIds = Array.from(new Set(activitySessionIds));
+    if (uniqueActivitySessionIds.length === 0) {
+      return;
+    }
+
+    const updatedAt = new Date().toISOString();
+    const updateStatement = this.database.db.prepare(`
+      UPDATE activity_sessions
+      SET
+        bookmark_count = (
+          SELECT COUNT(*)
+          FROM bookmark_links
+          WHERE bookmark_links.target_kind = 'activity-session'
+            AND bookmark_links.archived = 0
+            AND bookmark_links.target_id = activity_sessions.id
+        ),
+        clip_count = (
+          SELECT COUNT(*)
+          FROM activity_session_clips
+          WHERE activity_session_clips.activity_session_id = activity_sessions.id
+        ),
+        updated_at = ?
+      WHERE id = ?
+    `);
+
+    for (const activitySessionId of uniqueActivitySessionIds) {
+      updateStatement.run(updatedAt, activitySessionId);
+    }
   }
 
   private listActivitySessionLocationOffsetsBySessionIds(
@@ -1207,6 +1307,63 @@ class BookmarksRepository {
     return offsetsBySessionId;
   }
 
+  private updateActivitySessionLocationDurations(
+    session: ActivitySession,
+  ): void {
+    if (!session.stoppedAt) {
+      return;
+    }
+
+    const startedAtMs = Date.parse(session.startedAt);
+    const stoppedAtMs = Date.parse(session.stoppedAt);
+    if (!Number.isFinite(startedAtMs) || !Number.isFinite(stoppedAtMs)) {
+      return;
+    }
+
+    const sessionDurationSeconds = Math.max(
+      0,
+      (stoppedAtMs - startedAtMs) / 1_000,
+    );
+    const rows = this.database.queryAll(
+      this.database.kysely
+        .selectFrom("bookmark_links")
+        .innerJoin("bookmarks", "bookmarks.id", "bookmark_links.bookmark_id")
+        .select([
+          "bookmark_links.id as bookmark_link_id",
+          "bookmark_links.bookmark_id as bookmark_id",
+          "bookmark_links.offset_seconds as offset_seconds",
+          "bookmarks.category as category",
+        ])
+        .where("bookmark_links.target_kind", "=", "activity-session")
+        .where("bookmark_links.target_id", "=", session.id)
+        .where("bookmark_links.archived", "=", 0)
+        .where("bookmark_links.offset_seconds", "is not", null)
+        .where(
+          "bookmarks.category",
+          "in",
+          Array.from(locationBookmarkCategorySet),
+        )
+        .orderBy("bookmark_links.offset_seconds", "asc"),
+    ) as ActivitySessionLocationLinkRow[];
+    const now = new Date().toISOString();
+    const updateDurationStatement = this.database.db.prepare(`
+      UPDATE bookmark_links
+      SET duration_seconds = ?, updated_at = ?
+      WHERE id = ?
+    `);
+
+    for (const [index, row] of rows.entries()) {
+      const nextOffsetSeconds = rows[index + 1]?.offset_seconds ?? null;
+      const endSeconds = nextOffsetSeconds ?? sessionDurationSeconds;
+
+      updateDurationStatement.run(
+        Math.max(0, endSeconds - row.offset_seconds),
+        now,
+        row.bookmark_link_id,
+      );
+    }
+  }
+
   private calculateActivitySessionBookmarkDurationSeconds(input: {
     bookmarkId: string;
     category: BookmarkCategory;
@@ -1239,9 +1396,9 @@ class BookmarksRepository {
       this.createFilteredQuery(filter).select((eb) =>
         eb.fn.countAll<number>().as("count"),
       ),
-    ) as { count: number } | null;
+    ) as { count: number };
 
-    return Number(row?.count ?? 0);
+    return Number(row.count);
   }
 
   private listCategories(filter: BookmarkFilter = {}): BookmarkCategory[] {
@@ -1320,9 +1477,9 @@ class BookmarksRepository {
   ) {
     switch (sortBy) {
       case "bookmarkCount":
-        return sql<number>`COALESCE(bookmark_counts.bookmark_count, 0)`;
+        return "activity_sessions.bookmark_count";
       case "clipCount":
-        return sql<number>`COALESCE(clip_counts.clip_count, 0)`;
+        return "activity_sessions.clip_count";
       case "durationSeconds":
         return sql<number>`COALESCE(strftime('%s', activity_sessions.stopped_at), strftime('%s', 'now')) - strftime('%s', activity_sessions.started_at)`;
       case "sourceLeague":
@@ -1340,9 +1497,9 @@ class BookmarksRepository {
       this.createRecordingBookmarksQuery(recordingId, category)
         .clearSelect()
         .select((eb) => eb.fn.countAll<number>().as("count")),
-    ) as { count: number } | null;
+    ) as { count: number };
 
-    return Number(row?.count ?? 0);
+    return Number(row.count);
   }
 
   private listRecordingBookmarkCategories(
@@ -1364,9 +1521,9 @@ class BookmarksRepository {
       this.createActivitySessionFilterQuery(filter).select((eb) =>
         eb.fn.countAll<number>().as("count"),
       ),
-    ) as { count: number } | null;
+    ) as { count: number };
 
-    return Number(row?.count ?? 0);
+    return Number(row.count);
   }
 
   private listActivitySessionLeagues(

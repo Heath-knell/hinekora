@@ -8,6 +8,7 @@ import type {
   ActivitySessionLibraryItem,
   ActivitySessionLibraryPage,
   ActivitySessionLibraryQuery,
+  BookmarkCategory,
   BookmarkLibraryItem,
   BookmarkLibraryPage,
   BookmarkLibraryQuery,
@@ -27,6 +28,10 @@ import type {
 import type { SettingsStoreOverlaySnapshot } from "~/main/modules/settings-store/SettingsStore.dto";
 import type { AppMenuSlice } from "~/renderer/modules/app-menu/AppMenu.slice/AppMenu.slice";
 import type { AuraOverlaySlice } from "~/renderer/modules/aura-overlay/AuraOverlay.slice/AuraOverlay.slice";
+import type {
+  allBookmarkCategoriesValue,
+  defaultRewindTimelineMarkerFilterValue,
+} from "~/renderer/modules/bookmarks/Bookmarks.utils";
 import type { ChangelogSlice } from "~/renderer/modules/changelog/Changelog.slice/Changelog.slice";
 import type { CropEditorSlice } from "~/renderer/modules/crop-editor/CropEditor.slice/CropEditor.slice";
 import type { EditorSlice } from "~/renderer/modules/editor/Editor.slice/Editor.slice.types";
@@ -242,11 +247,24 @@ export interface BookmarksSlice {
     manualRenameDraft: { id: string; label: string } | null;
     page: BookmarkLibraryPage | null;
     query: BookmarkLibraryQuery | null;
+    recordingDetail: {
+      categoryFilter: BookmarkCategory | typeof allBookmarkCategoriesValue;
+      hasInteracted: boolean;
+      hoveredBookmarkId: string | null;
+      pageIndex: number;
+    };
     closeManualRenameDialog: () => void;
     openManualRenameDialog: (input: { id: string; label: string }) => void;
     hydrate: () => Promise<void>;
     refresh: (query?: BookmarkLibraryQuery) => Promise<void>;
     deleteManual: (id: string) => Promise<void>;
+    markRecordingDetailInteracted: () => void;
+    resetRecordingDetail: () => void;
+    selectRecordingDetailCategory: (
+      category: BookmarkCategory | typeof allBookmarkCategoriesValue,
+    ) => void;
+    setRecordingDetailHoveredBookmarkId: (id: string | null) => void;
+    setRecordingDetailPageIndex: (pageIndex: number) => void;
     saveManualRename: (label: string) => Promise<void>;
     updateManual: (
       id: string,
@@ -256,6 +274,11 @@ export interface BookmarksSlice {
   };
 }
 
+export type RewindDetailTimelineMarkerCategoryFilter =
+  | BookmarkCategory
+  | typeof allBookmarkCategoriesValue
+  | typeof defaultRewindTimelineMarkerFilterValue;
+
 export interface RewindsSlice {
   rewinds: {
     availableLeagues: string[];
@@ -264,8 +287,25 @@ export interface RewindsSlice {
     items: ActivitySessionLibraryItem[];
     page: ActivitySessionLibraryPage | null;
     query: ActivitySessionLibraryQuery | null;
+    detail: {
+      bookmarkCategoryFilter:
+        | BookmarkCategory
+        | typeof allBookmarkCategoriesValue;
+      bookmarkPageIndex: number;
+      hoveredBookmarkId: string | null;
+      timelineMarkerCategoryFilter: RewindDetailTimelineMarkerCategoryFilter;
+    };
     hydrate: () => Promise<void>;
     refresh: (query?: ActivitySessionLibraryQuery) => Promise<void>;
+    resetDetail: () => void;
+    selectDetailBookmarkCategory: (
+      category: BookmarkCategory | typeof allBookmarkCategoriesValue,
+    ) => void;
+    setDetailBookmarkPageIndex: (pageIndex: number) => void;
+    setDetailHoveredBookmarkId: (id: string | null) => void;
+    setDetailTimelineMarkerCategory: (
+      category: RewindDetailTimelineMarkerCategoryFilter,
+    ) => void;
   };
 }
 

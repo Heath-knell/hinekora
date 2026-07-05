@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import type { BookmarkLibraryItem } from "~/main/modules/bookmarks";
 
-import { resolveBookmarkTableSeparator } from "./BookmarksTable.utils";
+import {
+  resolveBookmarkLibraryTarget,
+  resolveBookmarkTableSeparator,
+} from "./BookmarksTable.utils";
 
 function createBookmarkLibraryItem(
   input: Partial<BookmarkLibraryItem>,
@@ -37,6 +40,62 @@ function createBookmarkLibraryItem(
 }
 
 describe("BookmarksTable utils", () => {
+  it("resolves active recording targets before rewind and archived recording targets", () => {
+    expect(
+      resolveBookmarkLibraryTarget(
+        createBookmarkLibraryItem({
+          activeActivitySessionId: "rewind-1",
+          activeActivitySessionOffsetSeconds: 4,
+          activeRecordingId: "recording-1",
+          activeRecordingOffsetSeconds: 2,
+          archivedRecordingId: "archived-recording-1",
+        }),
+      ),
+    ).toEqual({
+      bookmarkDurationSeconds: null,
+      durationSeconds: null,
+      id: "recording-1",
+      kind: "recording",
+      offsetSeconds: 2,
+    });
+  });
+
+  it("resolves rewind targets before archived recording targets", () => {
+    expect(
+      resolveBookmarkLibraryTarget(
+        createBookmarkLibraryItem({
+          activeActivitySessionId: "rewind-1",
+          activeActivitySessionOffsetSeconds: 4,
+          archivedRecordingId: "archived-recording-1",
+        }),
+      ),
+    ).toEqual({
+      bookmarkDurationSeconds: null,
+      durationSeconds: null,
+      id: "rewind-1",
+      kind: "rewind",
+      offsetSeconds: 4,
+    });
+  });
+
+  it("resolves archived recording targets last", () => {
+    expect(
+      resolveBookmarkLibraryTarget(
+        createBookmarkLibraryItem({
+          archivedRecordingDurationSeconds: 120,
+          archivedRecordingId: "archived-recording-1",
+          archivedRecordingTitle: "Recording",
+        }),
+      ),
+    ).toEqual({
+      bookmarkDurationSeconds: null,
+      durationSeconds: 120,
+      id: "archived-recording-1",
+      kind: "archived-recording",
+      title: "Recording",
+    });
+  });
+
   it("does not separate rows from the same recording", () => {
     expect(
       resolveBookmarkTableSeparator({

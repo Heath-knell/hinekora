@@ -180,6 +180,31 @@ describe("ReplayClipsRepository", () => {
     database.close();
   });
 
+  it("preserves known media duration when an upsert has no duration", () => {
+    const database = new DatabaseService(":memory:");
+    const repository = new ReplayClipsRepository(database);
+    const clip = createReplayClip({
+      id: "duration-preserved",
+      durationSeconds: 42,
+    });
+
+    repository.upsert(clip);
+    repository.upsert({
+      ...clip,
+      durationSeconds: null,
+      sizeBytes: 4096,
+    });
+
+    expect(repository.get("duration-preserved")).toEqual(
+      expect.objectContaining({
+        durationSeconds: 42,
+        sizeBytes: 4096,
+      }),
+    );
+
+    database.close();
+  });
+
   it("rebases persisted storage paths after media directory migration", () => {
     const database = new DatabaseService(":memory:");
     const repository = new ReplayClipsRepository(database);

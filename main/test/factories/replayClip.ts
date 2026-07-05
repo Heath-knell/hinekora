@@ -14,6 +14,7 @@ function createReplayClip(overrides: Partial<ReplayClip> = {}): ReplayClip {
     originalObsPath: null,
     processedClipPath: null,
     targetDurationSeconds: 10,
+    durationSeconds: null,
     sizeBytes: 0,
     error: null,
     createdAt: now,

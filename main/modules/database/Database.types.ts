@@ -127,6 +127,8 @@ interface ActivitySessionTable {
   source_league: string;
   started_at: TimestampColumn;
   stopped_at: TimestampColumn | null;
+  bookmark_count: number;
+  clip_count: number;
   created_at: TimestampColumn;
   updated_at: TimestampColumn;
 }

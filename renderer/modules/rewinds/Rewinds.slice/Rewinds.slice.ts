@@ -1,3 +1,7 @@
+import {
+  allBookmarkCategoriesValue,
+  defaultRewindTimelineMarkerFilterValue,
+} from "~/renderer/modules/bookmarks/Bookmarks.utils";
 import type {
   BoundStoreStateCreator,
   RewindsSlice,
@@ -7,7 +11,11 @@ export const createRewindsSlice: BoundStoreStateCreator<RewindsSlice> = (
   set,
   get,
 ) => {
+  let refreshRequestId = 0;
+
   const refresh: RewindsSlice["rewinds"]["refresh"] = async (queryInput) => {
+    refreshRequestId += 1;
+    const requestId = refreshRequestId;
     const query = queryInput ?? get().rewinds.query ?? {};
     set((state) => {
       state.rewinds.error = null;
@@ -17,6 +25,10 @@ export const createRewindsSlice: BoundStoreStateCreator<RewindsSlice> = (
 
     try {
       const page = await window.electron.bookmarks.listActivitySessions(query);
+      if (requestId !== refreshRequestId) {
+        return;
+      }
+
       set((state) => {
         state.rewinds.availableLeagues = page.availableLeagues;
         state.rewinds.error = null;
@@ -25,6 +37,10 @@ export const createRewindsSlice: BoundStoreStateCreator<RewindsSlice> = (
         state.rewinds.page = page;
       });
     } catch (error) {
+      if (requestId !== refreshRequestId) {
+        return;
+      }
+
       set((state) => {
         state.rewinds.error =
           error instanceof Error ? error.message : "Rewinds failed";
@@ -41,10 +57,49 @@ export const createRewindsSlice: BoundStoreStateCreator<RewindsSlice> = (
       items: [],
       page: null,
       query: null,
+      detail: {
+        bookmarkCategoryFilter: allBookmarkCategoriesValue,
+        bookmarkPageIndex: 0,
+        hoveredBookmarkId: null,
+        timelineMarkerCategoryFilter: defaultRewindTimelineMarkerFilterValue,
+      },
       hydrate: async () => {
         await refresh();
       },
       refresh,
+      resetDetail: () => {
+        set((state) => {
+          state.rewinds.detail = {
+            bookmarkCategoryFilter: allBookmarkCategoriesValue,
+            bookmarkPageIndex: 0,
+            hoveredBookmarkId: null,
+            timelineMarkerCategoryFilter:
+              defaultRewindTimelineMarkerFilterValue,
+          };
+        });
+      },
+      selectDetailBookmarkCategory: (category) => {
+        set((state) => {
+          state.rewinds.detail.bookmarkCategoryFilter = category;
+          state.rewinds.detail.timelineMarkerCategoryFilter = category;
+          state.rewinds.detail.bookmarkPageIndex = 0;
+        });
+      },
+      setDetailBookmarkPageIndex: (pageIndex) => {
+        set((state) => {
+          state.rewinds.detail.bookmarkPageIndex = Math.max(0, pageIndex);
+        });
+      },
+      setDetailHoveredBookmarkId: (id) => {
+        set((state) => {
+          state.rewinds.detail.hoveredBookmarkId = id;
+        });
+      },
+      setDetailTimelineMarkerCategory: (category) => {
+        set((state) => {
+          state.rewinds.detail.timelineMarkerCategoryFilter = category;
+        });
+      },
     },
   };
 };

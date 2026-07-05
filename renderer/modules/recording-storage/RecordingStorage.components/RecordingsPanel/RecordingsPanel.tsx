@@ -7,7 +7,7 @@ import {
   type SortingState,
   useReactTable,
 } from "@tanstack/react-table";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { RunRecordingLibraryQuery } from "~/main/modules/recording-storage/RecordingStorage.dto";
 import { MediaLibraryTable } from "~/renderer/modules/media-library/MediaLibrary.components/MediaLibraryTable/MediaLibraryTable";
@@ -71,6 +71,10 @@ function RecordingsPanel({ scope }: RecordingsPanelProps) {
     { id: "createdAt", desc: true },
   ]);
   const [now, setNow] = useState(() => new Date());
+  const scopeResetKey = `${scope.game}:${scope.league}`;
+  const lastScopeResetKeyRef = useRef(scopeResetKey);
+  const queryPageIndex =
+    scopeResetKey === lastScopeResetKeyRef.current ? pagination.pageIndex : 0;
   const showLeagueColumn = scope.league === ALL_LEAGUES_VALUE;
   const isProcessingRecording =
     managedRecorderStatus?.runRecordingActive === true ||
@@ -113,7 +117,7 @@ function RecordingsPanel({ scope }: RecordingsPanelProps) {
     const activeSort = sorting[0];
     const query: RunRecordingLibraryQuery = {
       game: scope.game,
-      pageIndex: pagination.pageIndex,
+      pageIndex: queryPageIndex,
       pageSize: pagination.pageSize,
       sortBy: resolveSortBy(activeSort?.id),
       sortDirection: activeSort?.desc === false ? "asc" : "desc",
@@ -123,26 +127,23 @@ function RecordingsPanel({ scope }: RecordingsPanelProps) {
     }
 
     return query;
-  }, [
-    pagination.pageIndex,
-    pagination.pageSize,
-    scope.game,
-    scope.league,
-    sorting,
-  ]);
+  }, [pagination.pageSize, queryPageIndex, scope.game, scope.league, sorting]);
+
+  useEffect(() => {
+    if (scopeResetKey === lastScopeResetKeyRef.current) {
+      return;
+    }
+
+    lastScopeResetKeyRef.current = scopeResetKey;
+    clearSelectedRecordings();
+    setPagination((current) =>
+      current.pageIndex === 0 ? current : { ...current, pageIndex: 0 },
+    );
+  }, [clearSelectedRecordings, scopeResetKey]);
 
   useEffect(() => {
     void refreshRecordings(recordingQuery);
   }, [recordingQuery, refreshRecordings]);
-
-  useEffect(() => {
-    if (!scope.game || !scope.league) {
-      return;
-    }
-
-    clearSelectedRecordings();
-    setPagination((current) => ({ ...current, pageIndex: 0 }));
-  }, [clearSelectedRecordings, scope.game, scope.league]);
 
   const handlePaginationChange: OnChangeFn<PaginationState> = (updater) => {
     clearSelectedRecordings();

@@ -9,6 +9,21 @@ interface ResolveTimelineSecondsFromClientXInput {
   timelineGrid: HTMLElement | null;
 }
 
+interface MediaClipTargetSegment {
+  endSeconds: number;
+  eventDurationSeconds: number;
+  startSeconds: number;
+  tailDurationSeconds: number;
+  triggerSeconds: number;
+}
+
+interface ResolveMediaClipTargetSegmentInput {
+  durationSeconds: number | null;
+  offsetSeconds: number | null;
+  targetDurationSeconds: number | null;
+  unknownDurationMode?: "target-duration" | "trigger-only";
+}
+
 function calculateTimelinePercent(
   seconds: number | null,
   durationSeconds: number,
@@ -113,6 +128,48 @@ function resolveTimelineSecondsFromClientX({
   );
 }
 
+function resolveMediaClipTargetSegment({
+  durationSeconds,
+  offsetSeconds,
+  targetDurationSeconds,
+  unknownDurationMode = "target-duration",
+}: ResolveMediaClipTargetSegmentInput): MediaClipTargetSegment | null {
+  if (
+    offsetSeconds === null ||
+    targetDurationSeconds === null ||
+    targetDurationSeconds <= 0
+  ) {
+    return null;
+  }
+
+  const triggerSeconds = Math.max(0, offsetSeconds);
+  const clipDurationSeconds =
+    durationSeconds ??
+    (unknownDurationMode === "trigger-only"
+      ? Math.min(targetDurationSeconds, triggerSeconds)
+      : targetDurationSeconds);
+  if (clipDurationSeconds <= 0) {
+    return null;
+  }
+
+  const preRollDurationSeconds = Math.min(
+    targetDurationSeconds,
+    clipDurationSeconds,
+  );
+  const startSeconds = Math.max(0, triggerSeconds - preRollDurationSeconds);
+  const endSeconds = startSeconds + clipDurationSeconds;
+  const eventDurationSeconds = Math.max(0, triggerSeconds - startSeconds);
+  const tailDurationSeconds = Math.max(0, endSeconds - triggerSeconds);
+
+  return {
+    endSeconds,
+    eventDurationSeconds,
+    startSeconds,
+    tailDurationSeconds,
+    triggerSeconds,
+  };
+}
+
 function resolveTimelineMarkerInterval(targetSeconds: number): number {
   return (
     defaultTimelineMarkerIntervalsSeconds.find(
@@ -125,6 +182,7 @@ function roundTimelineSeconds(seconds: number): number {
   return Math.round(seconds * 1000) / 1000;
 }
 
+export type { MediaClipTargetSegment };
 export {
   calculateTimelineMarkers,
   calculateTimelineMinorMarkers,
@@ -132,5 +190,6 @@ export {
   clampTimelineSeconds,
   formatTimelineRailLeft,
   formatTimelineRailWidth,
+  resolveMediaClipTargetSegment,
   resolveTimelineSecondsFromClientX,
 };

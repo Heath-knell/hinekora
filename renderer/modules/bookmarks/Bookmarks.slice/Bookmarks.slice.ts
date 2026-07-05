@@ -3,13 +3,19 @@ import type {
   BoundStoreStateCreator,
 } from "~/renderer/store/store.types";
 
+import { allBookmarkCategoriesValue } from "../Bookmarks.utils";
+
 export const createBookmarksSlice: BoundStoreStateCreator<BookmarksSlice> = (
   set,
   get,
 ) => {
+  let refreshRequestId = 0;
+
   const refresh: BookmarksSlice["bookmarks"]["refresh"] = async (
     queryInput,
   ) => {
+    refreshRequestId += 1;
+    const requestId = refreshRequestId;
     const query = queryInput ?? get().bookmarks.query ?? {};
     set((state) => {
       state.bookmarks.error = null;
@@ -19,6 +25,10 @@ export const createBookmarksSlice: BoundStoreStateCreator<BookmarksSlice> = (
 
     try {
       const page = await window.electron.bookmarks.listLibrary(query);
+      if (requestId !== refreshRequestId) {
+        return;
+      }
+
       set((state) => {
         state.bookmarks.availableCategories = page.availableCategories;
         state.bookmarks.availableLeagues = page.availableLeagues;
@@ -27,6 +37,10 @@ export const createBookmarksSlice: BoundStoreStateCreator<BookmarksSlice> = (
         state.bookmarks.isLoading = false;
       });
     } catch (error) {
+      if (requestId !== refreshRequestId) {
+        return;
+      }
+
       set((state) => {
         state.bookmarks.error =
           error instanceof Error ? error.message : "Bookmarks failed";
@@ -46,6 +60,12 @@ export const createBookmarksSlice: BoundStoreStateCreator<BookmarksSlice> = (
       manualRenameDraft: null,
       page: null,
       query: null,
+      recordingDetail: {
+        categoryFilter: allBookmarkCategoriesValue,
+        hasInteracted: false,
+        hoveredBookmarkId: null,
+        pageIndex: 0,
+      },
       closeManualRenameDialog: () => {
         set((state) => {
           if (state.bookmarks.isManualRenameSaving) {
@@ -67,6 +87,38 @@ export const createBookmarksSlice: BoundStoreStateCreator<BookmarksSlice> = (
       deleteManual: async (id) => {
         await window.electron.bookmarks.deleteManual(id);
         await refresh();
+      },
+      markRecordingDetailInteracted: () => {
+        set((state) => {
+          state.bookmarks.recordingDetail.hasInteracted = true;
+        });
+      },
+      resetRecordingDetail: () => {
+        set((state) => {
+          state.bookmarks.recordingDetail = {
+            categoryFilter: allBookmarkCategoriesValue,
+            hasInteracted: false,
+            hoveredBookmarkId: null,
+            pageIndex: 0,
+          };
+        });
+      },
+      selectRecordingDetailCategory: (category) => {
+        set((state) => {
+          state.bookmarks.recordingDetail.categoryFilter = category;
+          state.bookmarks.recordingDetail.hasInteracted = true;
+          state.bookmarks.recordingDetail.pageIndex = 0;
+        });
+      },
+      setRecordingDetailHoveredBookmarkId: (id) => {
+        set((state) => {
+          state.bookmarks.recordingDetail.hoveredBookmarkId = id;
+        });
+      },
+      setRecordingDetailPageIndex: (pageIndex) => {
+        set((state) => {
+          state.bookmarks.recordingDetail.pageIndex = Math.max(0, pageIndex);
+        });
       },
       saveManualRename: async (label) => {
         const draft = get().bookmarks.manualRenameDraft;

@@ -5,6 +5,8 @@ import {
   clampTimelineSeconds,
   formatTimelineRailLeft,
   formatTimelineRailWidth,
+  type MediaClipTargetSegment,
+  resolveMediaClipTargetSegment,
   resolveTimelineSecondsFromClientX,
 } from "~/renderer/modules/media-playback/MediaTimeline.utils/MediaTimeline.utils";
 
@@ -16,13 +18,7 @@ interface ResolveRecordingTimelineSecondsFromClientXInput {
   timelineGrid: HTMLElement | null;
 }
 
-interface RecordingClipTargetRulerSegment {
-  endSeconds: number;
-  eventDurationSeconds: number;
-  startSeconds: number;
-  tailDurationSeconds: number;
-  triggerSeconds: number;
-}
+type RecordingClipTargetRulerSegment = MediaClipTargetSegment;
 
 function calculateRecordingTimelinePercent(
   seconds: number | null,
@@ -105,37 +101,7 @@ function resolveRecordingClipTargetRulerSegment(input: {
   offsetSeconds: number | null;
   targetDurationSeconds: number | null;
 }): RecordingClipTargetRulerSegment | null {
-  if (
-    input.offsetSeconds === null ||
-    input.targetDurationSeconds === null ||
-    input.targetDurationSeconds <= 0
-  ) {
-    return null;
-  }
-
-  const clipDurationSeconds =
-    input.durationSeconds ?? input.targetDurationSeconds;
-  if (clipDurationSeconds <= 0) {
-    return null;
-  }
-
-  const triggerSeconds = Math.max(0, input.offsetSeconds);
-  const preRollDurationSeconds = Math.min(
-    input.targetDurationSeconds,
-    clipDurationSeconds,
-  );
-  const startSeconds = Math.max(0, triggerSeconds - preRollDurationSeconds);
-  const endSeconds = startSeconds + clipDurationSeconds;
-  const eventDurationSeconds = Math.max(0, triggerSeconds - startSeconds);
-  const tailDurationSeconds = Math.max(0, endSeconds - triggerSeconds);
-
-  return {
-    endSeconds,
-    eventDurationSeconds,
-    startSeconds,
-    tailDurationSeconds,
-    triggerSeconds,
-  };
+  return resolveMediaClipTargetSegment(input);
 }
 
 function resolveRecordingTimelineSecondsFromClientX({

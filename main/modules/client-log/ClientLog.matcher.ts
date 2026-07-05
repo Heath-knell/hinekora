@@ -156,12 +156,14 @@ function parseActivityEvent(
 
   const occurredAt = parseClientLogHeaderTimestamp(header);
   const sequenceId = header[7];
+  /* v8 ignore next -- the client log header regex requires this capture. */
   if (!sequenceId) {
     return null;
   }
   const generatedAreaMatch = GENERATED_AREA_PATTERN.exec(message);
   if (generatedAreaMatch) {
     const areaId = generatedAreaMatch[1];
+    /* v8 ignore next -- the generated-area regex requires this capture. */
     if (!areaId) {
       return null;
     }
@@ -181,6 +183,7 @@ function parseActivityEvent(
   }
 
   const sceneSource = sceneSourceMatch[1];
+  /* v8 ignore next -- the scene-source regex requires this capture. */
   if (!sceneSource) {
     return null;
   }

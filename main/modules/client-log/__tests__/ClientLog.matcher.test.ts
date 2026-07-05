@@ -198,6 +198,44 @@ describe("ClientLog matcher", () => {
     ]);
   });
 
+  it("parses generated area and scene activity events", () => {
+    expect(
+      parseClientLogEvents(
+        [
+          '2026/07/04 00:00:31 441791171 2caa2332 [DEBUG Client 54900] Generating level 22 area "Abyss_Hub" with seed 1616319435',
+          "2026/07/04 00:00:31 441791250 7fbd1225 [INFO Client 54900] [SCENE] Set Source [The Well of Souls]",
+        ].join("\n"),
+      ).activityEvents,
+    ).toEqual([
+      {
+        areaId: "Abyss_Hub",
+        kind: "generated-area",
+        line: '2026/07/04 00:00:31 441791171 2caa2332 [DEBUG Client 54900] Generating level 22 area "Abyss_Hub" with seed 1616319435',
+        occurredAt: new Date(2026, 6, 4, 0, 0, 31).toISOString(),
+        sequenceId: "441791171",
+      },
+      {
+        kind: "scene-source",
+        line: "2026/07/04 00:00:31 441791250 7fbd1225 [INFO Client 54900] [SCENE] Set Source [The Well of Souls]",
+        occurredAt: new Date(2026, 6, 4, 0, 0, 31).toISOString(),
+        sceneName: "The Well of Souls",
+        sequenceId: "441791250",
+      },
+    ]);
+  });
+
+  it("ignores malformed activity-looking lines", () => {
+    expect(
+      parseClientLogEvents(
+        [
+          'Generating level 22 area "Abyss_Hub" with seed 1616319435',
+          "2026/07/04 00:00:31 441791250 7fbd1225 [INFO Client 54900] #Player: [SCENE] Set Source [The Well of Souls]",
+          "2026/07/04 00:00:31 441791250 7fbd1225 [INFO Client 54900] [SCENE] Set Source [(unknown)]",
+        ].join("\n"),
+      ).activityEvents,
+    ).toEqual([]);
+  });
+
   it("hashes lines deterministically", () => {
     expect(hashDeathLine("You have died.")).toBe(
       hashDeathLine("You have died."),

@@ -1,6 +1,10 @@
 import { useCallback, useRef } from "react";
 
-function useRecordingVisualPlaybackPublisher() {
+type VisualPlaybackSubscriber = (
+  listener: (seconds: number) => void,
+) => () => void;
+
+function useVisualPlaybackPublisher() {
   const listenersRef = useRef(new Set<(seconds: number) => void>());
 
   const publishVisualPlaybackTime = useCallback((seconds: number) => {
@@ -9,8 +13,8 @@ function useRecordingVisualPlaybackPublisher() {
     }
   }, []);
 
-  const subscribeVisualPlaybackTime = useCallback(
-    (listener: (seconds: number) => void) => {
+  const subscribeVisualPlaybackTime = useCallback<VisualPlaybackSubscriber>(
+    (listener) => {
       listenersRef.current.add(listener);
 
       return () => {
@@ -23,4 +27,5 @@ function useRecordingVisualPlaybackPublisher() {
   return { publishVisualPlaybackTime, subscribeVisualPlaybackTime };
 }
 
-export { useRecordingVisualPlaybackPublisher };
+export type { VisualPlaybackSubscriber };
+export { useVisualPlaybackPublisher };

@@ -114,7 +114,9 @@ class ReplayClipsService {
 
     return {
       clip: sizedClip,
-      durationSeconds: this.readReplayClipDuration(storedClipPath),
+      durationSeconds:
+        sizedClip.durationSeconds ??
+        this.readReplayClipDuration(storedClipPath),
       mediaUrl: storedClipPath ? createReplayClipMediaUrl(id) : null,
     };
   }
@@ -164,7 +166,9 @@ class ReplayClipsService {
 
         return {
           clip: sizedClip,
-          durationSeconds: this.readReplayClipDuration(storedClipPath),
+          durationSeconds:
+            sizedClip.durationSeconds ??
+            this.readReplayClipDuration(storedClipPath),
           mediaUrl: storedClipPath
             ? createReplayClipMediaUrl(sizedClip.id)
             : null,
@@ -306,11 +310,10 @@ class ReplayClipsService {
         ...createSafePathLogFields(storedReplayPath, "recording"),
       });
 
-      const readyClip = this.updateClip(clip, { status: "ready" });
-      this.repository.updateDuration(
-        readyClip.id,
-        this.readReplayClipDuration(storedReplayPath),
-      );
+      const readyClip = this.updateClip(clip, {
+        status: "ready",
+        durationSeconds: this.readReplayClipDuration(storedReplayPath),
+      });
       logInfo(REPLAY_CLIPS_LOG_SCOPE, "Replay clip ready", {
         clipId: readyClip.id,
       });
@@ -546,6 +549,7 @@ class ReplayClipsService {
       originalObsPath: null,
       processedClipPath: null,
       targetDurationSeconds: settings.deathClipSeconds,
+      durationSeconds: null,
       sizeBytes: 0,
       error: null,
       createdAt: now,

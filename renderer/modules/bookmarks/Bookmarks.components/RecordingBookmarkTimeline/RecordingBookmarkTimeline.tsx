@@ -1,18 +1,15 @@
 import { type PointerEvent, type ReactNode, useRef } from "react";
 
 import type { RecordingBookmark } from "~/main/modules/bookmarks";
+import type { VisualPlaybackSubscriber } from "~/renderer/modules/media-playback/useVisualPlaybackPublisher/useVisualPlaybackPublisher";
 
 import { RecordingBookmarkTimelineMarker } from "../RecordingBookmarkTimelineMarker/RecordingBookmarkTimelineMarker";
-import { RecordingPlaybackControls } from "../RecordingPlaybackControls/RecordingPlaybackControls";
+import { RecordingBookmarkTimelineToolbar } from "../RecordingBookmarkTimelineToolbar/RecordingBookmarkTimelineToolbar";
 import { RecordingTimelineHoverMarker } from "../RecordingTimelineHoverMarker/RecordingTimelineHoverMarker";
 import { RecordingTimelineHoverSegment } from "../RecordingTimelineHoverSegment/RecordingTimelineHoverSegment";
-import {
-  RecordingTimelinePlayhead,
-  type RecordingVisualPlaybackSubscriber,
-} from "../RecordingTimelinePlayhead/RecordingTimelinePlayhead";
+import { RecordingTimelinePlayhead } from "../RecordingTimelinePlayhead/RecordingTimelinePlayhead";
 import { RecordingTimelineRuler } from "../RecordingTimelineRuler/RecordingTimelineRuler";
 import { RecordingTimelineVideoRail } from "../RecordingTimelineVideoRail/RecordingTimelineVideoRail";
-import { RecordingVolumeControls } from "../RecordingVolumeControls/RecordingVolumeControls";
 import {
   calculateRecordingTimelineMarkers,
   calculateRecordingTimelineMinorMarkers,
@@ -24,7 +21,7 @@ import {
 } from "./RecordingBookmarkTimeline.utils";
 import { useRecordingTimelineGridWidth } from "./useRecordingTimelineGridWidth";
 
-interface RecordingBookmarkTimelineProps {
+interface RecordingBookmarkTimelineMarkers {
   bookmarks: RecordingBookmark[];
   clipTargetsByBookmarkId?: Record<
     string,
@@ -34,19 +31,22 @@ interface RecordingBookmarkTimelineProps {
       targetId: string;
     }
   >;
-  durationSeconds: number | null;
-  enableVisualPlaybackSubscription?: boolean;
   highlightDeathsInRuler?: boolean;
   highlightManualsInRuler?: boolean;
   hoveredBookmark?: RecordingBookmark | null;
+  markerBookmarks?: RecordingBookmark[];
+  showBookmarkMarkers?: boolean;
+  onClipTargetSelect?: (clipId: string) => void;
+}
+
+interface RecordingBookmarkTimelinePlayback {
+  durationSeconds: number | null;
+  enableVisualPlaybackSubscription?: boolean;
   isPlaying: boolean;
   isPlaybackDisabled?: boolean;
-  markerBookmarks?: RecordingBookmark[];
   mediaUrl: string | null;
   playbackSeconds: number;
-  showBookmarkMarkers?: boolean;
-  subscribeVisualPlaybackTime?: RecordingVisualPlaybackSubscriber;
-  toolbarStart?: ReactNode;
+  subscribeVisualPlaybackTime?: VisualPlaybackSubscriber;
   visualPlaybackOffsetSeconds?: number;
   volume: number;
   onJumpToStart: () => void;
@@ -55,35 +55,46 @@ interface RecordingBookmarkTimelineProps {
   onSeekForward: () => void;
   onTogglePlayback: () => void;
   onVolumeChange: (volume: number) => void;
-  onClipTargetSelect?: (clipId: string) => void;
+}
+
+interface RecordingBookmarkTimelineProps {
+  markers: RecordingBookmarkTimelineMarkers;
+  playback: RecordingBookmarkTimelinePlayback;
+  toolbarStart?: ReactNode;
 }
 
 function RecordingBookmarkTimeline({
-  bookmarks,
-  clipTargetsByBookmarkId = {},
-  durationSeconds,
-  enableVisualPlaybackSubscription,
-  highlightDeathsInRuler = false,
-  highlightManualsInRuler = false,
-  hoveredBookmark = null,
-  isPlaying,
-  isPlaybackDisabled,
-  markerBookmarks,
-  mediaUrl,
-  playbackSeconds,
-  showBookmarkMarkers = true,
-  subscribeVisualPlaybackTime,
   toolbarStart,
-  visualPlaybackOffsetSeconds,
-  volume,
-  onJumpToStart,
-  onSeek,
-  onSeekBackward,
-  onSeekForward,
-  onTogglePlayback,
-  onVolumeChange,
-  onClipTargetSelect,
+  markers,
+  playback,
 }: RecordingBookmarkTimelineProps) {
+  const {
+    bookmarks,
+    clipTargetsByBookmarkId = {},
+    highlightDeathsInRuler = false,
+    highlightManualsInRuler = false,
+    hoveredBookmark = null,
+    markerBookmarks,
+    showBookmarkMarkers = true,
+    onClipTargetSelect,
+  } = markers;
+  const {
+    durationSeconds,
+    enableVisualPlaybackSubscription,
+    isPlaying,
+    isPlaybackDisabled,
+    mediaUrl,
+    playbackSeconds,
+    subscribeVisualPlaybackTime,
+    visualPlaybackOffsetSeconds,
+    volume,
+    onJumpToStart,
+    onSeek,
+    onSeekBackward,
+    onSeekForward,
+    onTogglePlayback,
+    onVolumeChange,
+  } = playback;
   const hoverLabelRef = useRef<HTMLSpanElement>(null);
   const hoverMarkerRef = useRef<HTMLDivElement>(null);
   const timelineGridRef = useRef<HTMLDivElement>(null);
@@ -94,11 +105,10 @@ function RecordingBookmarkTimeline({
     0,
     timelineGridWidthPixels - recordingTimelineRailPaddingPixels * 2,
   );
-  const markers = calculateRecordingTimelineMarkers(duration);
+  const timelineMarkers = calculateRecordingTimelineMarkers(duration);
   const minorMarkers = calculateRecordingTimelineMinorMarkers(duration);
   const isDisabled = duration <= 0 || (isPlaybackDisabled ?? !mediaUrl);
   const visibleMarkerBookmarks = markerBookmarks ?? bookmarks;
-
   const applyHoverSeconds = (seconds: number | null) => {
     const marker = hoverMarkerRef.current;
     if (!marker) {
@@ -148,30 +158,19 @@ function RecordingBookmarkTimeline({
 
   return (
     <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-base-content/10 bg-base-200">
-      <div className="grid h-12 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center border-base-content/10 border-b px-3">
-        <div className="relative z-10 flex items-center justify-self-start">
-          {toolbarStart}
-        </div>
-        <div className="relative z-10">
-          <RecordingPlaybackControls
-            durationSeconds={duration}
-            isDisabled={isDisabled}
-            isPlaying={isPlaying}
-            playbackSeconds={playbackSeconds}
-            onJumpToStart={onJumpToStart}
-            onSeekBackward={onSeekBackward}
-            onSeekForward={onSeekForward}
-            onTogglePlayback={onTogglePlayback}
-          />
-        </div>
-        <div className="relative z-10 flex items-center justify-self-end">
-          <RecordingVolumeControls
-            isDisabled={isDisabled}
-            volume={volume}
-            onVolumeChange={onVolumeChange}
-          />
-        </div>
-      </div>
+      <RecordingBookmarkTimelineToolbar
+        durationSeconds={duration}
+        isDisabled={isDisabled}
+        isPlaying={isPlaying}
+        playbackSeconds={playbackSeconds}
+        toolbarStart={toolbarStart}
+        volume={volume}
+        onJumpToStart={onJumpToStart}
+        onSeekBackward={onSeekBackward}
+        onSeekForward={onSeekForward}
+        onTogglePlayback={onTogglePlayback}
+        onVolumeChange={onVolumeChange}
+      />
 
       <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden p-3">
         <div
@@ -186,7 +185,7 @@ function RecordingBookmarkTimeline({
             bookmarks={bookmarks}
             clipTargetsByBookmarkId={clipTargetsByBookmarkId}
             durationSeconds={duration}
-            markers={markers}
+            markers={timelineMarkers}
             minorMarkers={minorMarkers}
             showDeathMarkers={highlightDeathsInRuler}
             showManualMarkers={highlightManualsInRuler}

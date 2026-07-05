@@ -1,29 +1,29 @@
 import { useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { RecordingBookmark } from "~/main/modules/bookmarks";
 import { PageContainer } from "~/renderer/components/PageContainer/PageContainer";
 import { PageContent } from "~/renderer/components/PageContent/PageContent";
 import { PageHeader } from "~/renderer/components/PageHeader/PageHeader";
+import { RecordingBookmarksPanel } from "~/renderer/modules/bookmarks/Bookmarks.components/RecordingBookmarksPanel/RecordingBookmarksPanel";
+import {
+  allRecordingBookmarkCategoriesValue,
+  recordingBookmarksPanelPageSize,
+} from "~/renderer/modules/bookmarks/Bookmarks.components/RecordingBookmarksPanel/RecordingBookmarksPanel.utils";
+import { RecordingBookmarkTimeline } from "~/renderer/modules/bookmarks/Bookmarks.components/RecordingBookmarkTimeline/RecordingBookmarkTimeline";
 import {
   formatBytes,
   formatDurationSeconds,
 } from "~/renderer/modules/media-library/MediaLibrary.utils/MediaLibrary.utils";
-import { useMediaPlayback } from "~/renderer/modules/media-playback/useMediaPlayback/useMediaPlayback";
+import { useBookmarksShallow } from "~/renderer/store";
 
-import { RecordingBookmarksPanel } from "./RecordingBookmarksPanel/RecordingBookmarksPanel";
-import {
-  allRecordingBookmarkCategoriesValue,
-  recordingBookmarksPanelPageSize,
-} from "./RecordingBookmarksPanel/RecordingBookmarksPanel.utils";
-import { RecordingBookmarkTimeline } from "./RecordingBookmarkTimeline/RecordingBookmarkTimeline";
 import { RecordingDetailPageActions } from "./RecordingDetailPageActions/RecordingDetailPageActions";
 import { RecordingDetailPlayer } from "./RecordingDetailPlayer/RecordingDetailPlayer";
 import { RecordingDetailStatusAlerts } from "./RecordingDetailStatusAlerts/RecordingDetailStatusAlerts";
 import { useRecordingBookmarkFilters } from "./useRecordingBookmarkFilters/useRecordingBookmarkFilters";
 import { useRecordingDetailData } from "./useRecordingDetailData/useRecordingDetailData";
 import { useRecordingDetailFileActions } from "./useRecordingDetailFileActions/useRecordingDetailFileActions";
-import { useRecordingVisualPlaybackPublisher } from "./useRecordingVisualPlaybackPublisher/useRecordingVisualPlaybackPublisher";
+import { useRecordingDetailPlayback } from "./useRecordingDetailPlayback/useRecordingDetailPlayback";
 
 interface RecordingDetailPageProps {
   initialPlaybackSeconds?: number | null;
@@ -35,12 +35,15 @@ function RecordingDetailPage({
   recordingId,
 }: RecordingDetailPageProps) {
   const navigate = useNavigate();
-  const appliedInitialPlaybackKeyRef = useRef<string | null>(null);
   const [videoFrameHeightPixels, setVideoFrameHeightPixels] = useState<
     number | null
   >(null);
-  const [hoveredBookmark, setHoveredBookmark] =
-    useState<RecordingBookmark | null>(null);
+  const { hoveredBookmarkId, setHoveredBookmarkId } = useBookmarksShallow(
+    (bookmarks) => ({
+      hoveredBookmarkId: bookmarks.recordingDetail.hoveredBookmarkId,
+      setHoveredBookmarkId: bookmarks.setRecordingDetailHoveredBookmarkId,
+    }),
+  );
   const state = useRecordingDetailData(recordingId);
   const recording = state.detail?.recording ?? null;
   const handleRecordingDeleted = useCallback(() => {
@@ -60,8 +63,26 @@ function RecordingDetailPage({
     timelineBookmarks,
     state.bookmarksPage?.availableCategories ?? [],
   );
-  const { publishVisualPlaybackTime, subscribeVisualPlaybackTime } =
-    useRecordingVisualPlaybackPublisher();
+  const hoveredBookmark = useMemo(
+    () =>
+      hoveredBookmarkId
+        ? (timelineBookmarks.find(
+            (bookmark) => bookmark.id === hoveredBookmarkId,
+          ) ??
+          latestBookmarks.find(
+            (bookmark) => bookmark.id === hoveredBookmarkId,
+          ) ??
+          null)
+        : null,
+    [hoveredBookmarkId, latestBookmarks, timelineBookmarks],
+  );
+  const playback = useRecordingDetailPlayback({
+    detailReady: Boolean(state.detail),
+    fallbackDurationSeconds: recording?.durationSeconds ?? null,
+    initialPlaybackSeconds,
+    mediaUrl: state.detail?.mediaUrl ?? null,
+    recordingId,
+  });
 
   useEffect(() => {
     if (!recordingId) {
@@ -91,66 +112,29 @@ function RecordingDetailPage({
     state.detail,
     state.refreshBookmarksPage,
   ]);
-  const {
-    durationSeconds,
-    handleEnded,
-    handleLoadedMetadata,
-    handlePause,
-    handlePlay,
-    handleTimeUpdate,
-    isPlaying,
-    jumpToStart,
-    playbackSeconds,
-    seekBy,
-    seekTo,
-    setVolume,
-    togglePlayback,
-    videoRef,
-    volume,
-  } = useMediaPlayback({
-    fallbackDurationSeconds: recording?.durationSeconds ?? null,
-    mediaUrl: state.detail?.mediaUrl ?? null,
-    onVisualTimeChange: publishVisualPlaybackTime,
-  });
   const canUseFileActions = Boolean(
     recording?.exists && state.detail?.mediaUrl,
   );
 
   const handleSelectBookmark = (bookmark: RecordingBookmark) => {
     bookmarkFilters.markInteracted();
-    seekTo(bookmark.offsetSeconds ?? 0);
+    playback.seekTo(bookmark.offsetSeconds ?? 0);
   };
 
+  const handleHoverBookmark = useCallback(
+    (bookmark: RecordingBookmark | null) => {
+      setHoveredBookmarkId(bookmark?.id ?? null);
+    },
+    [setHoveredBookmarkId],
+  );
+
   const handleSeekBackward = () => {
-    seekBy(-5);
+    playback.seekBy(-5);
   };
 
   const handleSeekForward = () => {
-    seekBy(5);
+    playback.seekBy(5);
   };
-
-  useEffect(() => {
-    if (!state.detail || initialPlaybackSeconds === null) {
-      return;
-    }
-    if (initialPlaybackSeconds > 0 && durationSeconds <= 0) {
-      return;
-    }
-
-    const seekKey = `${recordingId}:${initialPlaybackSeconds}`;
-    if (appliedInitialPlaybackKeyRef.current === seekKey) {
-      return;
-    }
-
-    appliedInitialPlaybackKeyRef.current = seekKey;
-    seekTo(initialPlaybackSeconds);
-  }, [
-    durationSeconds,
-    initialPlaybackSeconds,
-    recordingId,
-    seekTo,
-    state.detail,
-  ]);
 
   return (
     <PageContainer className="relative gap-4">
@@ -188,6 +172,7 @@ function RecordingDetailPage({
               bookmarks={latestBookmarks}
               categories={bookmarkFilters.categories}
               categoryFilter={bookmarkFilters.categoryFilter}
+              emptyMessage="No bookmarks are attached to this recording yet."
               heightPixels={videoFrameHeightPixels}
               isTimelineTruncated={
                 state.bookmarksPage?.timelineItemsTruncated ?? false
@@ -196,7 +181,7 @@ function RecordingDetailPage({
               pageIndex={state.bookmarksPage?.pageIndex ?? 0}
               totalCount={state.bookmarksPage?.totalCount ?? 0}
               onCategoryChange={bookmarkFilters.selectCategory}
-              onHoverBookmark={setHoveredBookmark}
+              onHoverBookmark={handleHoverBookmark}
               onNextPage={bookmarkFilters.nextPage}
               onPreviousPage={bookmarkFilters.previousPage}
               onSelectBookmark={handleSelectBookmark}
@@ -206,38 +191,42 @@ function RecordingDetailPage({
               emptyTitle="Recording video unavailable"
               mediaUrl={state.detail.mediaUrl}
               title={recording.fileName}
-              videoRef={videoRef}
-              onEnded={handleEnded}
+              videoRef={playback.videoRef}
+              onEnded={playback.handleEnded}
               onFrameHeightChange={setVideoFrameHeightPixels}
-              onLoadedMetadata={handleLoadedMetadata}
-              onPause={handlePause}
-              onPlay={handlePlay}
-              onTimeUpdate={handleTimeUpdate}
+              onLoadedMetadata={playback.handleLoadedMetadata}
+              onPause={playback.handlePause}
+              onPlay={playback.handlePlay}
+              onTimeUpdate={playback.handleTimeUpdate}
             />
             <div className="min-h-0 lg:col-span-2">
               <RecordingBookmarkTimeline
-                bookmarks={timelineBookmarks}
-                durationSeconds={durationSeconds}
-                highlightDeathsInRuler={true}
-                highlightManualsInRuler={true}
-                hoveredBookmark={hoveredBookmark}
-                isPlaying={isPlaying}
-                markerBookmarks={bookmarkFilters.markerBookmarks}
-                mediaUrl={state.detail.mediaUrl}
-                playbackSeconds={playbackSeconds}
-                showBookmarkMarkers={
-                  bookmarkFilters.hasInteracted ||
-                  bookmarkFilters.categoryFilter !==
-                    allRecordingBookmarkCategoriesValue
-                }
-                subscribeVisualPlaybackTime={subscribeVisualPlaybackTime}
-                volume={volume}
-                onJumpToStart={jumpToStart}
-                onSeek={seekTo}
-                onSeekBackward={handleSeekBackward}
-                onSeekForward={handleSeekForward}
-                onTogglePlayback={togglePlayback}
-                onVolumeChange={setVolume}
+                markers={{
+                  bookmarks: timelineBookmarks,
+                  highlightDeathsInRuler: true,
+                  highlightManualsInRuler: true,
+                  hoveredBookmark,
+                  markerBookmarks: bookmarkFilters.markerBookmarks,
+                  showBookmarkMarkers:
+                    bookmarkFilters.hasInteracted ||
+                    bookmarkFilters.categoryFilter !==
+                      allRecordingBookmarkCategoriesValue,
+                }}
+                playback={{
+                  durationSeconds: playback.durationSeconds,
+                  isPlaying: playback.isPlaying,
+                  mediaUrl: state.detail.mediaUrl,
+                  playbackSeconds: playback.playbackSeconds,
+                  subscribeVisualPlaybackTime:
+                    playback.subscribeVisualPlaybackTime,
+                  volume: playback.volume,
+                  onJumpToStart: playback.jumpToStart,
+                  onSeek: playback.seekTo,
+                  onSeekBackward: handleSeekBackward,
+                  onSeekForward: handleSeekForward,
+                  onTogglePlayback: playback.togglePlayback,
+                  onVolumeChange: playback.setVolume,
+                }}
               />
             </div>
           </div>

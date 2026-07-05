@@ -676,6 +676,111 @@ describe("ClientLogService", () => {
     service.stopWatchFile();
   });
 
+  it("emits activity events from appended generated area and scene lines", async () => {
+    const path = join(directory, "Client.txt");
+    writeFileSync(path, "");
+    const service = new ClientLogService();
+    const activityBatches: unknown[] = [];
+    service.on("activity", (event) => activityBatches.push(event));
+    const internals = service as unknown as {
+      openFileDescriptor(path: string): void;
+      processNewBytes(path: string, size: number, game: "poe2"): Promise<void>;
+    };
+
+    internals.openFileDescriptor(path);
+    const text = [
+      '2026/07/03 11:34:23 397021937 2caa2332 [DEBUG Client 52640] Generating level 64 area "P2_Town" with seed 1',
+      "2026/07/03 11:34:23 397022484 7fbd1225 [INFO Client 52640] [SCENE] Set Source [The Khari Bazaar]",
+      "",
+    ].join("\n");
+    writeFileSync(path, text);
+
+    await internals.processNewBytes(path, Buffer.byteLength(text), "poe2");
+
+    expect(activityBatches).toEqual([
+      {
+        events: [
+          expect.objectContaining({
+            areaId: "P2_Town",
+            kind: "generated-area",
+            sequenceId: "397021937",
+          }),
+          expect.objectContaining({
+            kind: "scene-source",
+            sceneName: "The Khari Bazaar",
+            sequenceId: "397022484",
+          }),
+        ],
+        game: "poe2",
+      },
+    ]);
+    service.stopWatchFile();
+  });
+
+  it("seeds activity state from the current client log tail", async () => {
+    const path = join(directory, "Client.txt");
+    writeFileSync(
+      path,
+      [
+        '2026/07/03 11:34:23 397021937 2caa2332 [DEBUG Client 52640] Generating level 64 area "P2_Town" with seed 1',
+        "2026/07/03 11:34:23 397022484 7fbd1225 [INFO Client 52640] [SCENE] Set Source [The Khari Bazaar]",
+        "",
+      ].join("\n"),
+    );
+    const service = new ClientLogService();
+    const activitySeeds: unknown[] = [];
+    service.on("activity-seed", (event) => activitySeeds.push(event));
+
+    service.watchFile(path, "poe2");
+    await flushPromises();
+
+    expect(activitySeeds).toEqual([
+      {
+        events: [
+          expect.objectContaining({ kind: "generated-area" }),
+          expect.objectContaining({ kind: "scene-source" }),
+        ],
+        game: "poe2",
+      },
+    ]);
+    service.stopWatchFile();
+  });
+
+  it("handles defensive activity seed read paths", () => {
+    const path = join(directory, "Client.txt");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const service = new ClientLogService();
+    const internals = service as unknown as {
+      fd: number | null;
+      lastKnownSize: number;
+      seedClientLogActivityState(filePath: string, game: "poe1"): void;
+    };
+
+    internals.fd = null;
+    internals.lastKnownSize = 10;
+    internals.seedClientLogActivityState(path, "poe1");
+
+    internals.fd = 1;
+    vi.spyOn(fs, "readSync").mockReturnValueOnce(0);
+    internals.seedClientLogActivityState(path, "poe1");
+
+    vi.spyOn(fs, "readSync").mockImplementationOnce(() => {
+      throw new Error("seed read failed");
+    });
+    internals.seedClientLogActivityState(path, "poe1");
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "WARN [client-log] Client log activity seed failed",
+      ),
+      expect.objectContaining({
+        clientLogFile: "Client.txt",
+        error: "seed read failed",
+        game: "poe1",
+      }),
+    );
+  });
+
   it("handles missing files and unavailable-log throttling without throwing", async () => {
     const path = join(directory, "missing.txt");
     electronMocks.getAllWindows.mockReturnValue([

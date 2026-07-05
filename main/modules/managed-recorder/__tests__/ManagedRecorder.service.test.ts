@@ -19,6 +19,7 @@ import {
   vi,
 } from "vitest";
 
+import { BookmarksService } from "~/main/modules/bookmarks";
 import { CaptureProfilesService } from "~/main/modules/capture-profiles";
 import { DatabaseService } from "~/main/modules/database";
 import { RecordingStorageService } from "~/main/modules/recording-storage";
@@ -519,14 +520,20 @@ describe("ManagedRecorderService", () => {
         recordingClipQuality: "high",
       }),
     } as unknown as SettingsStoreService);
+    const beginRewindSession = vi.fn();
+    vi.spyOn(BookmarksService, "getInstance").mockReturnValue({
+      beginRewindSession,
+    } as unknown as BookmarksService);
     const service = createService();
     const noobs = createNoobsApi();
     const internals = service as unknown as {
       initialize(): Promise<void>;
       noobs: ReturnType<typeof createNoobsApi>;
+      status: ManagedRecorderStatus;
     };
     internals.noobs = noobs;
     internals.initialize = vi.fn().mockResolvedValue(undefined);
+    internals.status = { ...service.getStatus(), activeGame: null };
 
     await service.startBuffer();
 
@@ -536,6 +543,9 @@ describe("ManagedRecorderService", () => {
         rate_control: "CRF",
         crf: 26,
       }),
+    );
+    expect(beginRewindSession).toHaveBeenCalledWith(
+      expect.objectContaining({ game: "poe1" }),
     );
   });
 
@@ -975,15 +985,39 @@ describe("ManagedRecorderService", () => {
     const service = createService();
     const noobs = createNoobsApi();
     noobs.GetLastRecording.mockReturnValue(savedPath);
-    const registerRunRecording = vi.fn();
+    const registeredRecording = {
+      createdAt: "2026-07-03T20:00:00.000Z",
+      durationSeconds: 30,
+      exists: true,
+      fileName: "run.mp4",
+      id: "registered-run",
+      path: savedPath,
+      sizeBytes: 1024,
+      sourceGame: "poe1" as const,
+      sourceLeague: "Runes of Aldur",
+      startedAt: "2026-07-03T20:00:00.000Z",
+      stoppedAt: "2026-07-03T20:00:30.000Z",
+      updatedAt: "2026-07-03T20:00:30.000Z",
+    };
+    const beginRecordingSession = vi.fn();
+    const finalizeRecordingSession = vi.fn();
+    vi.spyOn(BookmarksService, "getInstance").mockReturnValue({
+      beginRecordingSession,
+      discardRecordingSession: vi.fn(),
+      finalizeRecordingSession,
+    } as unknown as BookmarksService);
+    const registerRunRecording = vi.fn(() => ({ id: registeredRecording.id }));
+    const getRecording = vi.fn(() => ({ recording: registeredRecording }));
     const cleanup = vi.fn();
     vi.spyOn(RecordingStorageService, "getInstance").mockReturnValue({
       cleanup,
+      getRecording,
       registerRunRecording,
     } as unknown as RecordingStorageService);
     const internals = service as unknown as {
       initialize(): Promise<void>;
       noobs: ReturnType<typeof createNoobsApi>;
+      status: ManagedRecorderStatus;
       waitForRecordingStop(): Promise<void>;
       waitForSavedRecording(): Promise<string | null>;
     };
@@ -991,6 +1025,7 @@ describe("ManagedRecorderService", () => {
     internals.initialize = vi.fn().mockResolvedValue(undefined);
     internals.waitForRecordingStop = vi.fn().mockResolvedValue(undefined);
     internals.waitForSavedRecording = vi.fn().mockResolvedValue(savedPath);
+    internals.status = { ...service.getStatus(), activeGame: null };
 
     await expect(service.startRunRecording()).resolves.toMatchObject({
       recording: true,
@@ -1043,6 +1078,12 @@ describe("ManagedRecorderService", () => {
     expect(noobs.SetBuffering).toHaveBeenCalledWith(false);
     expect(noobs.StartRecording).toHaveBeenCalledWith(0);
     expect(noobs.StopRecording).toHaveBeenCalled();
+    expect(beginRecordingSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        game: "poe1",
+        league: "Standard",
+      }),
+    );
     expect(registerRunRecording).toHaveBeenCalledWith(
       expect.objectContaining({
         path: savedPath,
@@ -1051,6 +1092,8 @@ describe("ManagedRecorderService", () => {
         sourceLeague: "Runes of Aldur",
       }),
     );
+    expect(getRecording).toHaveBeenCalledWith(registeredRecording.id);
+    expect(finalizeRecordingSession).toHaveBeenCalledWith(registeredRecording);
     expect(cleanup).toHaveBeenCalledWith({
       protectedDirectories: [],
       protectedPaths: [savedPath],

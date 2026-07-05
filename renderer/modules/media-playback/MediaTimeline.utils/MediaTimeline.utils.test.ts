@@ -7,6 +7,7 @@ import {
   clampTimelineSeconds,
   formatTimelineRailLeft,
   formatTimelineRailWidth,
+  resolveMediaClipTargetSegment,
   resolveTimelineSecondsFromClientX,
 } from "./MediaTimeline.utils";
 
@@ -34,6 +35,81 @@ describe("MediaTimeline utils", () => {
     expect(clampTimelineSeconds(Number.NaN, 100)).toBe(0);
     expect(clampTimelineSeconds(-1, 100)).toBe(0);
     expect(clampTimelineSeconds(101, 100)).toBe(100);
+  });
+
+  it("resolves clip target pre-roll and post-event tail segments", () => {
+    expect(
+      resolveMediaClipTargetSegment({
+        durationSeconds: 4,
+        offsetSeconds: 2,
+        targetDurationSeconds: 50,
+      }),
+    ).toEqual({
+      endSeconds: 4,
+      eventDurationSeconds: 2,
+      startSeconds: 0,
+      tailDurationSeconds: 2,
+      triggerSeconds: 2,
+    });
+    expect(
+      resolveMediaClipTargetSegment({
+        durationSeconds: null,
+        offsetSeconds: 30,
+        targetDurationSeconds: 50,
+        unknownDurationMode: "trigger-only",
+      }),
+    ).toEqual({
+      endSeconds: 30,
+      eventDurationSeconds: 30,
+      startSeconds: 0,
+      tailDurationSeconds: 0,
+      triggerSeconds: 30,
+    });
+    expect(
+      resolveMediaClipTargetSegment({
+        durationSeconds: null,
+        offsetSeconds: 90,
+        targetDurationSeconds: 50,
+        unknownDurationMode: "trigger-only",
+      }),
+    ).toEqual({
+      endSeconds: 90,
+      eventDurationSeconds: 50,
+      startSeconds: 40,
+      tailDurationSeconds: 0,
+      triggerSeconds: 90,
+    });
+    expect(
+      resolveMediaClipTargetSegment({
+        durationSeconds: null,
+        offsetSeconds: 0,
+        targetDurationSeconds: 50,
+        unknownDurationMode: "trigger-only",
+      }),
+    ).toBeNull();
+    expect(
+      resolveMediaClipTargetSegment({
+        durationSeconds: 0,
+        offsetSeconds: 30,
+        targetDurationSeconds: 50,
+      }),
+    ).toBeNull();
+  });
+
+  it("falls back to target duration while clip duration is unknown by default", () => {
+    expect(
+      resolveMediaClipTargetSegment({
+        durationSeconds: null,
+        offsetSeconds: 30,
+        targetDurationSeconds: 50,
+      }),
+    ).toEqual({
+      endSeconds: 50,
+      eventDurationSeconds: 30,
+      startSeconds: 0,
+      tailDurationSeconds: 20,
+      triggerSeconds: 30,
+    });
   });
 
   it("resolves timeline seconds from client coordinates", () => {

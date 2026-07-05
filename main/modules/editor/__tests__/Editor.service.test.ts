@@ -107,6 +107,7 @@ function createReplayClipDetail(
       originalObsPath: `C:\\Videos\\${id}.mp4`,
       processedClipPath: `C:\\Videos\\${id}.mp4`,
       targetDurationSeconds: 10,
+      durationSeconds: overrides.durationSeconds ?? null,
       sizeBytes: 1024,
       error: null,
       createdAt: "2026-06-12T10:00:00.000Z",

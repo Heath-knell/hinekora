@@ -1,26 +1,36 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 
 import type {
   BookmarkCategory,
   RecordingBookmark,
 } from "~/main/modules/bookmarks";
-
 import {
   allRecordingBookmarkCategoriesValue,
-  type RecordingBookmarkCategoryFilter,
   resolveRecordingBookmarkCategories,
-} from "../RecordingBookmarksPanel/RecordingBookmarksPanel.utils";
+} from "~/renderer/modules/bookmarks/Bookmarks.components/RecordingBookmarksPanel/RecordingBookmarksPanel.utils";
+import { useBookmarksShallow } from "~/renderer/store";
 
 function useRecordingBookmarkFilters(
   bookmarks: RecordingBookmark[],
   availableCategories: BookmarkCategory[] = [],
 ) {
-  const [categoryFilter, setCategoryFilter] =
-    useState<RecordingBookmarkCategoryFilter>(
-      allRecordingBookmarkCategoriesValue,
-    );
-  const [pageIndex, setPageIndex] = useState(0);
-  const [hasInteracted, setHasInteracted] = useState(false);
+  const {
+    categoryFilter,
+    hasInteracted,
+    markInteracted,
+    pageIndex,
+    reset,
+    selectCategory,
+    setPageIndex,
+  } = useBookmarksShallow((bookmarksState) => ({
+    categoryFilter: bookmarksState.recordingDetail.categoryFilter,
+    hasInteracted: bookmarksState.recordingDetail.hasInteracted,
+    markInteracted: bookmarksState.markRecordingDetailInteracted,
+    pageIndex: bookmarksState.recordingDetail.pageIndex,
+    reset: bookmarksState.resetRecordingDetail,
+    selectCategory: bookmarksState.selectRecordingDetailCategory,
+    setPageIndex: bookmarksState.setRecordingDetailPageIndex,
+  }));
   const markerBookmarks = useMemo(
     () =>
       categoryFilter === allRecordingBookmarkCategoriesValue
@@ -36,32 +46,13 @@ function useRecordingBookmarkFilters(
     [availableCategories, bookmarks],
   );
 
-  const reset = useCallback(() => {
-    setCategoryFilter(allRecordingBookmarkCategoriesValue);
-    setPageIndex(0);
-    setHasInteracted(false);
-  }, []);
-
-  const selectCategory = useCallback(
-    (category: RecordingBookmarkCategoryFilter) => {
-      setCategoryFilter(category);
-      setPageIndex(0);
-      setHasInteracted(true);
-    },
-    [],
-  );
-
   const previousPage = useCallback(() => {
-    setPageIndex((current) => Math.max(0, current - 1));
-  }, []);
+    setPageIndex(pageIndex - 1);
+  }, [pageIndex, setPageIndex]);
 
   const nextPage = useCallback(() => {
-    setPageIndex((current) => current + 1);
-  }, []);
-
-  const markInteracted = useCallback(() => {
-    setHasInteracted(true);
-  }, []);
+    setPageIndex(pageIndex + 1);
+  }, [pageIndex, setPageIndex]);
 
   return {
     categories,

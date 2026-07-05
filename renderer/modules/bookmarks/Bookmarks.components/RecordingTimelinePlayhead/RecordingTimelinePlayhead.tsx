@@ -1,19 +1,17 @@
 import { useCallback, useEffect, useRef } from "react";
 
+import type { VisualPlaybackSubscriber } from "~/renderer/modules/media-playback/useVisualPlaybackPublisher/useVisualPlaybackPublisher";
+
 import {
   calculateRecordingTimelinePercent,
   formatRecordingTimelineRailLeft,
 } from "../RecordingBookmarkTimeline/RecordingBookmarkTimeline.utils";
 
-type RecordingVisualPlaybackSubscriber = (
-  listener: (seconds: number) => void,
-) => () => void;
-
 interface RecordingTimelinePlayheadProps {
   durationSeconds: number;
   enableVisualPlaybackSubscription?: boolean;
   playbackSeconds: number;
-  subscribeVisualPlaybackTime?: RecordingVisualPlaybackSubscriber;
+  subscribeVisualPlaybackTime?: VisualPlaybackSubscriber;
   visualPlaybackOffsetSeconds?: number;
 }
 
@@ -80,5 +78,4 @@ function RecordingTimelinePlayhead({
   );
 }
 
-export type { RecordingVisualPlaybackSubscriber };
 export { RecordingTimelinePlayhead };

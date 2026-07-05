@@ -417,8 +417,11 @@ class ManagedRecorderService {
         recordingStartedAt: session.startedAt,
         error: null,
       });
+      /* v8 ignore next -- ensureActiveGameRunning refreshes activeGame before startup; fallback protects stale status mutations. */
+      const sessionGame =
+        this.status.activeGame ?? this.resolveConfiguredGame();
       BookmarksService.getInstance().beginRewindSession({
-        game: this.status.activeGame ?? this.resolveConfiguredGame(),
+        game: sessionGame,
         league: SettingsStoreService.getInstance().get().activeLeague,
         startedAt: session.startedAt,
       });
@@ -544,8 +547,11 @@ class ManagedRecorderService {
         runRecordingStartedAt: session.startedAt,
         error: null,
       });
+      /* v8 ignore next -- ensureActiveGameRunning refreshes activeGame before startup; fallback protects stale status mutations. */
+      const sessionGame =
+        this.status.activeGame ?? this.resolveConfiguredGame();
       BookmarksService.getInstance().beginRecordingSession({
-        game: this.status.activeGame ?? this.resolveConfiguredGame(),
+        game: sessionGame,
         league: SettingsStoreService.getInstance().get().activeLeague,
         startedAt: session.startedAt,
       });

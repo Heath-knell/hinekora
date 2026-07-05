@@ -1,6 +1,8 @@
 import type { BookmarkCategory } from "~/main/modules/bookmarks";
 
-const allBookmarkCategoriesValue = "__all__";
+const allBookmarkCategoriesValue = "__all__" as const;
+const defaultRewindTimelineMarkerFilterValue =
+  "__rewind_default_markers__" as const;
 
 const bookmarkCategoryLabels: Record<BookmarkCategory, string> = {
   boss: "Boss",
@@ -160,4 +162,5 @@ export {
   bookmarkCategoryTimelineClassNames,
   bookmarkCategoryTimelineLineClassNames,
   bookmarkCategoryTimelineThumbClassNames,
+  defaultRewindTimelineMarkerFilterValue,
 };

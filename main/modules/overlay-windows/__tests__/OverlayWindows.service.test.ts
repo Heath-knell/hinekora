@@ -139,6 +139,7 @@ function createClip(update: Partial<ReplayClip> = {}): ReplayClip {
     originalObsPath: "clip.mp4",
     processedClipPath: "clip.mp4",
     targetDurationSeconds: 10,
+    durationSeconds: null,
     sizeBytes: 0,
     error: null,
     createdAt: "2026-06-12T10:00:00.000Z",

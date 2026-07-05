@@ -24,6 +24,7 @@ interface ReplayClipRow {
   original_obs_path: string | null;
   processed_clip_path: string | null;
   target_duration_seconds: number;
+  duration_seconds: number | null;
   size_bytes: number;
   error: string | null;
   created_at: string;
@@ -83,6 +84,7 @@ function mapReplayClipRow(row: ReplayClipRow): ReplayClip {
     originalObsPath: row.original_obs_path,
     processedClipPath: row.processed_clip_path,
     targetDurationSeconds: row.target_duration_seconds,
+    durationSeconds: row.duration_seconds,
     sizeBytes: row.size_bytes,
     error: row.error,
     createdAt: row.created_at,
@@ -285,7 +287,7 @@ class ReplayClipsRepository {
           original_obs_path: clip.originalObsPath,
           processed_clip_path: clip.processedClipPath,
           target_duration_seconds: clip.targetDurationSeconds,
-          duration_seconds: null,
+          duration_seconds: clip.durationSeconds,
           size_bytes: clip.sizeBytes,
           error: clip.error,
           created_at: clip.createdAt,
@@ -298,6 +300,10 @@ class ReplayClipsRepository {
             source_league: clip.sourceLeague,
             original_obs_path: clip.originalObsPath,
             processed_clip_path: clip.processedClipPath,
+            duration_seconds:
+              clip.durationSeconds === null
+                ? sql<number | null>`duration_seconds`
+                : clip.durationSeconds,
             size_bytes: clip.sizeBytes,
             error: clip.error,
             updated_at: clip.updatedAt,
@@ -312,18 +318,6 @@ class ReplayClipsRepository {
         .updateTable("replay_clips")
         .set({
           size_bytes: sizeBytes,
-          updated_at: new Date().toISOString(),
-        })
-        .where("id", "=", id),
-    );
-  }
-
-  updateDuration(id: string, durationSeconds: number | null): void {
-    this.database.runQuery(
-      this.database.kysely
-        .updateTable("replay_clips")
-        .set({
-          duration_seconds: durationSeconds,
           updated_at: new Date().toISOString(),
         })
         .where("id", "=", id),

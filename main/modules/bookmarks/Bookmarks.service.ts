@@ -192,7 +192,9 @@ class BookmarksService {
       ...(activitySession ? { activitySessionId: activitySession.id } : {}),
     };
     this.lastBookmarkedSceneByGame[input.game] = null;
-    this.createSessionAnchorBookmark(this.activeRewindSession, "rewind");
+    if (activitySession) {
+      this.createSessionAnchorBookmark(this.activeRewindSession, "rewind");
+    }
     logInfo(BOOKMARKS_LOG_SCOPE, "Rewind bookmark session started", {
       game: input.game,
       activitySessionId: activitySession?.id ?? null,
@@ -475,6 +477,7 @@ class BookmarksService {
       source: "client-log",
       subcategory: scene.subcategory,
     });
+    /* v8 ignore next -- session anchors are created only with an active session, and repository upsert returns either created or existing bookmark. */
     if (bookmark) {
       this.lastBookmarkedSceneByGame[session.game] = scene;
     }
@@ -619,6 +622,7 @@ class BookmarksService {
       this.pendingReplayClipSessions.size > maxPendingReplayClipSessionLinks
     ) {
       const oldestKey = this.pendingReplayClipSessions.keys().next().value;
+      /* v8 ignore next -- size is above the cap, so Map.keys() must yield a key. */
       if (!oldestKey) {
         return;
       }

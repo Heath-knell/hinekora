@@ -1039,6 +1039,7 @@ class RecordingStorageService {
 
       if (metadata.exists || metadata.sizeBytes !== 0) {
         const recording = this.repository.getItemByPath(path);
+        /* v8 ignore next -- sync metadata and get-by-path rows come from the same table; false only guards inconsistent local SQLite state. */
         if (recording) {
           BookmarksService.getInstance().archiveRecordingLinks(recording);
         }

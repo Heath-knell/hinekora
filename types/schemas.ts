@@ -576,6 +576,7 @@ export const ReplayClipSchema = z.object({
   originalObsPath: z.string().max(2_048).nullable(),
   processedClipPath: z.string().max(2_048).nullable(),
   targetDurationSeconds: z.number().int().min(1).max(120),
+  durationSeconds: z.number().min(0).nullable().default(null),
   sizeBytes: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).default(0),
   error: z.string().max(2_048).nullable(),
   createdAt: z.string().datetime(),

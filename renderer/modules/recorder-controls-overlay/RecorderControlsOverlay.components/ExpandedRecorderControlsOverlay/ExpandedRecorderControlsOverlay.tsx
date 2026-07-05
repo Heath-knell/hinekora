@@ -26,11 +26,11 @@ import {
   openRecorderAuraOverlay,
 } from "./ExpandedRecorderControlsOverlay.utils";
 
+type ExpandedRecorderControlsOverlayProps = { onMinimize: () => void };
+
 function ExpandedRecorderControlsOverlay({
   onMinimize,
-}: {
-  onMinimize: () => void;
-}) {
+}: ExpandedRecorderControlsOverlayProps) {
   const {
     bookmarkSaved,
     canCreateBookmark,

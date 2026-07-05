@@ -1,12 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type {
   RecordingBookmarksPage,
   RecordingBookmarksQuery,
 } from "~/main/modules/bookmarks";
 import type { RunRecordingDetail } from "~/main/modules/recording-storage";
-
-import { recordingBookmarksPanelPageSize } from "../RecordingBookmarksPanel/RecordingBookmarksPanel.utils";
+import { recordingBookmarksPanelPageSize } from "~/renderer/modules/bookmarks/Bookmarks.components/RecordingBookmarksPanel/RecordingBookmarksPanel.utils";
 
 interface RecordingDetailState {
   bookmarksPage: RecordingBookmarksPage | null;
@@ -26,13 +25,19 @@ function useRecordingDetailData(recordingId: string) {
   const [state, setState] = useState<RecordingDetailState>(
     initialRecordingDetailState,
   );
+  const requestIdRef = useRef(0);
 
   const refreshBookmarksPage = useCallback(
     async (query: RecordingBookmarksQuery) => {
+      requestIdRef.current += 1;
+      const requestId = requestIdRef.current;
       const bookmarksPage = await window.electron.bookmarks.listRecording(
         recordingId,
         query,
       );
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
 
       setState((current) => ({
         ...current,
@@ -56,6 +61,8 @@ function useRecordingDetailData(recordingId: string) {
 
   useEffect(() => {
     let isActive = true;
+    requestIdRef.current += 1;
+    const requestId = requestIdRef.current;
     setState(initialRecordingDetailState);
 
     Promise.all([
@@ -66,12 +73,12 @@ function useRecordingDetailData(recordingId: string) {
       }),
     ])
       .then(([detail, bookmarksPage]) => {
-        if (isActive) {
+        if (isActive && requestId === requestIdRef.current) {
           setState({ bookmarksPage, detail, error: null, isLoading: false });
         }
       })
       .catch((error: unknown) => {
-        if (isActive) {
+        if (isActive && requestId === requestIdRef.current) {
           setState({
             detail: null,
             bookmarksPage: null,

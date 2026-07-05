@@ -4,15 +4,17 @@ import type {
   ActivitySessionTimeline,
   RecordingBookmark,
 } from "~/main/modules/bookmarks";
-import { resolveRecordingBookmarkCategories } from "~/renderer/modules/recordings/Recordings.page/RecordingDetailPage/RecordingBookmarksPanel/RecordingBookmarksPanel.utils";
+import { resolveRecordingBookmarkCategories } from "~/renderer/modules/bookmarks/Bookmarks.components/RecordingBookmarksPanel/RecordingBookmarksPanel.utils";
+import {
+  resolveRewindClipSegment,
+  resolveRewindClipVisualOffsetSeconds,
+} from "~/renderer/modules/rewinds/Rewinds.utils/Rewinds.utils";
 
 import {
   calculateRewindDurationSeconds,
   filterRewindTimelineMarkerBookmarks,
   mapRewindTimelineBookmarks,
   type RewindTimelineMarkerCategoryFilter,
-  resolveRewindClipSegment,
-  resolveRewindClipVisualOffsetSeconds,
 } from "../RewindDetailPage.utils";
 
 interface UseRewindTimelineDerivedStateInput {

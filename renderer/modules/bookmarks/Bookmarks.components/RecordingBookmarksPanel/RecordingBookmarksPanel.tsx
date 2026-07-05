@@ -16,6 +16,7 @@ interface RecordingBookmarksPanelProps {
   bookmarks: RecordingBookmark[];
   categories: BookmarkCategory[];
   categoryFilter: RecordingBookmarkCategoryFilter;
+  emptyMessage?: string;
   heightPixels: number | null;
   isTimelineTruncated?: boolean;
   pageCount: number;
@@ -32,6 +33,7 @@ function RecordingBookmarksPanel({
   bookmarks,
   categories,
   categoryFilter,
+  emptyMessage = "No bookmarks are attached yet.",
   heightPixels,
   isTimelineTruncated = false,
   pageCount,
@@ -89,9 +91,7 @@ function RecordingBookmarksPanel({
           />
         ))}
         {bookmarks.length === 0 && (
-          <p className="m-0 text-base-content/55 text-sm">
-            No bookmarks are attached to this recording yet.
-          </p>
+          <p className="m-0 text-base-content/55 text-sm">{emptyMessage}</p>
         )}
       </div>
       <div className="flex h-9 shrink-0 items-center justify-between border-base-content/10 border-t px-3 text-xs">

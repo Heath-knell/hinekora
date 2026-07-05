@@ -61,6 +61,8 @@ const migration_20260702_010000_bookmarks: Migration = {
         source_league TEXT NOT NULL,
         started_at TEXT NOT NULL,
         stopped_at TEXT,
+        bookmark_count INTEGER NOT NULL DEFAULT 0,
+        clip_count INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
@@ -78,7 +80,11 @@ const migration_20260702_010000_bookmarks: Migration = {
         FOREIGN KEY(bookmark_id) REFERENCES bookmarks(id) ON DELETE SET NULL,
         UNIQUE(activity_session_id, target_kind, target_id)
       );
+    `);
 
+    ensureActivitySessionCounterColumns(db);
+
+    db.exec(`
       CREATE INDEX IF NOT EXISTS idx_bookmarks_library
         ON bookmarks(source_game, source_league, category, occurred_at DESC);
       CREATE INDEX IF NOT EXISTS idx_bookmarks_game_occurred_at
@@ -89,6 +95,18 @@ const migration_20260702_010000_bookmarks: Migration = {
         ON bookmark_links(bookmark_id, target_kind, archived);
       CREATE INDEX IF NOT EXISTS idx_activity_sessions_game_league_started_at
         ON activity_sessions(source_game, source_league, started_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_activity_sessions_game_started_at
+        ON activity_sessions(source_game, started_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_activity_sessions_game_bookmark_count
+        ON activity_sessions(source_game, bookmark_count DESC, started_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_activity_sessions_game_clip_count
+        ON activity_sessions(source_game, clip_count DESC, started_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_activity_sessions_mode_game_league_bookmark_count
+        ON activity_sessions(mode, source_game, source_league, bookmark_count DESC, started_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_activity_sessions_mode_game_league_clip_count
+        ON activity_sessions(mode, source_game, source_league, clip_count DESC, started_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_activity_sessions_mode_game_league_started_at
+        ON activity_sessions(mode, source_game, source_league, started_at DESC);
       CREATE INDEX IF NOT EXISTS idx_activity_sessions_open
         ON activity_sessions(mode, stopped_at, started_at DESC);
       CREATE INDEX IF NOT EXISTS idx_activity_session_clips_session_offset
@@ -115,6 +133,19 @@ const migration_20260702_010000_bookmarks: Migration = {
     `);
   },
 };
+
+function ensureActivitySessionCounterColumns(db: DatabaseSync): void {
+  if (!hasColumn(db, "activity_sessions", "bookmark_count")) {
+    db.exec(
+      "ALTER TABLE activity_sessions ADD COLUMN bookmark_count INTEGER NOT NULL DEFAULT 0",
+    );
+  }
+  if (!hasColumn(db, "activity_sessions", "clip_count")) {
+    db.exec(
+      "ALTER TABLE activity_sessions ADD COLUMN clip_count INTEGER NOT NULL DEFAULT 0",
+    );
+  }
+}
 
 function upsertMissingBooleanSetting(
   db: DatabaseSync,

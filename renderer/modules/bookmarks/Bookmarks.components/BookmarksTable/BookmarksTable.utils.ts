@@ -17,6 +17,29 @@ interface BookmarkTableSeparator {
   previousLabel: BookmarkTableContext["label"];
 }
 
+type BookmarkLibraryTarget =
+  | {
+      bookmarkDurationSeconds: number | null;
+      durationSeconds: number | null;
+      id: string;
+      kind: "recording";
+      offsetSeconds: number | null;
+    }
+  | {
+      bookmarkDurationSeconds: number | null;
+      durationSeconds: number | null;
+      id: string;
+      kind: "rewind";
+      offsetSeconds: number | null;
+    }
+  | {
+      bookmarkDurationSeconds: number | null;
+      durationSeconds: number | null;
+      id: string;
+      kind: "archived-recording";
+      title: string | null;
+    };
+
 function getHeaderClassName(columnId: string): string {
   return clsx(
     "sticky top-0 z-10 bg-base-200 text-base-content/55",
@@ -55,26 +78,57 @@ function resolveSortBy(columnId: string | undefined): BookmarkLibrarySortKey {
   }
 }
 
-function resolveBookmarkTableContext(
-  bookmark: Pick<
-    BookmarkLibraryItem,
-    "activeActivitySessionId" | "activeRecordingId" | "archivedRecordingId"
-  >,
-): BookmarkTableContext | null {
-  const recordingId =
-    bookmark.activeRecordingId ?? bookmark.archivedRecordingId;
-  if (recordingId) {
-    return { key: `recording:${recordingId}`, label: "Recording" };
+function resolveBookmarkLibraryTarget(
+  bookmark: BookmarkLibraryItem,
+): BookmarkLibraryTarget | null {
+  if (bookmark.activeRecordingId) {
+    return {
+      bookmarkDurationSeconds: bookmark.activeRecordingBookmarkDurationSeconds,
+      durationSeconds: bookmark.activeRecordingDurationSeconds,
+      id: bookmark.activeRecordingId,
+      kind: "recording",
+      offsetSeconds: bookmark.activeRecordingOffsetSeconds,
+    };
   }
 
   if (bookmark.activeActivitySessionId) {
     return {
-      key: `rewind:${bookmark.activeActivitySessionId}`,
-      label: "Rewind",
+      bookmarkDurationSeconds:
+        bookmark.activeActivitySessionBookmarkDurationSeconds,
+      durationSeconds: bookmark.activeActivitySessionDurationSeconds,
+      id: bookmark.activeActivitySessionId,
+      kind: "rewind",
+      offsetSeconds: bookmark.activeActivitySessionOffsetSeconds,
+    };
+  }
+
+  if (bookmark.archivedRecordingId) {
+    return {
+      bookmarkDurationSeconds:
+        bookmark.archivedRecordingBookmarkDurationSeconds,
+      durationSeconds: bookmark.archivedRecordingDurationSeconds,
+      id: bookmark.archivedRecordingId,
+      kind: "archived-recording",
+      title: bookmark.archivedRecordingTitle,
     };
   }
 
   return null;
+}
+
+function resolveBookmarkTableContext(
+  bookmark: BookmarkLibraryItem,
+): BookmarkTableContext | null {
+  const target = resolveBookmarkLibraryTarget(bookmark);
+  if (!target) {
+    return null;
+  }
+
+  if (target.kind === "rewind") {
+    return { key: `rewind:${target.id}`, label: "Rewind" };
+  }
+
+  return { key: `recording:${target.id}`, label: "Recording" };
 }
 
 function resolveBookmarkTableSeparator(input: {
@@ -106,11 +160,12 @@ function resolveBookmarkTableSeparator(input: {
   };
 }
 
-export type { BookmarkTableSeparator };
+export type { BookmarkLibraryTarget, BookmarkTableSeparator };
 export {
   getCellClassName,
   getHeaderClassName,
   getRowClassName,
+  resolveBookmarkLibraryTarget,
   resolveBookmarkTableSeparator,
   resolveSortBy,
 };

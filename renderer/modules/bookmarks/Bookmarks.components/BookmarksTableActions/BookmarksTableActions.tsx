@@ -10,6 +10,8 @@ import { IoIosRecording } from "react-icons/io";
 import type { BookmarkLibraryItem } from "~/main/modules/bookmarks";
 import { useBookmarksShallow } from "~/renderer/store";
 
+import { resolveBookmarkLibraryTarget } from "../BookmarksTable/BookmarksTable.utils";
+
 interface BookmarksTableActionsProps {
   bookmark: BookmarkLibraryItem;
 }
@@ -23,6 +25,7 @@ function BookmarksTableActions({ bookmark }: BookmarksTableActionsProps) {
   );
   const isManualBookmark =
     bookmark.category === "manual" && bookmark.source === "manual";
+  const target = resolveBookmarkLibraryTarget(bookmark);
 
   const handleRenameManual = (event: MouseEvent<HTMLButtonElement>) => {
     const { bookmarkId, currentLabel } = event.currentTarget.dataset;
@@ -44,24 +47,24 @@ function BookmarksTableActions({ bookmark }: BookmarksTableActionsProps) {
 
   return (
     <div className="flex justify-end gap-1.5">
-      {bookmark.activeRecordingId && (
+      {target?.kind === "recording" && (
         <Link
           aria-label="Open attached recording"
           className="btn btn-primary btn-square btn-xs"
-          params={{ recordingId: bookmark.activeRecordingId }}
-          search={{ t: bookmark.activeRecordingOffsetSeconds ?? 0 }}
+          params={{ recordingId: target.id }}
+          search={{ t: target.offsetSeconds ?? 0 }}
           title="Open attached recording"
           to="/recording/$recordingId"
         >
           <IoIosRecording size={16} />
         </Link>
       )}
-      {!bookmark.activeRecordingId && bookmark.activeActivitySessionId && (
+      {target?.kind === "rewind" && (
         <Link
           aria-label="Open attached rewind"
           className="btn btn-primary btn-square btn-xs"
-          params={{ rewindId: bookmark.activeActivitySessionId }}
-          search={{ t: bookmark.activeActivitySessionOffsetSeconds ?? 0 }}
+          params={{ rewindId: target.id }}
+          search={{ t: target.offsetSeconds ?? 0 }}
           title="Open attached rewind"
           to="/rewind/$rewindId"
         >

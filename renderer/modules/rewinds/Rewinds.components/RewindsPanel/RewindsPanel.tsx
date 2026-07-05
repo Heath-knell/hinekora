@@ -2,18 +2,19 @@ import { useNavigate } from "@tanstack/react-router";
 import {
   type ColumnDef,
   getCoreRowModel,
-  type OnChangeFn,
-  type PaginationState,
-  type SortingState,
   useReactTable,
 } from "@tanstack/react-table";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 
 import type {
   ActivitySessionLibraryItem,
   ActivitySessionLibraryQuery,
 } from "~/main/modules/bookmarks";
 import { MediaLibraryTable } from "~/renderer/modules/media-library/MediaLibrary.components/MediaLibraryTable/MediaLibraryTable";
+import {
+  type ServerMediaLibraryTableQueryInput,
+  useServerMediaLibraryTableState,
+} from "~/renderer/modules/media-library/MediaLibrary.hooks/useServerMediaLibraryTableState/useServerMediaLibraryTableState";
 import {
   ALL_LEAGUES_VALUE,
   formatDateTime,
@@ -45,55 +46,35 @@ function RewindsPanel({ scope }: RewindsPanelProps) {
       refresh: rewinds.refresh,
     }),
   );
-  const [pagination, setPagination] = useState<PaginationState>({
-    pageIndex: 0,
-    pageSize: 20,
-  });
-  const [sorting, setSorting] = useState<SortingState>([
-    { id: "startedAt", desc: true },
-  ]);
   const showLeagueColumn = scope.league === ALL_LEAGUES_VALUE;
-  const filterResetKey = `${scope.game}:${scope.league}`;
-  const query = useMemo<ActivitySessionLibraryQuery>(() => {
-    const activeSort = sorting[0];
-    const nextQuery: ActivitySessionLibraryQuery = {
-      game: scope.game,
-      pageIndex: pagination.pageIndex,
-      pageSize: pagination.pageSize,
-      sortBy: resolveSortBy(activeSort?.id),
-      sortDirection: activeSort?.desc === false ? "asc" : "desc",
-    };
-    if (scope.league !== ALL_LEAGUES_VALUE) {
-      nextQuery.league = scope.league;
-    }
+  const createRewindQuery = useCallback(
+    ({
+      pagination,
+      sorting,
+    }: ServerMediaLibraryTableQueryInput): ActivitySessionLibraryQuery => {
+      const activeSort = sorting[0];
+      const nextQuery: ActivitySessionLibraryQuery = {
+        game: scope.game,
+        pageIndex: pagination.pageIndex,
+        pageSize: pagination.pageSize,
+        sortBy: resolveSortBy(activeSort?.id),
+        sortDirection: activeSort?.desc === false ? "asc" : "desc",
+      };
+      if (scope.league !== ALL_LEAGUES_VALUE) {
+        nextQuery.league = scope.league;
+      }
 
-    return nextQuery;
-  }, [pagination, scope.game, scope.league, sorting]);
-
-  useEffect(() => {
-    void refresh(query);
-  }, [query, refresh]);
-
-  useEffect(() => {
-    if (!filterResetKey) {
-      return;
-    }
-
-    setPagination((current) => ({ ...current, pageIndex: 0 }));
-  }, [filterResetKey]);
-
-  const handlePaginationChange: OnChangeFn<PaginationState> = (updater) => {
-    setPagination((current) =>
-      typeof updater === "function" ? updater(current) : updater,
-    );
-  };
-
-  const handleSortingChange: OnChangeFn<SortingState> = (updater) => {
-    setPagination((current) => ({ ...current, pageIndex: 0 }));
-    setSorting((current) =>
-      typeof updater === "function" ? updater(current) : updater,
-    );
-  };
+      return nextQuery;
+    },
+    [scope.game, scope.league],
+  );
+  const { handlePaginationChange, handleSortingChange, pagination, sorting } =
+    useServerMediaLibraryTableState({
+      createQuery: createRewindQuery,
+      initialSorting: [{ id: "startedAt", desc: true }],
+      refresh,
+      resetKey: `${scope.game}:${scope.league}`,
+    });
 
   const handleRowClick = (rewind: ActivitySessionLibraryItem) => {
     void navigate({

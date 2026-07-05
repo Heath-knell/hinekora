@@ -1,17 +1,18 @@
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useCallback, useMemo } from "react";
 import { FiArrowLeft, FiEdit2 } from "react-icons/fi";
 
 import type { RecordingBookmark } from "~/main/modules/bookmarks";
 import { PageContainer } from "~/renderer/components/PageContainer/PageContainer";
 import { PageContent } from "~/renderer/components/PageContent/PageContent";
 import { PageHeader } from "~/renderer/components/PageHeader/PageHeader";
+import { RecordingBookmarksPanel } from "~/renderer/modules/bookmarks/Bookmarks.components/RecordingBookmarksPanel/RecordingBookmarksPanel";
+import { RecordingBookmarkTimeline } from "~/renderer/modules/bookmarks/Bookmarks.components/RecordingBookmarkTimeline/RecordingBookmarkTimeline";
 import {
   formatDateTime,
   formatDurationSeconds,
 } from "~/renderer/modules/media-library/MediaLibrary.utils/MediaLibrary.utils";
-import { RecordingBookmarksPanel } from "~/renderer/modules/recordings/Recordings.page/RecordingDetailPage/RecordingBookmarksPanel/RecordingBookmarksPanel";
-import { RecordingBookmarkTimeline } from "~/renderer/modules/recordings/Recordings.page/RecordingDetailPage/RecordingBookmarkTimeline/RecordingBookmarkTimeline";
+import { useRewindsShallow } from "~/renderer/store";
 
 import { RewindClipPreview } from "./RewindClipPreview/RewindClipPreview";
 import { useRewindDetailTimeline } from "./useRewindDetailTimeline/useRewindDetailTimeline";
@@ -29,8 +30,27 @@ function RewindDetailPage({
     initialPlaybackSeconds,
     rewindId,
   });
-  const [hoveredBookmark, setHoveredBookmark] =
-    useState<RecordingBookmark | null>(null);
+  const { hoveredBookmarkId, setHoveredBookmarkId } = useRewindsShallow(
+    (rewinds) => ({
+      hoveredBookmarkId: rewinds.detail.hoveredBookmarkId,
+      setHoveredBookmarkId: rewinds.setDetailHoveredBookmarkId,
+    }),
+  );
+  const hoveredBookmark = useMemo(
+    () =>
+      hoveredBookmarkId
+        ? (detail.bookmarks.find(
+            (bookmark) => bookmark.id === hoveredBookmarkId,
+          ) ?? null)
+        : null,
+    [detail.bookmarks, hoveredBookmarkId],
+  );
+  const handleHoverBookmark = useCallback(
+    (bookmark: RecordingBookmark | null) => {
+      setHoveredBookmarkId(bookmark?.id ?? null);
+    },
+    [setHoveredBookmarkId],
+  );
   const session = detail.state.timeline?.session ?? null;
 
   return (
@@ -70,13 +90,14 @@ function RewindDetailPage({
               bookmarks={detail.bookmarkPanelItems}
               categories={detail.bookmarkCategories}
               categoryFilter={detail.bookmarkCategoryFilter}
+              emptyMessage="No bookmarks are attached to this rewind yet."
               heightPixels={360}
               isTimelineTruncated={detail.isTimelineTruncated}
               pageCount={detail.bookmarkPageCount}
               pageIndex={detail.bookmarkPageIndex}
               totalCount={detail.bookmarkTotalCount}
               onCategoryChange={detail.handleBookmarkCategoryChange}
-              onHoverBookmark={setHoveredBookmark}
+              onHoverBookmark={handleHoverBookmark}
               onNextPage={detail.handleNextBookmarkPage}
               onPreviousPage={detail.handlePreviousBookmarkPage}
               onSelectBookmark={detail.handleSelectBookmark}
@@ -97,17 +118,32 @@ function RewindDetailPage({
             </section>
             <div className="lg:col-span-2">
               <RecordingBookmarkTimeline
-                bookmarks={detail.bookmarks}
-                clipTargetsByBookmarkId={detail.clipTargetsByBookmarkId}
-                durationSeconds={detail.durationSeconds}
-                enableVisualPlaybackSubscription={!!detail.mediaUrl}
-                hoveredBookmark={hoveredBookmark}
-                isPlaybackDisabled={!detail.mediaUrl}
-                isPlaying={detail.playback.isPlaying}
-                markerBookmarks={detail.markerBookmarks}
-                mediaUrl={null}
-                playbackSeconds={detail.playbackSeconds}
-                subscribeVisualPlaybackTime={detail.subscribeVisualPlaybackTime}
+                markers={{
+                  bookmarks: detail.bookmarks,
+                  clipTargetsByBookmarkId: detail.clipTargetsByBookmarkId,
+                  hoveredBookmark,
+                  markerBookmarks: detail.markerBookmarks,
+                  onClipTargetSelect: detail.handleClipTargetSelect,
+                }}
+                playback={{
+                  durationSeconds: detail.durationSeconds,
+                  enableVisualPlaybackSubscription: !!detail.mediaUrl,
+                  isPlaybackDisabled: !detail.mediaUrl,
+                  isPlaying: detail.playback.isPlaying,
+                  mediaUrl: null,
+                  playbackSeconds: detail.playbackSeconds,
+                  subscribeVisualPlaybackTime:
+                    detail.subscribeVisualPlaybackTime,
+                  visualPlaybackOffsetSeconds:
+                    detail.visualPlaybackOffsetSeconds,
+                  volume: detail.playback.volume,
+                  onJumpToStart: detail.handleJumpToStart,
+                  onSeek: detail.handleSeek,
+                  onSeekBackward: detail.handleSeekBackward,
+                  onSeekForward: detail.handleSeekForward,
+                  onTogglePlayback: detail.playback.togglePlayback,
+                  onVolumeChange: detail.handleVolumeChange,
+                }}
                 toolbarStart={
                   <div
                     aria-label="Rewind tools"
@@ -135,15 +171,6 @@ function RewindDetailPage({
                     )}
                   </div>
                 }
-                visualPlaybackOffsetSeconds={detail.visualPlaybackOffsetSeconds}
-                volume={detail.playback.volume}
-                onJumpToStart={detail.handleJumpToStart}
-                onSeek={detail.handleSeek}
-                onSeekBackward={detail.handleSeekBackward}
-                onSeekForward={detail.handleSeekForward}
-                onTogglePlayback={detail.playback.togglePlayback}
-                onVolumeChange={detail.handleVolumeChange}
-                onClipTargetSelect={detail.handleClipTargetSelect}
               />
             </div>
           </div>

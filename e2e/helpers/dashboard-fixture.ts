@@ -2,6 +2,10 @@ import { expect, type Page } from "@playwright/test";
 
 import type { SetupState } from "../../main/modules/app-setup/AppSetup.types";
 import type {
+  ActivitySessionLibraryItem,
+  ActivitySessionLibraryPage,
+  ActivitySessionLibraryQuery,
+  ActivitySessionTimeline,
   BookmarkCategory,
   BookmarkLibraryItem,
   BookmarkLibraryPage,
@@ -21,6 +25,7 @@ import type {
   RecordingStorageUsage,
   RunRecordingLibraryPage,
 } from "../../main/modules/recording-storage/RecordingStorage.dto";
+import type { ReplayClipDetail } from "../../main/modules/replay-clips";
 import type {
   DiskSpaceCheck,
   StorageInfo,
@@ -83,6 +88,8 @@ interface DashboardE2EApi {
 }
 
 interface DashboardE2EFixture {
+  activitySessions: ActivitySessionLibraryItem[];
+  activitySessionTimelines: Record<string, ActivitySessionTimeline>;
   audioDevices: ManagedRecorderAudioDevices;
   auraLocked: boolean;
   bookmarks: BookmarkLibraryItem[];
@@ -93,6 +100,7 @@ interface DashboardE2EFixture {
   profile: Profile;
   recordingStorageUsage: RecordingStorageUsage;
   recorderStatus: ManagedRecorderStatus;
+  replayClipDetails: Record<string, ReplayClipDetail>;
   settings: AppSettings;
   setupState: SetupState;
   sources: CapturePreviewSource[];
@@ -106,9 +114,12 @@ const dashboardE2ENow = "2026-06-25T00:00:00.000Z";
 
 interface DashboardE2EOptions {
   activeGame?: GameId;
+  activitySessions?: ActivitySessionLibraryItem[];
+  activitySessionTimelines?: Record<string, ActivitySessionTimeline>;
   auraLocked?: boolean;
   bookmarks?: BookmarkLibraryItem[];
   recorderOverlayVisible?: boolean;
+  replayClipDetails?: Record<string, ReplayClipDetail>;
 }
 
 function createDashboardE2EFixture(
@@ -239,6 +250,8 @@ function createDashboardE2EFixture(
   };
 
   return {
+    activitySessions: options.activitySessions ?? [],
+    activitySessionTimelines: options.activitySessionTimelines ?? {},
     audioDevices: {
       input: [{ id: "{mic-1}", label: "Microphone Array" }],
       output: [
@@ -278,6 +291,7 @@ function createDashboardE2EFixture(
       totalTrackedSizeBytes: 1024,
     },
     recorderStatus,
+    replayClipDetails: options.replayClipDetails ?? {},
     settings,
     setupState: {
       currentStep: 3,
@@ -325,7 +339,10 @@ async function setupDashboardE2E(
         `"use strict"; return (${input.bridgeFactorySource});`,
       )() as E2EBridgeDomainFactory;
       let settings = clone(fixture.settings);
+      const activitySessions = clone(fixture.activitySessions);
+      const activitySessionTimelines = clone(fixture.activitySessionTimelines);
       let bookmarks = clone(fixture.bookmarks);
+      const replayClipDetails = clone(fixture.replayClipDetails);
       let recorderStatus = clone(fixture.recorderStatus);
       let captureMode: ManagedRecorderCaptureMode = "rewind";
       let recorderOverlayRequested = fixture.recorderOverlayVisible;
@@ -538,6 +555,68 @@ async function setupDashboardE2E(
           totalCount: filtered.length,
         };
       };
+      const sortActivitySessions = (
+        items: ActivitySessionLibraryItem[],
+        query: ActivitySessionLibraryQuery,
+      ) => {
+        const sortBy = query.sortBy ?? "startedAt";
+        const direction = query.sortDirection ?? "desc";
+        const multiplier = direction === "asc" ? 1 : -1;
+
+        return [...items].sort((left, right) => {
+          const leftValue = left[sortBy];
+          const rightValue = right[sortBy];
+          if (typeof leftValue === "number" || typeof rightValue === "number") {
+            return (
+              (((leftValue ?? Number.NEGATIVE_INFINITY) as number) -
+                ((rightValue ?? Number.NEGATIVE_INFINITY) as number)) *
+              multiplier
+            );
+          }
+
+          return (
+            String(leftValue ?? "").localeCompare(String(rightValue ?? "")) *
+            multiplier
+          );
+        });
+      };
+      const listActivitySessions = (
+        query: ActivitySessionLibraryQuery = {},
+      ): ActivitySessionLibraryPage => {
+        const filtered = activitySessions.filter((session) => {
+          if (query.game && session.sourceGame !== query.game) {
+            return false;
+          }
+          if (query.league && session.sourceLeague !== query.league) {
+            return false;
+          }
+
+          return true;
+        });
+        const pageIndex = query.pageIndex ?? 0;
+        const pageSize = query.pageSize ?? 20;
+        const pageStart = pageIndex * pageSize;
+        const sorted = sortActivitySessions(filtered, query);
+
+        return {
+          availableLeagues: Array.from(
+            new Set(
+              activitySessions
+                .filter((session) =>
+                  query.game ? session.sourceGame === query.game : true,
+                )
+                .map((session) => session.sourceLeague),
+            ),
+          ),
+          items: clone(sorted.slice(pageStart, pageStart + pageSize)),
+          pageCount: Math.max(1, Math.ceil(filtered.length / pageSize)),
+          pageIndex,
+          pageSize,
+          sortBy: query.sortBy ?? "startedAt",
+          sortDirection: query.sortDirection ?? "desc",
+          totalCount: filtered.length,
+        };
+      };
       const emitRecorderVisibility = (visible: boolean) => {
         recorderOverlayVisible = visible;
         calls.recorderVisibilityEvents.push(visible);
@@ -612,6 +691,9 @@ async function setupDashboardE2E(
               );
             },
             listLibrary: async (query) => listBookmarks(query),
+            listActivitySessions: async (query) => listActivitySessions(query),
+            getActivitySessionTimeline: async (activitySessionId) =>
+              clone(activitySessionTimelines[activitySessionId] ?? null),
             listRecording: async (recordingId, query) =>
               listRecordingBookmarks(recordingId, query),
             updateManual: async (input) => {
@@ -990,9 +1072,16 @@ async function setupDashboardE2E(
         replayClips: createBridgeDomain<DashboardE2EElectron["replayClips"]>(
           "replayClips",
           {
+            get: async (id) => clone(replayClipDetails[id] ?? null),
+            list: async () =>
+              clone(
+                Object.values(replayClipDetails).map((detail) => detail.clip),
+              ),
             listLibrary: async () => ({
               availableLeagues: ["Standard", "Runes of Aldur"],
-              items: [],
+              items: clone(
+                Object.values(replayClipDetails).map((detail) => detail.clip),
+              ),
               pageCount: 0,
               pageIndex: 0,
               pageSize: 20,

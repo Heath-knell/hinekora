@@ -1,6 +1,7 @@
 import type { BookmarkLibraryItem } from "~/main/modules/bookmarks";
 import { formatDurationSeconds } from "~/renderer/modules/media-library/MediaLibrary.utils/MediaLibrary.utils";
 
+import { resolveBookmarkLibraryTarget } from "../BookmarksTable/BookmarksTable.utils";
 import { calculateBookmarkRecordingProgressPercent } from "./BookmarksRecordingTimeCell.utils";
 
 interface BookmarksRecordingTimeCellProps {
@@ -10,17 +11,17 @@ interface BookmarksRecordingTimeCellProps {
 function BookmarksRecordingTimeCell({
   bookmark,
 }: BookmarksRecordingTimeCellProps) {
-  if (bookmark.activeRecordingId) {
+  const target = resolveBookmarkLibraryTarget(bookmark);
+
+  if (target?.kind === "recording") {
     const progressPercent = calculateBookmarkRecordingProgressPercent({
-      durationSeconds: bookmark.activeRecordingDurationSeconds,
-      offsetSeconds: bookmark.activeRecordingOffsetSeconds,
+      durationSeconds: target.durationSeconds,
+      offsetSeconds: target.offsetSeconds,
     });
 
     return (
       <div className="min-w-0">
-        <div>
-          {formatDurationSeconds(bookmark.activeRecordingOffsetSeconds)}
-        </div>
+        <div>{formatDurationSeconds(target.offsetSeconds)}</div>
         {progressPercent !== null && (
           <div className="text-base-content/50 text-xs">
             {progressPercent}% into recording
@@ -30,17 +31,15 @@ function BookmarksRecordingTimeCell({
     );
   }
 
-  if (bookmark.activeActivitySessionId) {
+  if (target?.kind === "rewind") {
     const progressPercent = calculateBookmarkRecordingProgressPercent({
-      durationSeconds: bookmark.activeActivitySessionDurationSeconds,
-      offsetSeconds: bookmark.activeActivitySessionOffsetSeconds,
+      durationSeconds: target.durationSeconds,
+      offsetSeconds: target.offsetSeconds,
     });
 
     return (
       <div className="min-w-0">
-        <div>
-          {formatDurationSeconds(bookmark.activeActivitySessionOffsetSeconds)}
-        </div>
+        <div>{formatDurationSeconds(target.offsetSeconds)}</div>
         <div className="text-base-content/50 text-xs">
           {progressPercent !== null
             ? `${progressPercent}% into rewind`
@@ -50,7 +49,7 @@ function BookmarksRecordingTimeCell({
     );
   }
 
-  if (bookmark.archivedRecordingTitle) {
+  if (target?.kind === "archived-recording") {
     return <span className="badge badge-outline badge-xs">Archived</span>;
   }
 

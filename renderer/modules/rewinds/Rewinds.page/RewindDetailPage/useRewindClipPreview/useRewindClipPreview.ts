@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { ReplayClipDetail } from "~/main/modules/replay-clips";
 import { useMediaPlayback } from "~/renderer/modules/media-playback/useMediaPlayback/useMediaPlayback";
+import { useVisualPlaybackPublisher } from "~/renderer/modules/media-playback/useVisualPlaybackPublisher/useVisualPlaybackPublisher";
 
 interface RewindClipPreviewState {
   detail: ReplayClipDetail | null;
@@ -35,7 +36,6 @@ function useRewindClipPreview() {
   const [playbackRequest, setPlaybackRequest] = useState(
     initialRewindClipPlaybackRequest,
   );
-  const visualTimeListenersRef = useRef(new Set<(seconds: number) => void>());
   const mediaUrl = clipPreviewState.detail?.mediaUrl ?? null;
   const fallbackDurationSeconds = useMemo(() => {
     const detail = clipPreviewState.detail;
@@ -44,21 +44,8 @@ function useRewindClipPreview() {
       detail?.durationSeconds ?? detail?.clip.targetDurationSeconds ?? null
     );
   }, [clipPreviewState.detail]);
-  const publishVisualPlaybackTime = useCallback((seconds: number) => {
-    for (const listener of visualTimeListenersRef.current) {
-      listener(seconds);
-    }
-  }, []);
-  const subscribeVisualPlaybackTime = useCallback(
-    (listener: (seconds: number) => void) => {
-      visualTimeListenersRef.current.add(listener);
-
-      return () => {
-        visualTimeListenersRef.current.delete(listener);
-      };
-    },
-    [],
-  );
+  const { publishVisualPlaybackTime, subscribeVisualPlaybackTime } =
+    useVisualPlaybackPublisher();
   const playback = useMediaPlayback({
     fallbackDurationSeconds,
     mediaUrl,

@@ -21,9 +21,9 @@ function BookmarksPage() {
       buildMediaLibraryLeagueOptions(
         scope.game,
         availableLeagues,
-        scope.league,
+        scope.league
       ),
-    [availableLeagues, scope.game, scope.league],
+    [availableLeagues, scope.game, scope.league]
   );
 
   const handleRefresh = () => {
@@ -45,7 +45,7 @@ function BookmarksPage() {
         }
       />
       <PageContent className="grid h-full min-h-0 grid-cols-12 items-stretch gap-4 [grid-auto-flow:dense]">
-        <BookmarksTable />
+        <BookmarksTable scope={scope} />
       </PageContent>
       <BookmarkRenameDialog />
     </PageContainer>
