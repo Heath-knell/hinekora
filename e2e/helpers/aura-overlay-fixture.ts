@@ -6,10 +6,6 @@ import type {
   SelectCropRegionOptions,
 } from "../../main/modules/overlay-windows/OverlayWindows.dto";
 import {
-  createPoeProcessSnapshot,
-  createStoppedPoeProcessStates,
-} from "../../main/modules/poe-process/PoeProcess.dto";
-import {
   type AppSettings,
   type CapturePreviewSource,
   createDefaultSettings,
@@ -21,6 +17,10 @@ import {
   type E2EBridgeDomainMethods,
   e2eBridgeDomainFactorySource,
 } from "./bridge-fixture";
+import {
+  type E2EPoeProcessSnapshotFactory,
+  e2ePoeProcessSnapshotFactoryScript,
+} from "./poe-process-fixture";
 
 interface AuraOverlayE2ECalls {
   captureConstraintSourceIds: string[];
@@ -195,6 +195,7 @@ async function setupAuraOverlayE2E(
     (input: {
       bridgeFactorySource: string;
       fixture: AuraOverlayE2EFixture;
+      poeProcessSnapshotFactoryScript: string;
     }) => {
       const { fixture } = input;
       const unsubscribe = () => undefined;
@@ -202,6 +203,10 @@ async function setupAuraOverlayE2E(
       const createBridgeDomainFactory = Function(
         `"use strict"; return (${input.bridgeFactorySource});`,
       )() as E2EBridgeDomainFactory;
+      const createPoeProcessSnapshotFactory = Function(
+        input.poeProcessSnapshotFactoryScript,
+      )() as () => E2EPoeProcessSnapshotFactory;
+      const poeProcessSnapshotFactory = createPoeProcessSnapshotFactory();
       let profile = clone(fixture.profile);
       const settings = clone(fixture.settings);
       const calls: AuraOverlayE2ECalls = {
@@ -292,7 +297,8 @@ async function setupAuraOverlayE2E(
           "poeProcess",
           {
             getSnapshot: async () => {
-              const states = createStoppedPoeProcessStates();
+              const states =
+                poeProcessSnapshotFactory.createStoppedPoeProcessStates();
               states[settings.activeGame] = {
                 game: settings.activeGame,
                 isRunning: true,
@@ -307,7 +313,10 @@ async function setupAuraOverlayE2E(
                     : "Path of Exile",
               };
 
-              return createPoeProcessSnapshot(states, settings.activeGame);
+              return poeProcessSnapshotFactory.createPoeProcessSnapshot(
+                states,
+                settings.activeGame,
+              );
             },
             onError: () => unsubscribe,
             onStart: () => unsubscribe,
@@ -366,6 +375,7 @@ async function setupAuraOverlayE2E(
     {
       bridgeFactorySource: e2eBridgeDomainFactorySource,
       fixture: createAuraOverlayE2EFixture(options),
+      poeProcessSnapshotFactoryScript: e2ePoeProcessSnapshotFactoryScript,
     },
   );
 

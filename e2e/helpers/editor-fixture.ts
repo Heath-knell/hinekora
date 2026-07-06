@@ -15,10 +15,6 @@ import {
   createEditorProjectPersistedMetadata,
   type EditorProjectSourceLeagueMembership,
 } from "../../main/modules/editor/EditorProject.metadata";
-import {
-  createPoeProcessSnapshot,
-  createStoppedPoeProcessStates,
-} from "../../main/modules/poe-process/PoeProcess.dto";
 import type {
   SavedEditItem,
   SavedEditsLibraryPage,
@@ -35,6 +31,10 @@ import {
   type E2EBridgeDomainMethods,
   e2eBridgeDomainFactorySource,
 } from "./bridge-fixture";
+import {
+  type E2EPoeProcessSnapshotFactory,
+  e2ePoeProcessSnapshotFactoryScript,
+} from "./poe-process-fixture";
 
 interface TimelineClipSnapshot {
   durationSeconds: number;
@@ -426,7 +426,11 @@ async function setupEditorE2E(page: Page) {
     (project: EditorProject) => createEditorE2ESavedEditRecord(project),
   );
   await page.addInitScript(
-    (input: { bridgeFactorySource: string; fixture: EditorE2EFixture }) => {
+    (input: {
+      bridgeFactorySource: string;
+      fixture: EditorE2EFixture;
+      poeProcessSnapshotFactoryScript: string;
+    }) => {
       const { fixture } = input;
       const { deathAsset, manualAsset, mediaAssets, recordingAsset } =
         fixture.assets;
@@ -447,6 +451,10 @@ async function setupEditorE2E(page: Page) {
       const createBridgeDomainFactory = Function(
         `"use strict"; return (${input.bridgeFactorySource});`,
       )() as E2EBridgeDomainFactory;
+      const createPoeProcessSnapshotFactory = Function(
+        input.poeProcessSnapshotFactoryScript,
+      )() as () => E2EPoeProcessSnapshotFactory;
+      const poeProcessSnapshotFactory = createPoeProcessSnapshotFactory();
       const createSavedEditRecord = (project: EditorProject) =>
         (
           window as unknown as {
@@ -883,7 +891,9 @@ async function setupEditorE2E(page: Page) {
           "poeProcess",
           {
             getSnapshot: async () =>
-              createPoeProcessSnapshot(createStoppedPoeProcessStates()),
+              poeProcessSnapshotFactory.createPoeProcessSnapshot(
+                poeProcessSnapshotFactory.createStoppedPoeProcessStates(),
+              ),
             onError: () => unsubscribe,
             onStart: () => unsubscribe,
             onSnapshot: () => unsubscribe,
@@ -976,6 +986,7 @@ async function setupEditorE2E(page: Page) {
     {
       bridgeFactorySource: e2eBridgeDomainFactorySource,
       fixture: createEditorE2EFixture(),
+      poeProcessSnapshotFactoryScript: e2ePoeProcessSnapshotFactoryScript,
     },
   );
 

@@ -34,7 +34,6 @@ import type {
   StorageInfo,
 } from "../../main/modules/storage/Storage.dto";
 import type { DownloadProgress, UpdateInfo } from "../../main/modules/updater";
-import { createPoeProcessSnapshotFromState } from "../../main/test/poe-process";
 import {
   type AppSettings,
   type CapturePreviewSource,
@@ -52,6 +51,10 @@ import {
   type E2EBridgeDomainMethods,
   e2eBridgeDomainFactorySource,
 } from "./bridge-fixture";
+import {
+  type E2EPoeProcessSnapshotFactory,
+  e2ePoeProcessSnapshotFactoryScript,
+} from "./poe-process-fixture";
 
 interface DashboardE2ECalls {
   audioDeviceRequests: Array<ManagedRecorderListAudioDevicesOptions | null>;
@@ -125,13 +128,6 @@ interface DashboardE2EOptions {
   bookmarks?: BookmarkLibraryItem[];
   recorderOverlayVisible?: boolean;
   replayClipDetails?: Record<string, ReplayClipDetail>;
-}
-
-function createDashboardPoeProcessSnapshot(
-  state: PoeProcessState,
-  activeGame: GameId,
-): PoeProcessSnapshot {
-  return createPoeProcessSnapshotFromState(state, activeGame);
 }
 
 function createDashboardE2EFixture(
@@ -328,7 +324,11 @@ async function setupDashboardE2E(
 ) {
   await page.setViewportSize({ height: 760, width: 1280 });
   await page.addInitScript(
-    (input: { bridgeFactorySource: string; fixture: DashboardE2EFixture }) => {
+    (input: {
+      bridgeFactorySource: string;
+      fixture: DashboardE2EFixture;
+      poeProcessSnapshotFactoryScript: string;
+    }) => {
       const { fixture } = input;
       const unsubscribe = () => undefined;
       const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
@@ -353,6 +353,10 @@ async function setupDashboardE2E(
       const createBridgeDomainFactory = Function(
         `"use strict"; return (${input.bridgeFactorySource});`,
       )() as E2EBridgeDomainFactory;
+      const createPoeProcessSnapshotFactory = Function(
+        input.poeProcessSnapshotFactoryScript,
+      )() as () => E2EPoeProcessSnapshotFactory;
+      const poeProcessSnapshotFactory = createPoeProcessSnapshotFactory();
       let settings = clone(fixture.settings);
       const activitySessions = clone(fixture.activitySessions);
       const activitySessionTimelines = clone(fixture.activitySessionTimelines);
@@ -404,15 +408,17 @@ async function setupDashboardE2E(
       ]);
       const clientLogStatus = clone(fixture.clientLogStatus);
       let poeProcessState = clone(fixture.poeProcessState);
-      let poeProcessSnapshot = createDashboardPoeProcessSnapshot(
-        poeProcessState,
-        settings.activeGame,
-      );
-      const syncPoeProcessSnapshot = () => {
-        poeProcessSnapshot = createDashboardPoeProcessSnapshot(
+      let poeProcessSnapshot =
+        poeProcessSnapshotFactory.createPoeProcessSnapshotFromState(
           poeProcessState,
           settings.activeGame,
         );
+      const syncPoeProcessSnapshot = () => {
+        poeProcessSnapshot =
+          poeProcessSnapshotFactory.createPoeProcessSnapshotFromState(
+            poeProcessState,
+            settings.activeGame,
+          );
       };
       let captureSources = clone(fixture.sources);
       const listeners: {
@@ -1227,6 +1233,7 @@ async function setupDashboardE2E(
     {
       bridgeFactorySource: e2eBridgeDomainFactorySource,
       fixture: createDashboardE2EFixture(options),
+      poeProcessSnapshotFactoryScript: e2ePoeProcessSnapshotFactoryScript,
     },
   );
 
