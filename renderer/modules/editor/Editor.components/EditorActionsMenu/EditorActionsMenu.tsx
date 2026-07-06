@@ -13,15 +13,19 @@ import { EditorSaveActions } from "../EditorSaveActions/EditorSaveActions";
 import { EditorShortcutCombo } from "../EditorShortcutCombo/EditorShortcutCombo";
 
 interface EditorActionsMenuProps {
+  isBookmarksVisible: boolean;
   isHistoryVisible: boolean;
   isShortcutsVisible: boolean;
+  onToggleBookmarks: () => void;
   onToggleHistory: () => void;
   onToggleShortcuts: () => void;
 }
 
 function EditorActionsMenu({
+  isBookmarksVisible,
   isHistoryVisible,
   isShortcutsVisible,
+  onToggleBookmarks,
   onToggleHistory,
   onToggleShortcuts,
 }: EditorActionsMenuProps) {
@@ -31,6 +35,9 @@ function EditorActionsMenu({
       editor.clipboardState.status === "copying" ||
       editor.exportState.status === "exporting",
   );
+  const bookmarksLabel = isBookmarksVisible
+    ? "Hide bookmarks"
+    : "Show bookmarks";
   const historyLabel = isHistoryVisible ? "Hide history" : "Show history";
   const shortcutsLabel = isShortcutsVisible
     ? "Hide shortcuts"
@@ -47,6 +54,10 @@ function EditorActionsMenu({
 
   const handleToggleHistory = () => {
     onToggleHistory();
+  };
+
+  const handleToggleBookmarks = () => {
+    onToggleBookmarks();
   };
 
   const handleToggleShortcuts = () => {
@@ -77,6 +88,16 @@ function EditorActionsMenu({
         </li>
         <li aria-hidden="true" className="list-none py-1">
           <div className="h-px w-full bg-base-content/10" />
+        </li>
+        <li className="list-none">
+          <button
+            className="flex h-8 w-full cursor-pointer items-center justify-between gap-3 rounded-md px-3 text-left text-sm transition-colors hover:bg-base-300"
+            type="button"
+            onClick={handleToggleBookmarks}
+          >
+            {bookmarksLabel}
+            <EditorShortcutCombo keys={["Ctrl", "B"]} />
+          </button>
         </li>
         <li className="list-none">
           <button

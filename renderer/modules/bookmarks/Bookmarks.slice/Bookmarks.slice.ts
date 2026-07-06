@@ -3,7 +3,10 @@ import type {
   BoundStoreStateCreator,
 } from "~/renderer/store/store.types";
 
-import { allBookmarkCategoriesValue } from "../Bookmarks.utils";
+import {
+  allBookmarkCategoriesValue,
+  resolveBookmarkCategoryToggle,
+} from "../Bookmarks.utils";
 
 export const createBookmarksSlice: BoundStoreStateCreator<BookmarksSlice> = (
   set,
@@ -65,6 +68,7 @@ export const createBookmarksSlice: BoundStoreStateCreator<BookmarksSlice> = (
         hasInteracted: false,
         hoveredBookmarkId: null,
         pageIndex: 0,
+        selectedBookmarkId: null,
       },
       closeManualRenameDialog: () => {
         set((state) => {
@@ -88,11 +92,6 @@ export const createBookmarksSlice: BoundStoreStateCreator<BookmarksSlice> = (
         await window.electron.bookmarks.deleteManual(id);
         await refresh();
       },
-      markRecordingDetailInteracted: () => {
-        set((state) => {
-          state.bookmarks.recordingDetail.hasInteracted = true;
-        });
-      },
       resetRecordingDetail: () => {
         set((state) => {
           state.bookmarks.recordingDetail = {
@@ -100,13 +99,20 @@ export const createBookmarksSlice: BoundStoreStateCreator<BookmarksSlice> = (
             hasInteracted: false,
             hoveredBookmarkId: null,
             pageIndex: 0,
+            selectedBookmarkId: null,
           };
         });
       },
       selectRecordingDetailCategory: (category) => {
         set((state) => {
-          state.bookmarks.recordingDetail.categoryFilter = category;
-          state.bookmarks.recordingDetail.hasInteracted = true;
+          const nextState = resolveBookmarkCategoryToggle(
+            state.bookmarks.recordingDetail,
+            category,
+          );
+          state.bookmarks.recordingDetail.categoryFilter =
+            nextState.categoryFilter;
+          state.bookmarks.recordingDetail.hasInteracted =
+            nextState.hasInteracted;
           state.bookmarks.recordingDetail.pageIndex = 0;
         });
       },
@@ -118,6 +124,11 @@ export const createBookmarksSlice: BoundStoreStateCreator<BookmarksSlice> = (
       setRecordingDetailPageIndex: (pageIndex) => {
         set((state) => {
           state.bookmarks.recordingDetail.pageIndex = Math.max(0, pageIndex);
+        });
+      },
+      setRecordingDetailSelectedBookmarkId: (id) => {
+        set((state) => {
+          state.bookmarks.recordingDetail.selectedBookmarkId = id;
         });
       },
       saveManualRename: async (label) => {

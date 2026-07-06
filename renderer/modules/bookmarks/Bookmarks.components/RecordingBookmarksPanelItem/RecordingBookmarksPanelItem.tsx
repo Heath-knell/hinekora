@@ -9,12 +9,14 @@ import { formatRecordingTimelineTimestamp } from "../RecordingBookmarkTimeline/R
 
 interface RecordingBookmarksPanelItemProps {
   bookmark: RecordingBookmark;
+  isSelected?: boolean;
   onHover?: (bookmark: RecordingBookmark | null) => void;
   onSelect: (bookmark: RecordingBookmark) => void;
 }
 
 function RecordingBookmarksPanelItem({
   bookmark,
+  isSelected = false,
   onHover,
   onSelect,
 }: RecordingBookmarksPanelItemProps) {
@@ -54,6 +56,7 @@ function RecordingBookmarksPanelItem({
       className={clsx(
         "group relative shrink-0 overflow-hidden rounded-md border border-base-content/10 bg-base-100/60 p-3 text-left text-base-content transition",
         bookmarkCategoryPanelItemClassNames[bookmark.category],
+        isSelected && "border-primary/70 bg-primary/10 text-primary shadow-sm",
       )}
       type="button"
       onClick={handleSelect}

@@ -73,6 +73,7 @@ function RecordingBookmarkTimelineMarker({
   return (
     <span
       className="group absolute top-0 bottom-0 z-[35] flex -translate-x-1/2 flex-col items-center"
+      data-recording-bookmark-marker-id={bookmark.id}
       style={{ left: formatRecordingTimelineRailLeft(left) }}
       title={title}
     >

@@ -2,11 +2,14 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { RecordingBookmark } from "~/main/modules/bookmarks";
+
 import {
   createEditorTestAsset,
   createEditorTestProject,
   createEditorTestTimelineClip,
 } from "../../Editor.slice/Editor.slice.test-utils";
+import type { EditorTimelineBookmarks } from "./EditorTimeline";
 
 const dragMocks = vi.hoisted(() => ({
   handleTimelinePointerDown: vi.fn(),
@@ -104,9 +107,26 @@ function configureEditorState(overrides: Record<string, unknown> = {}) {
   );
 }
 
-async function renderTimeline() {
+const hoveredBookmark: RecordingBookmark = {
+  category: "map",
+  createdAt: "2026-07-03T10:00:00.000Z",
+  durationSeconds: 2,
+  id: "bookmark-map",
+  label: "Qimah Reservoir",
+  note: null,
+  occurredAt: "2026-07-03T10:00:05.000Z",
+  offsetSeconds: 4.5,
+  sceneName: "Qimah Reservoir",
+  source: "client-log",
+  sourceGame: "poe2",
+  sourceLeague: "Standard",
+  subcategory: null,
+  updatedAt: "2026-07-03T10:00:00.000Z",
+};
+
+async function renderTimeline(bookmarks?: EditorTimelineBookmarks) {
   await act(async () => {
-    root.render(<EditorTimeline />);
+    root.render(<EditorTimeline {...(bookmarks ? { bookmarks } : {})} />);
   });
 }
 
@@ -474,6 +494,60 @@ describe("EditorTimeline", () => {
     expect(
       container.querySelector('[data-testid="hover-marker"]')?.textContent,
     ).toBe("7.54");
+  });
+
+  it("uses the hovered recording bookmark as the passive marker", async () => {
+    await renderTimeline({
+      hoveredBookmark,
+      markerBookmarks: [],
+      showBookmarkMarkers: false,
+    });
+
+    expect(
+      container.querySelector('[data-testid="hover-marker"]')?.textContent,
+    ).toBe("4.5");
+    expect(
+      container.querySelector(
+        '[data-recording-bookmark-marker-id="bookmark-map"]',
+      ),
+    ).not.toBe(null);
+  });
+
+  it("does not duplicate a highlighted bookmark marker already visible in the marker layer", async () => {
+    await renderTimeline({
+      hoveredBookmark,
+      markerBookmarks: [hoveredBookmark],
+      showBookmarkMarkers: true,
+    });
+
+    expect(
+      container.querySelectorAll(
+        '[data-recording-bookmark-marker-id="bookmark-map"]',
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("allows a highlighted bookmark segment without a pinned point marker", async () => {
+    await renderTimeline({
+      hoveredBookmark,
+      markerBookmarks: [],
+      pinnedBookmark: null,
+      showBookmarkMarkers: false,
+    });
+
+    expect(
+      container.querySelector('[data-testid="hover-marker"]')?.textContent,
+    ).toBe("none");
+    expect(
+      container.querySelector(
+        '[data-recording-timeline-hover-segment-id="bookmark-map"]',
+      ),
+    ).not.toBe(null);
+    expect(
+      container.querySelector(
+        '[data-recording-bookmark-marker-id="bookmark-map"]',
+      ),
+    ).toBe(null);
   });
 
   it("hides the hover marker while dragging the playhead", async () => {

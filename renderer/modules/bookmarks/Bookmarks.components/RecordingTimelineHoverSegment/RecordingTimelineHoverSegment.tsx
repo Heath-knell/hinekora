@@ -71,6 +71,7 @@ function RecordingTimelineHoverSegment({
         "pointer-events-none absolute top-0 bottom-0 z-[23] rounded-sm border border-base-content/25 opacity-45",
         bookmarkCategoryTimelineClassNames[hoveredBookmark.category],
       )}
+      data-recording-timeline-hover-segment-id={hoveredBookmark.id}
       style={{
         backgroundImage:
           "repeating-linear-gradient(135deg, rgba(255,255,255,0.1) 0 1px, transparent 1px 8px)",

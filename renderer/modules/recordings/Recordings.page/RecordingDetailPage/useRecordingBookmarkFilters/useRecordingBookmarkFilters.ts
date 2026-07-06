@@ -17,7 +17,6 @@ function useRecordingBookmarkFilters(
   const {
     categoryFilter,
     hasInteracted,
-    markInteracted,
     pageIndex,
     reset,
     selectCategory,
@@ -25,7 +24,6 @@ function useRecordingBookmarkFilters(
   } = useBookmarksShallow((bookmarksState) => ({
     categoryFilter: bookmarksState.recordingDetail.categoryFilter,
     hasInteracted: bookmarksState.recordingDetail.hasInteracted,
-    markInteracted: bookmarksState.markRecordingDetailInteracted,
     pageIndex: bookmarksState.recordingDetail.pageIndex,
     reset: bookmarksState.resetRecordingDetail,
     selectCategory: bookmarksState.selectRecordingDetailCategory,
@@ -59,7 +57,6 @@ function useRecordingBookmarkFilters(
     categoryFilter,
     hasInteracted,
     markerBookmarks,
-    markInteracted,
     nextPage,
     pageIndex,
     previousPage,

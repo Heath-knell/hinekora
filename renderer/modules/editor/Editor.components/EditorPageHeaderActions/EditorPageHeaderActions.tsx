@@ -10,22 +10,26 @@ interface EditorPageHeaderLeagueOption {
 
 interface EditorPageHeaderActionsProps {
   isClipboardBusy: boolean;
+  isBookmarksVisible: boolean;
   isHistoryVisible: boolean;
   isShortcutsVisible: boolean;
   league: string;
   leagueOptions: EditorPageHeaderLeagueOption[];
   onLeagueChange: (league: string) => void;
+  onToggleBookmarks: () => void;
   onToggleHistory: () => void;
   onToggleShortcuts: () => void;
 }
 
 function EditorPageHeaderActions({
   isClipboardBusy,
+  isBookmarksVisible,
   isHistoryVisible,
   isShortcutsVisible,
   league,
   leagueOptions,
   onLeagueChange,
+  onToggleBookmarks,
   onToggleHistory,
   onToggleShortcuts,
 }: EditorPageHeaderActionsProps) {
@@ -53,8 +57,10 @@ function EditorPageHeaderActions({
       </label>
       <EditorProjectPicker />
       <EditorActionsMenu
+        isBookmarksVisible={isBookmarksVisible}
         isHistoryVisible={isHistoryVisible}
         isShortcutsVisible={isShortcutsVisible}
+        onToggleBookmarks={onToggleBookmarks}
         onToggleHistory={onToggleHistory}
         onToggleShortcuts={onToggleShortcuts}
       />

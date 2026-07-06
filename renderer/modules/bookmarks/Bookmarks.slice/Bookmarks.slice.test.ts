@@ -23,12 +23,16 @@ describe("Bookmarks slice", () => {
       hasInteracted: false,
       hoveredBookmarkId: null,
       pageIndex: 0,
+      selectedBookmarkId: null,
     });
 
     store.getState().bookmarks.setRecordingDetailPageIndex(3);
     store
       .getState()
       .bookmarks.setRecordingDetailHoveredBookmarkId("bookmark-1");
+    store
+      .getState()
+      .bookmarks.setRecordingDetailSelectedBookmarkId("bookmark-2");
     store.getState().bookmarks.selectRecordingDetailCategory("death");
 
     expect(store.getState().bookmarks.recordingDetail).toEqual({
@@ -36,6 +40,38 @@ describe("Bookmarks slice", () => {
       hasInteracted: true,
       hoveredBookmarkId: "bookmark-1",
       pageIndex: 0,
+      selectedBookmarkId: "bookmark-2",
+    });
+
+    store.getState().bookmarks.selectRecordingDetailCategory("death");
+    expect(store.getState().bookmarks.recordingDetail).toEqual({
+      categoryFilter: allBookmarkCategoriesValue,
+      hasInteracted: false,
+      hoveredBookmarkId: "bookmark-1",
+      pageIndex: 0,
+      selectedBookmarkId: "bookmark-2",
+    });
+
+    store
+      .getState()
+      .bookmarks.selectRecordingDetailCategory(allBookmarkCategoriesValue);
+    expect(store.getState().bookmarks.recordingDetail).toEqual({
+      categoryFilter: allBookmarkCategoriesValue,
+      hasInteracted: true,
+      hoveredBookmarkId: "bookmark-1",
+      pageIndex: 0,
+      selectedBookmarkId: "bookmark-2",
+    });
+
+    store
+      .getState()
+      .bookmarks.selectRecordingDetailCategory(allBookmarkCategoriesValue);
+    expect(store.getState().bookmarks.recordingDetail).toEqual({
+      categoryFilter: allBookmarkCategoriesValue,
+      hasInteracted: false,
+      hoveredBookmarkId: "bookmark-1",
+      pageIndex: 0,
+      selectedBookmarkId: "bookmark-2",
     });
 
     store.getState().bookmarks.setRecordingDetailPageIndex(-2);
@@ -47,6 +83,7 @@ describe("Bookmarks slice", () => {
       hasInteracted: false,
       hoveredBookmarkId: null,
       pageIndex: 0,
+      selectedBookmarkId: null,
     });
   });
 });

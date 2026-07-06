@@ -4,6 +4,15 @@ const allBookmarkCategoriesValue = "__all__" as const;
 const defaultRewindTimelineMarkerFilterValue =
   "__rewind_default_markers__" as const;
 
+type BookmarkCategoryFilterValue =
+  | BookmarkCategory
+  | typeof allBookmarkCategoriesValue;
+
+interface BookmarkCategoryToggleState {
+  categoryFilter: BookmarkCategoryFilterValue;
+  hasInteracted: boolean;
+}
+
 const bookmarkCategoryLabels: Record<BookmarkCategory, string> = {
   boss: "Boss",
   death: "Death",
@@ -151,8 +160,22 @@ const bookmarkCategoryPanelItemClassNames: Record<BookmarkCategory, string> = {
   town: "hover:border-zinc-300/70 hover:bg-gradient-to-r hover:from-zinc-400/15 hover:via-zinc-400/5 hover:to-transparent hover:text-zinc-300",
 };
 
+function resolveBookmarkCategoryToggle(
+  current: BookmarkCategoryToggleState,
+  category: BookmarkCategoryFilterValue,
+): BookmarkCategoryToggleState {
+  const isActive = current.hasInteracted && current.categoryFilter === category;
+
+  return {
+    categoryFilter: isActive ? allBookmarkCategoriesValue : category,
+    hasInteracted: !isActive,
+  };
+}
+
 export {
   allBookmarkCategoriesValue,
+  type BookmarkCategoryFilterValue,
+  type BookmarkCategoryToggleState,
   bookmarkCategoryBadgeClassNames,
   bookmarkCategoryChipClassNames,
   bookmarkCategoryIconClassNames,
@@ -163,4 +186,5 @@ export {
   bookmarkCategoryTimelineLineClassNames,
   bookmarkCategoryTimelineThumbClassNames,
   defaultRewindTimelineMarkerFilterValue,
+  resolveBookmarkCategoryToggle,
 };

@@ -3,6 +3,10 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type {
+  RecordingBookmark,
+  RecordingBookmarksPage,
+} from "~/main/modules/bookmarks";
 import type { EditorProject } from "~/main/modules/editor";
 
 import { createDeferred } from "../../Editor.slice/Editor.slice.test-utils";
@@ -17,6 +21,7 @@ const storeMocks = vi.hoisted(() => ({
   removeTimelineClip: vi.fn(),
   removeTimelineGap: vi.fn(),
   setHoveredTimelineGap: vi.fn(),
+  setPlaybackSeconds: vi.fn(),
   splitTimelineClipAt: vi.fn(),
   toggleProjectAudioMuted: vi.fn(),
   undoProjectChange: vi.fn(),
@@ -28,6 +33,19 @@ const assetRailMocks = vi.hoisted(() => ({
   props: [] as Array<{
     isHydrationEnabled?: boolean;
     scope: { game: string; league: string };
+  }>,
+}));
+const bookmarkApiMocks = vi.hoisted(() => ({
+  listRecording: vi.fn(),
+}));
+const timelineMocks = vi.hoisted(() => ({
+  props: [] as Array<{
+    bookmarks?: {
+      hoveredBookmark: RecordingBookmark | null;
+      markerBookmarks: RecordingBookmark[];
+      pinnedBookmark?: RecordingBookmark | null;
+      showBookmarkMarkers: boolean;
+    };
   }>,
 }));
 
@@ -54,15 +72,21 @@ vi.mock("../../Editor.components/EditorAssetRail/EditorAssetRail", () => ({
 }));
 vi.mock("../../Editor.components/EditorActionsMenu/EditorActionsMenu", () => ({
   EditorActionsMenu: ({
+    onToggleBookmarks,
     onToggleHistory,
     onToggleShortcuts,
   }: {
+    isBookmarksVisible: boolean;
     isHistoryVisible: boolean;
     isShortcutsVisible: boolean;
+    onToggleBookmarks: () => void;
     onToggleHistory: () => void;
     onToggleShortcuts: () => void;
   }) => (
     <>
+      <button type="button" onClick={onToggleBookmarks}>
+        Toggle bookmarks
+      </button>
       <button type="button" onClick={onToggleHistory}>
         Toggle history
       </button>
@@ -123,7 +147,26 @@ vi.mock(
   }),
 );
 vi.mock("../../Editor.components/EditorTimeline/EditorTimeline", () => ({
-  EditorTimeline: () => <div data-testid="timeline" />,
+  EditorTimeline: (props: {
+    bookmarks?: {
+      hoveredBookmark: RecordingBookmark | null;
+      markerBookmarks: RecordingBookmark[];
+      pinnedBookmark?: RecordingBookmark | null;
+      showBookmarkMarkers: boolean;
+    };
+  }) => {
+    timelineMocks.props.push(props);
+
+    return (
+      <div
+        data-show-bookmark-markers={String(
+          props.bookmarks?.showBookmarkMarkers ?? false,
+        )}
+        data-timeline-bookmark-id={props.bookmarks?.hoveredBookmark?.id ?? ""}
+        data-testid="timeline"
+      />
+    );
+  },
 }));
 
 import { editorShortcutEventNames } from "../../Editor.utils/EditorShortcuts.utils";
@@ -156,6 +199,199 @@ const project: EditorProject = {
   title: "asset-1.mp4 edit",
   tracks: [],
   updatedAt: "2026-06-18T00:00:00.000Z",
+};
+
+const recordingBookmark: RecordingBookmark = {
+  category: "map",
+  createdAt: "2026-07-03T10:00:00.000Z",
+  durationSeconds: 6,
+  id: "bookmark-map",
+  label: "Qimah Reservoir",
+  note: null,
+  occurredAt: "2026-07-03T10:00:05.000Z",
+  offsetSeconds: 7,
+  sceneName: "Qimah Reservoir",
+  source: "client-log",
+  sourceGame: "poe2",
+  sourceLeague: "Standard",
+  subcategory: null,
+  updatedAt: "2026-07-03T10:00:00.000Z",
+};
+
+function createRecordingBookmark(
+  overrides: Partial<RecordingBookmark> = {},
+): RecordingBookmark {
+  return {
+    ...recordingBookmark,
+    ...overrides,
+  };
+}
+
+const trimmedOverlapBookmark = createRecordingBookmark({
+  durationSeconds: 6,
+  id: "bookmark-overlap",
+  label: "Caer Blaidd",
+  occurredAt: "2026-07-03T10:02:00.000Z",
+  offsetSeconds: 7,
+  sceneName: "Caer Blaidd",
+});
+const trimmedBeforeBookmark = createRecordingBookmark({
+  category: "hideout",
+  durationSeconds: 4,
+  id: "bookmark-before-trim",
+  label: "Atlas Hideout",
+  occurredAt: "2026-07-03T10:03:00.000Z",
+  offsetSeconds: 0,
+  sceneName: "Atlas Hideout",
+});
+const trimmedAfterBookmark = createRecordingBookmark({
+  durationSeconds: 3,
+  id: "bookmark-after-trim",
+  label: "The Well of Souls",
+  occurredAt: "2026-07-03T10:01:00.000Z",
+  offsetSeconds: 22,
+  sceneName: "The Well of Souls",
+});
+const trimmedManualBookmark = createRecordingBookmark({
+  category: "manual",
+  durationSeconds: null,
+  id: "bookmark-manual-visible",
+  label: "Manual bookmark",
+  occurredAt: "2026-07-03T10:04:00.000Z",
+  offsetSeconds: 17,
+  sceneName: null,
+});
+const trimmedDeathBookmark = createRecordingBookmark({
+  category: "death",
+  durationSeconds: null,
+  id: "bookmark-death-visible",
+  label: "Death bookmark",
+  occurredAt: "2026-07-03T10:05:00.000Z",
+  offsetSeconds: 12,
+  sceneName: "Death at Shrine",
+});
+
+const recordingProject: EditorProject = {
+  ...project,
+  activeClipId: "timeline-recording",
+  assets: [
+    {
+      assetKey: "recording:recording-1",
+      category: "recording",
+      createdAt: "2026-06-18T00:00:00.000Z",
+      durationSeconds: 20,
+      exists: true,
+      id: "recording-1",
+      kind: "recording",
+      mediaUrl: "hinekora-media://run-recording/recording-1",
+      name: "recording-1.mp4",
+      sizeBytes: 1024,
+      sourceGame: "poe2",
+      sourceLeague: "Standard",
+      status: "ready",
+      subtitle: "Run recording - Standard",
+    },
+  ],
+  durationSeconds: 18,
+  selectedAssetKey: "recording:recording-1",
+  tracks: [
+    {
+      clips: [
+        {
+          assetKey: "recording:recording-1",
+          color: "secondary",
+          durationSeconds: 8,
+          id: "timeline-recording",
+          inSeconds: 3,
+          mediaUrl: "hinekora-media://run-recording/recording-1",
+          name: "recording-1.mp4",
+          outSeconds: 11,
+          sourceInSeconds: 0,
+          sourceOutSeconds: 20,
+          startSeconds: 10,
+          trackId: "video-track",
+        },
+      ],
+      id: "video-track",
+      kind: "video",
+      label: "Video",
+    },
+  ],
+};
+
+const trimmedRecordingProject: EditorProject = {
+  ...recordingProject,
+  durationSeconds: 10,
+  tracks: [
+    {
+      clips: [
+        {
+          assetKey: "recording:recording-1",
+          color: "secondary",
+          durationSeconds: 10,
+          id: "timeline-recording",
+          inSeconds: 10,
+          mediaUrl: "hinekora-media://run-recording/recording-1",
+          name: "recording-1.mp4",
+          outSeconds: 20,
+          sourceInSeconds: 0,
+          sourceOutSeconds: 30,
+          startSeconds: 30,
+          trackId: "video-track",
+        },
+      ],
+      id: "video-track",
+      kind: "video",
+      label: "Video",
+    },
+  ],
+};
+
+const secondRecordingProject: EditorProject = {
+  ...recordingProject,
+  activeClipId: "timeline-recording-2",
+  assets: [
+    {
+      assetKey: "recording:recording-2",
+      category: "recording",
+      createdAt: "2026-06-18T00:00:00.000Z",
+      durationSeconds: 20,
+      exists: true,
+      id: "recording-2",
+      kind: "recording",
+      mediaUrl: "hinekora-media://run-recording/recording-2",
+      name: "recording-2.mp4",
+      sizeBytes: 1024,
+      sourceGame: "poe2",
+      sourceLeague: "Standard",
+      status: "ready",
+      subtitle: "Run recording - Standard",
+    },
+  ],
+  selectedAssetKey: "recording:recording-2",
+  tracks: [
+    {
+      clips: [
+        {
+          assetKey: "recording:recording-2",
+          color: "secondary",
+          durationSeconds: 12,
+          id: "timeline-recording-2",
+          inSeconds: 0,
+          mediaUrl: "hinekora-media://run-recording/recording-2",
+          name: "recording-2.mp4",
+          outSeconds: 12,
+          sourceInSeconds: 0,
+          sourceOutSeconds: 20,
+          startSeconds: 20,
+          trackId: "video-track",
+        },
+      ],
+      id: "video-track",
+      kind: "video",
+      label: "Video",
+    },
+  ],
 };
 
 let container: HTMLDivElement;
@@ -193,6 +429,7 @@ function configureEditorState(overrides: Record<string, unknown> = {}) {
     removeTimelineGap: storeMocks.removeTimelineGap,
     selectedClipId: "timeline-1",
     setHoveredTimelineGap: storeMocks.setHoveredTimelineGap,
+    setPlaybackSeconds: storeMocks.setPlaybackSeconds,
     splitTimelineClipAt: storeMocks.splitTimelineClipAt,
     toggleProjectAudioMuted: storeMocks.toggleProjectAudioMuted,
     undoProjectChange: storeMocks.undoProjectChange,
@@ -232,6 +469,7 @@ describe("EditorPage shortcuts", () => {
     storeMocks.openProject.mockResolvedValue(true);
     configureEditorState();
     assetRailMocks.props = [];
+    timelineMocks.props = [];
     storeMocks.useSettingsSelector.mockImplementation((selector) =>
       selector(settingsSlice),
     );
@@ -244,6 +482,24 @@ describe("EditorPage shortcuts", () => {
         },
       }),
     );
+    bookmarkApiMocks.listRecording.mockResolvedValue({
+      availableCategories: ["map"],
+      items: [recordingBookmark],
+      pageCount: 1,
+      pageIndex: 0,
+      pageSize: 5,
+      timelineItems: [recordingBookmark],
+      timelineItemsTruncated: false,
+      totalCount: 1,
+    });
+    Object.defineProperty(window, "electron", {
+      configurable: true,
+      value: {
+        bookmarks: {
+          listRecording: bookmarkApiMocks.listRecording,
+        },
+      } as unknown as Window["electron"],
+    });
   });
 
   afterEach(() => {
@@ -387,6 +643,333 @@ describe("EditorPage shortcuts", () => {
       editorShortcutEventNames.openDeleteEditDialog,
       openDeleteEditDialog,
     );
+  });
+
+  it("opens recording bookmarks with Ctrl+B and seeks the mapped timeline time", async () => {
+    configureEditorState({
+      project: recordingProject,
+      selectedClipId: "timeline-recording",
+    });
+    await renderEditorPage();
+
+    await act(async () => {
+      document.body.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          bubbles: true,
+          ctrlKey: true,
+          key: "b",
+        }),
+      );
+    });
+
+    await vi.waitFor(() => {
+      expect(bookmarkApiMocks.listRecording).toHaveBeenCalledWith(
+        "recording-1",
+        {
+          includeTimeline: true,
+          pageIndex: 0,
+          pageSize: 5,
+        },
+      );
+    });
+    await vi.waitFor(() => {
+      expect(container.textContent).toContain("Qimah Reservoir");
+    });
+
+    const bookmarkButton = Array.from(
+      container.querySelectorAll("button"),
+    ).find((button) => button.textContent?.includes("Qimah Reservoir"));
+    await act(async () => {
+      bookmarkButton?.dispatchEvent(
+        new MouseEvent("pointerover", { bubbles: true }),
+      );
+      bookmarkButton?.click();
+      bookmarkButton?.dispatchEvent(
+        new MouseEvent("pointerout", { bubbles: true }),
+      );
+    });
+
+    expect(storeMocks.setPlaybackSeconds).toHaveBeenCalledWith(14);
+    expect(
+      container
+        .querySelector("[data-testid='timeline']")
+        ?.getAttribute("data-timeline-bookmark-id"),
+    ).toBe("bookmark-map");
+  });
+
+  it("toggles editor bookmark category chips off when clicked again", async () => {
+    configureEditorState({
+      project: recordingProject,
+      selectedClipId: "timeline-recording",
+    });
+    await renderEditorPage();
+
+    await act(async () => {
+      document.body.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          bubbles: true,
+          ctrlKey: true,
+          key: "b",
+        }),
+      );
+    });
+
+    await vi.waitFor(() => {
+      expect(container.textContent).toContain("Qimah Reservoir");
+    });
+    expect(
+      container
+        .querySelector("[data-testid='timeline']")
+        ?.getAttribute("data-show-bookmark-markers"),
+    ).toBe("false");
+
+    const findMapButton = () =>
+      Array.from(container.querySelectorAll("button")).find(
+        (button) => button.textContent === "Map",
+      );
+
+    await act(async () => {
+      findMapButton()?.click();
+    });
+    await vi.waitFor(() => {
+      expect(
+        container
+          .querySelector("[data-testid='timeline']")
+          ?.getAttribute("data-show-bookmark-markers"),
+      ).toBe("true");
+    });
+
+    await act(async () => {
+      findMapButton()?.click();
+    });
+    await vi.waitFor(() => {
+      expect(
+        container
+          .querySelector("[data-testid='timeline']")
+          ?.getAttribute("data-show-bookmark-markers"),
+      ).toBe("false");
+    });
+
+    const bookmarkButton = Array.from(
+      container.querySelectorAll("button"),
+    ).find((button) => button.textContent?.includes("Qimah Reservoir"));
+
+    await act(async () => {
+      bookmarkButton?.click();
+    });
+    expect(
+      container
+        .querySelector("[data-testid='timeline']")
+        ?.getAttribute("data-show-bookmark-markers"),
+    ).toBe("false");
+    expect(
+      container
+        .querySelector("[data-testid='timeline']")
+        ?.getAttribute("data-timeline-bookmark-id"),
+    ).toBe("bookmark-map");
+  });
+
+  it("clears the selected editor bookmark with Escape", async () => {
+    configureEditorState({
+      project: recordingProject,
+      selectedClipId: "timeline-recording",
+    });
+    await renderEditorPage();
+
+    await act(async () => {
+      document.body.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          bubbles: true,
+          ctrlKey: true,
+          key: "b",
+        }),
+      );
+    });
+
+    await vi.waitFor(() => {
+      expect(container.textContent).toContain("Qimah Reservoir");
+    });
+
+    const bookmarkButton = Array.from(
+      container.querySelectorAll("button"),
+    ).find((button) => button.textContent?.includes("Qimah Reservoir"));
+    await act(async () => {
+      bookmarkButton?.click();
+    });
+
+    await vi.waitFor(() => {
+      expect(
+        container
+          .querySelector("[data-testid='timeline']")
+          ?.getAttribute("data-timeline-bookmark-id"),
+      ).toBe("bookmark-map");
+    });
+
+    await act(async () => {
+      document.body.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          bubbles: true,
+          key: "Escape",
+        }),
+      );
+    });
+
+    expect(
+      container
+        .querySelector("[data-testid='timeline']")
+        ?.getAttribute("data-timeline-bookmark-id"),
+    ).toBe("");
+  });
+
+  it("filters editor bookmarks to the selected clip trim range", async () => {
+    bookmarkApiMocks.listRecording.mockResolvedValue({
+      availableCategories: ["death", "hideout", "manual", "map"],
+      items: [
+        trimmedBeforeBookmark,
+        trimmedOverlapBookmark,
+        trimmedAfterBookmark,
+        trimmedManualBookmark,
+        trimmedDeathBookmark,
+      ],
+      pageCount: 1,
+      pageIndex: 0,
+      pageSize: 5,
+      timelineItems: [
+        trimmedBeforeBookmark,
+        trimmedOverlapBookmark,
+        trimmedAfterBookmark,
+        trimmedManualBookmark,
+        trimmedDeathBookmark,
+      ],
+      timelineItemsTruncated: false,
+      totalCount: 5,
+    });
+    configureEditorState({
+      project: trimmedRecordingProject,
+      selectedClipId: "timeline-recording",
+    });
+    await renderEditorPage();
+
+    await act(async () => {
+      document.body.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          bubbles: true,
+          ctrlKey: true,
+          key: "b",
+        }),
+      );
+    });
+
+    await vi.waitFor(() => {
+      expect(container.textContent).toContain("Caer Blaidd");
+    });
+
+    expect(container.textContent).toContain("Manual bookmark");
+    expect(container.textContent).toContain("Death at Shrine");
+    expect(container.textContent).not.toContain("Atlas Hideout");
+    expect(container.textContent).not.toContain("The Well of Souls");
+    expect(container.textContent).toContain("3 items");
+
+    const bookmarkButton = Array.from(
+      container.querySelectorAll("button"),
+    ).find((button) => button.textContent?.includes("Caer Blaidd"));
+    await act(async () => {
+      bookmarkButton?.click();
+    });
+
+    expect(storeMocks.setPlaybackSeconds).toHaveBeenCalledWith(30);
+    expect(
+      container
+        .querySelector("[data-testid='timeline']")
+        ?.getAttribute("data-timeline-bookmark-id"),
+    ).toBe("bookmark-overlap");
+  });
+
+  it("hides stale bookmark markers immediately when switching recordings", async () => {
+    const secondBookmarksRequest = createDeferred<RecordingBookmarksPage>();
+    bookmarkApiMocks.listRecording.mockImplementation((recordingId: string) => {
+      if (recordingId === "recording-2") {
+        return secondBookmarksRequest.promise;
+      }
+
+      return Promise.resolve({
+        availableCategories: ["map"],
+        items: [recordingBookmark],
+        pageCount: 1,
+        pageIndex: 0,
+        pageSize: 5,
+        timelineItems: [recordingBookmark],
+        timelineItemsTruncated: false,
+        totalCount: 1,
+      });
+    });
+    configureEditorState({
+      project: recordingProject,
+      selectedClipId: "timeline-recording",
+    });
+    await renderEditorPage();
+
+    await act(async () => {
+      document.body.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          bubbles: true,
+          ctrlKey: true,
+          key: "b",
+        }),
+      );
+    });
+    await vi.waitFor(() => {
+      expect(container.textContent).toContain("Qimah Reservoir");
+    });
+
+    const mapButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "Map",
+    );
+    await act(async () => {
+      mapButton?.click();
+    });
+    await vi.waitFor(() => {
+      expect(timelineMocks.props.at(-1)?.bookmarks).toMatchObject({
+        markerBookmarks: [expect.objectContaining({ id: "bookmark-map" })],
+        showBookmarkMarkers: true,
+      });
+    });
+
+    const switchRenderStartIndex = timelineMocks.props.length;
+    configureEditorState({
+      project: secondRecordingProject,
+      selectedClipId: "timeline-recording-2",
+    });
+    await renderEditorPage();
+
+    const switchRenderBookmarkProps = timelineMocks.props
+      .slice(switchRenderStartIndex)
+      .map((props) => props.bookmarks);
+    expect(switchRenderBookmarkProps.length).toBeGreaterThan(0);
+    expect(
+      switchRenderBookmarkProps.every(
+        (bookmarks) =>
+          bookmarks !== undefined &&
+          bookmarks.showBookmarkMarkers === false &&
+          bookmarks.hoveredBookmark === null &&
+          bookmarks.markerBookmarks.length === 0,
+      ),
+    ).toBe(true);
+    expect(container.textContent).not.toContain("Qimah Reservoir");
+
+    secondBookmarksRequest.resolve({
+      availableCategories: [],
+      items: [],
+      pageCount: 1,
+      pageIndex: 0,
+      pageSize: 5,
+      timelineItems: [],
+      timelineItemsTruncated: false,
+      totalCount: 0,
+    });
+    await act(async () => {
+      await secondBookmarksRequest.promise;
+    });
   });
 
   it("ignores editor shortcuts while a dialog is focused", async () => {
@@ -742,6 +1325,54 @@ describe("EditorPage shortcuts", () => {
     expect(container.querySelector("[data-testid='shortcuts-rail']")).toBe(
       null,
     );
+  });
+
+  it("shows bookmarks in the right rail in place of history and shortcuts", async () => {
+    configureEditorState({
+      project: recordingProject,
+      selectedClipId: "timeline-recording",
+    });
+    await renderEditorPage();
+
+    const bookmarksButton = Array.from(
+      container.querySelectorAll("button"),
+    ).find((button) => button.textContent === "Toggle bookmarks");
+    await act(async () => {
+      bookmarksButton?.click();
+    });
+
+    await vi.waitFor(() => {
+      expect(container.textContent).toContain("Qimah Reservoir");
+    });
+    expect(container.querySelector("[data-testid='history-rail']")).toBe(null);
+    expect(container.querySelector("[data-testid='shortcuts-rail']")).toBe(
+      null,
+    );
+
+    const closeButton = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Close bookmarks panel"]',
+    );
+    await act(async () => {
+      closeButton?.click();
+    });
+
+    expect(container.textContent).not.toContain("Qimah Reservoir");
+  });
+
+  it("shows an empty bookmark rail when the selected edit has no recording source", async () => {
+    await renderEditorPage();
+
+    const bookmarksButton = Array.from(
+      container.querySelectorAll("button"),
+    ).find((button) => button.textContent === "Toggle bookmarks");
+    await act(async () => {
+      bookmarksButton?.click();
+    });
+
+    expect(container.textContent).toContain(
+      "Select a recording clip to show its bookmarks.",
+    );
+    expect(bookmarkApiMocks.listRecording).not.toHaveBeenCalled();
   });
 
   it("rehydrates when opening a different editor source", async () => {

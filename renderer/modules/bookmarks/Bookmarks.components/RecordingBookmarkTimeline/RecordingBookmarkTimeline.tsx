@@ -109,6 +109,12 @@ function RecordingBookmarkTimeline({
   const minorMarkers = calculateRecordingTimelineMinorMarkers(duration);
   const isDisabled = duration <= 0 || (isPlaybackDisabled ?? !mediaUrl);
   const visibleMarkerBookmarks = markerBookmarks ?? bookmarks;
+  const shouldRenderPinnedBookmark =
+    hoveredBookmark !== null &&
+    (!showBookmarkMarkers ||
+      !visibleMarkerBookmarks.some(
+        (bookmark) => bookmark.id === hoveredBookmark.id,
+      ));
   const applyHoverSeconds = (seconds: number | null) => {
     const marker = hoverMarkerRef.current;
     if (!marker) {
@@ -204,6 +210,12 @@ function RecordingBookmarkTimeline({
             durationSeconds={duration}
             hoveredBookmark={hoveredBookmark}
           />
+          {hoveredBookmark && shouldRenderPinnedBookmark && (
+            <RecordingBookmarkTimelineMarker
+              bookmark={hoveredBookmark}
+              durationSeconds={duration}
+            />
+          )}
 
           {showBookmarkMarkers &&
             visibleMarkerBookmarks.map((bookmark) => {

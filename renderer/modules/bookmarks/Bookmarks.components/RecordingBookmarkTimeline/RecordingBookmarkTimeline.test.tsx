@@ -140,4 +140,40 @@ describe("RecordingBookmarkTimeline", () => {
 
     expect(onClipTargetSelect).toHaveBeenCalledWith("clip-1");
   });
+
+  it("renders the highlighted bookmark marker when regular markers are hidden", () => {
+    const bookmark = createBookmark();
+
+    act(() => {
+      root.render(
+        <RecordingBookmarkTimeline
+          markers={{
+            bookmarks: [bookmark],
+            hoveredBookmark: bookmark,
+            markerBookmarks: [],
+            showBookmarkMarkers: false,
+          }}
+          playback={{
+            durationSeconds: 100,
+            isPlaying: false,
+            mediaUrl: "hinekora-media://recording/recording-1",
+            playbackSeconds: 0,
+            volume: 1,
+            onJumpToStart: vi.fn(),
+            onSeek: vi.fn(),
+            onSeekBackward: vi.fn(),
+            onSeekForward: vi.fn(),
+            onTogglePlayback: vi.fn(),
+            onVolumeChange: vi.fn(),
+          }}
+        />,
+      );
+    });
+
+    expect(
+      container.querySelector(
+        '[data-recording-bookmark-marker-id="bookmark-1"]',
+      ),
+    ).not.toBe(null);
+  });
 });

@@ -5,6 +5,7 @@ import { useEditorShallow } from "~/renderer/store";
 
 import { useEditorTimelineDrag } from "../../Editor.hooks/useEditorTimelineDrag/useEditorTimelineDrag";
 import { useEditorTimelinePlaybackScroll } from "../../Editor.hooks/useEditorTimelinePlaybackScroll/useEditorTimelinePlaybackScroll";
+import { EditorTimelineBookmarkMarkers } from "../EditorTimelineBookmarkMarkers/EditorTimelineBookmarkMarkers";
 import { EditorTimelineClipDragPreview } from "../EditorTimelineClipDragPreview/EditorTimelineClipDragPreview";
 import { EditorTimelineControlsRow } from "../EditorTimelineControlsRow/EditorTimelineControlsRow";
 import { EditorTimelineGap } from "../EditorTimelineGap/EditorTimelineGap";
@@ -13,6 +14,7 @@ import { EditorTimelinePlayhead } from "../EditorTimelinePlayhead/EditorTimeline
 import { EditorTimelineRuler } from "../EditorTimelineRuler/EditorTimelineRuler";
 import { EditorTimelineVideoTrack } from "../EditorTimelineVideoTrack/EditorTimelineVideoTrack";
 import {
+  type EditorTimelineBookmarks,
   editorTimelinePlaybackFollowPaddingPixels,
   editorTimelineRailPaddingPixels,
   formatEditorTimelineRailLeft,
@@ -24,7 +26,11 @@ import {
 import { useEditorTimelineGridWidth } from "./useEditorTimelineGridWidth";
 import { useEditorTimelineInteraction } from "./useEditorTimelineInteraction/useEditorTimelineInteraction";
 
-function EditorTimeline() {
+function EditorTimeline({
+  bookmarks,
+}: {
+  bookmarks?: EditorTimelineBookmarks;
+}) {
   const timelineScrollRef = useRef<HTMLDivElement>(null);
   const {
     isPreviewPlaying,
@@ -123,11 +129,18 @@ function EditorTimeline() {
     visibleDurationSeconds,
     zoom,
   });
+  const passiveBookmarkMarkerSeconds =
+    bookmarks?.pinnedBookmark === undefined
+      ? (bookmarks?.hoveredBookmark?.offsetSeconds ?? null)
+      : (bookmarks.pinnedBookmark?.offsetSeconds ?? null);
 
   const markerSeconds =
     activeTimelineMarkerKind === "playhead"
       ? null
-      : (activeTimelineMarkerSeconds ?? hoverSeconds);
+      : (activeTimelineMarkerSeconds ??
+        hoverSeconds ??
+        passiveBookmarkMarkerSeconds ??
+        null);
 
   return (
     <section
@@ -211,6 +224,19 @@ function EditorTimeline() {
               visibleDurationSeconds={visibleDurationSeconds}
             />
           )}
+          {bookmarks && (
+            <EditorTimelineBookmarkMarkers
+              hoveredBookmark={bookmarks.hoveredBookmark}
+              markerBookmarks={bookmarks.markerBookmarks}
+              pinnedBookmark={
+                bookmarks.pinnedBookmark === undefined
+                  ? bookmarks.hoveredBookmark
+                  : bookmarks.pinnedBookmark
+              }
+              showBookmarkMarkers={bookmarks.showBookmarkMarkers}
+              visibleDurationSeconds={visibleDurationSeconds}
+            />
+          )}
           <EditorTimelinePlayhead
             railPaddingPixels={editorTimelineRailPaddingPixels}
             visibleDurationSeconds={visibleDurationSeconds}
@@ -226,4 +252,5 @@ function EditorTimeline() {
   );
 }
 
+export type { EditorTimelineBookmarks };
 export { EditorTimeline };

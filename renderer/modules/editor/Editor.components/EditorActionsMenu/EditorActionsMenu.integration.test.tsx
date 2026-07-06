@@ -85,8 +85,10 @@ async function renderActionsMenu() {
   await act(async () => {
     root.render(
       <EditorActionsMenu
+        isBookmarksVisible={false}
         isHistoryVisible={false}
         isShortcutsVisible={false}
+        onToggleBookmarks={vi.fn()}
         onToggleHistory={vi.fn()}
         onToggleShortcuts={vi.fn()}
       />,

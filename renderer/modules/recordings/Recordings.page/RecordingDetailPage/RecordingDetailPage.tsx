@@ -38,12 +38,17 @@ function RecordingDetailPage({
   const [videoFrameHeightPixels, setVideoFrameHeightPixels] = useState<
     number | null
   >(null);
-  const { hoveredBookmarkId, setHoveredBookmarkId } = useBookmarksShallow(
-    (bookmarks) => ({
-      hoveredBookmarkId: bookmarks.recordingDetail.hoveredBookmarkId,
-      setHoveredBookmarkId: bookmarks.setRecordingDetailHoveredBookmarkId,
-    }),
-  );
+  const {
+    hoveredBookmarkId,
+    selectedBookmarkId,
+    setHoveredBookmarkId,
+    setSelectedBookmarkId,
+  } = useBookmarksShallow((bookmarks) => ({
+    hoveredBookmarkId: bookmarks.recordingDetail.hoveredBookmarkId,
+    selectedBookmarkId: bookmarks.recordingDetail.selectedBookmarkId,
+    setHoveredBookmarkId: bookmarks.setRecordingDetailHoveredBookmarkId,
+    setSelectedBookmarkId: bookmarks.setRecordingDetailSelectedBookmarkId,
+  }));
   const state = useRecordingDetailData(recordingId);
   const recording = state.detail?.recording ?? null;
   const handleRecordingDeleted = useCallback(() => {
@@ -76,6 +81,20 @@ function RecordingDetailPage({
         : null,
     [hoveredBookmarkId, latestBookmarks, timelineBookmarks],
   );
+  const selectedBookmark = useMemo(
+    () =>
+      selectedBookmarkId
+        ? (timelineBookmarks.find(
+            (bookmark) => bookmark.id === selectedBookmarkId,
+          ) ??
+          latestBookmarks.find(
+            (bookmark) => bookmark.id === selectedBookmarkId,
+          ) ??
+          null)
+        : null,
+    [latestBookmarks, selectedBookmarkId, timelineBookmarks],
+  );
+  const highlightedBookmark = hoveredBookmark ?? selectedBookmark;
   const playback = useRecordingDetailPlayback({
     detailReady: Boolean(state.detail),
     fallbackDurationSeconds: recording?.durationSeconds ?? null,
@@ -117,7 +136,7 @@ function RecordingDetailPage({
   );
 
   const handleSelectBookmark = (bookmark: RecordingBookmark) => {
-    bookmarkFilters.markInteracted();
+    setSelectedBookmarkId(bookmark.id);
     playback.seekTo(bookmark.offsetSeconds ?? 0);
   };
 
@@ -169,6 +188,11 @@ function RecordingDetailPage({
         {state.detail && recording && (
           <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_220px] gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
             <RecordingBookmarksPanel
+              activeCategoryFilter={
+                bookmarkFilters.hasInteracted
+                  ? bookmarkFilters.categoryFilter
+                  : null
+              }
               bookmarks={latestBookmarks}
               categories={bookmarkFilters.categories}
               categoryFilter={bookmarkFilters.categoryFilter}
@@ -179,6 +203,7 @@ function RecordingDetailPage({
               }
               pageCount={state.bookmarksPage?.pageCount ?? 1}
               pageIndex={state.bookmarksPage?.pageIndex ?? 0}
+              selectedBookmarkId={selectedBookmarkId}
               totalCount={state.bookmarksPage?.totalCount ?? 0}
               onCategoryChange={bookmarkFilters.selectCategory}
               onHoverBookmark={handleHoverBookmark}
@@ -205,12 +230,9 @@ function RecordingDetailPage({
                   bookmarks: timelineBookmarks,
                   highlightDeathsInRuler: true,
                   highlightManualsInRuler: true,
-                  hoveredBookmark,
+                  hoveredBookmark: highlightedBookmark,
                   markerBookmarks: bookmarkFilters.markerBookmarks,
-                  showBookmarkMarkers:
-                    bookmarkFilters.hasInteracted ||
-                    bookmarkFilters.categoryFilter !==
-                      allRecordingBookmarkCategoriesValue,
+                  showBookmarkMarkers: bookmarkFilters.hasInteracted,
                 }}
                 playback={{
                   durationSeconds: playback.durationSeconds,

@@ -1,20 +1,16 @@
 import clsx from "clsx";
 
-import type { BookmarkCategory } from "~/main/modules/bookmarks";
 import {
   allBookmarkCategoriesValue,
+  type BookmarkCategoryFilterValue,
   bookmarkCategoryChipClassNames,
   bookmarkCategoryLabels,
 } from "~/renderer/modules/bookmarks/Bookmarks.utils";
 
-type BookmarksCategoryFilterValue =
-  | BookmarkCategory
-  | typeof allBookmarkCategoriesValue;
-
 interface BookmarksCategoryFilterChipProps {
-  category: BookmarksCategoryFilterValue;
+  category: BookmarkCategoryFilterValue;
   isActive: boolean;
-  onSelect: (category: BookmarksCategoryFilterValue) => void;
+  onSelect: (category: BookmarkCategoryFilterValue) => void;
 }
 
 function BookmarksCategoryFilterChip({
@@ -53,5 +49,5 @@ function BookmarksCategoryFilterChip({
   );
 }
 
-export type { BookmarksCategoryFilterValue };
+export type { BookmarkCategoryFilterValue as BookmarksCategoryFilterValue };
 export { BookmarksCategoryFilterChip };

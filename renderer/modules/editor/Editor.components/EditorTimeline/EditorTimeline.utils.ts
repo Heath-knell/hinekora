@@ -1,3 +1,4 @@
+import type { RecordingBookmark } from "~/main/modules/bookmarks";
 import type { EditorProject, EditorTimelineTrack } from "~/main/modules/editor";
 
 import {
@@ -73,6 +74,13 @@ interface ResolveEditorTimelineDragPreviewStateInput {
   videoTracks: Pick<EditorTimelineTrack, "clips">[];
   visibleDurationSeconds: number;
 }
+
+type EditorTimelineBookmarks = {
+  hoveredBookmark: RecordingBookmark | null;
+  markerBookmarks: RecordingBookmark[];
+  pinnedBookmark?: RecordingBookmark | null;
+  showBookmarkMarkers: boolean;
+};
 
 const editorTimelinePlaybackFollowPaddingPixels = 96;
 const editorTimelineRailPaddingPixels = 24;
@@ -396,6 +404,7 @@ function formatEditorTimelineRailWidth(
 }
 
 export {
+  type EditorTimelineBookmarks,
   editorTimelinePlaybackFollowPaddingPixels,
   editorTimelineRailPaddingPixels,
   formatEditorTimelineRailLeft,

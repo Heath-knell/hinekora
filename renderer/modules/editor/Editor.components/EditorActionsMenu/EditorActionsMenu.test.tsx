@@ -70,6 +70,7 @@ import { EditorActionsMenu } from "./EditorActionsMenu";
 let container: HTMLDivElement;
 let root: Root;
 const onToggleHistory = vi.fn();
+const onToggleBookmarks = vi.fn();
 const onToggleShortcuts = vi.fn();
 
 function configureEditorState(overrides: Record<string, unknown> = {}) {
@@ -86,8 +87,10 @@ async function renderActionsMenu(isHistoryVisible: boolean) {
   await act(async () => {
     root.render(
       <EditorActionsMenu
+        isBookmarksVisible={false}
         isHistoryVisible={isHistoryVisible}
         isShortcutsVisible={false}
+        onToggleBookmarks={onToggleBookmarks}
         onToggleHistory={onToggleHistory}
         onToggleShortcuts={onToggleShortcuts}
       />,
@@ -125,6 +128,9 @@ describe("EditorActionsMenu", () => {
       content.indexOf("New edit menu"),
     );
     expect(content.indexOf("New edit menu")).toBeLessThan(
+      content.indexOf("Show bookmarks"),
+    );
+    expect(content.indexOf("Show bookmarks")).toBeLessThan(
       content.indexOf("Hide history"),
     );
     expect(content.indexOf("Hide history")).toBeLessThan(
@@ -160,6 +166,19 @@ describe("EditorActionsMenu", () => {
     });
 
     expect(onToggleHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it("toggles the bookmarks rail", async () => {
+    await renderActionsMenu(false);
+    const bookmarksButton = Array.from(
+      container.querySelectorAll("button"),
+    ).find((button) => button.textContent?.includes("Show bookmarks"));
+
+    await act(async () => {
+      bookmarksButton?.click();
+    });
+
+    expect(onToggleBookmarks).toHaveBeenCalledTimes(1);
   });
 
   it("toggles the shortcuts rail", async () => {
@@ -211,6 +230,7 @@ describe("EditorActionsMenu", () => {
     expect(newEditButton?.disabled).toBe(true);
     expect(deleteEditButton?.disabled).toBe(true);
     expect(onToggleHistory).toHaveBeenCalledTimes(1);
+    expect(onToggleBookmarks).not.toHaveBeenCalled();
     expect(onToggleShortcuts).not.toHaveBeenCalled();
   });
 });

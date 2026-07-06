@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import { useCallback, useMemo, useState } from "react";
 
+import type { RecordingBookmark } from "~/main/modules/bookmarks";
 import type { EditorMediaReference } from "~/main/modules/editor";
 import { PageContainer } from "~/renderer/components/PageContainer/PageContainer";
 import { PageContent } from "~/renderer/components/PageContent/PageContent";
@@ -10,6 +11,7 @@ import { buildMediaLibraryLeagueOptions } from "~/renderer/modules/media-library
 import { useEditorShallow, useSavedEditsShallow } from "~/renderer/store";
 
 import { EditorAssetRail } from "../../Editor.components/EditorAssetRail/EditorAssetRail";
+import { EditorBookmarksRail } from "../../Editor.components/EditorBookmarksRail/EditorBookmarksRail";
 import { EditorDragDropProvider } from "../../Editor.components/EditorDragDropProvider/EditorDragDropProvider";
 import { EditorExportActions } from "../../Editor.components/EditorExportActions/EditorExportActions";
 import { EditorExportView } from "../../Editor.components/EditorExportView/EditorExportView";
@@ -20,6 +22,7 @@ import { EditorShortcutsRail } from "../../Editor.components/EditorShortcutsRail
 import { EditorTimeline } from "../../Editor.components/EditorTimeline/EditorTimeline";
 import { createExportSubtitle, createExportTitle } from "./EditorPage.utils";
 import { useEditorKeyboardShortcuts } from "./useEditorKeyboardShortcuts";
+import { useEditorRecordingBookmarks } from "./useEditorRecordingBookmarks/useEditorRecordingBookmarks";
 import { useEditorRouteHydration } from "./useEditorRouteHydration";
 
 interface EditorPageProps {
@@ -27,7 +30,7 @@ interface EditorPageProps {
   source?: EditorMediaReference | null;
 }
 
-type EditorSidePanel = "history" | "shortcuts";
+type EditorSidePanel = "bookmarks" | "history" | "shortcuts";
 
 function EditorPage({ projectId = null, source = null }: EditorPageProps) {
   const [visibleSidePanel, setVisibleSidePanel] =
@@ -50,6 +53,8 @@ function EditorPage({ projectId = null, source = null }: EditorPageProps) {
     isLoading,
     openProject,
     project,
+    selectedClipId,
+    setPlaybackSeconds,
     workspace,
   } = useEditorShallow((editor) => ({
     clipboardStatus: editor.clipboardState.status,
@@ -61,11 +66,18 @@ function EditorPage({ projectId = null, source = null }: EditorPageProps) {
     isLoading: editor.isLoading,
     openProject: editor.openProject,
     project: editor.project,
+    selectedClipId: editor.selectedClipId,
+    setPlaybackSeconds: editor.setPlaybackSeconds,
     workspace: editor.workspace,
   }));
   const isClipboardBusy = clipboardStatus === "copying";
+  const isBookmarksVisible = visibleSidePanel === "bookmarks";
   const isHistoryVisible = visibleSidePanel === "history";
   const isShortcutsVisible = visibleSidePanel === "shortcuts";
+  const editorBookmarks = useEditorRecordingBookmarks({
+    project,
+    selectedClipId,
+  });
   const editorMediaLeagueOptions = useMemo(() => {
     const mediaLeagues =
       workspace?.assets
@@ -85,15 +97,43 @@ function EditorPage({ projectId = null, source = null }: EditorPageProps) {
     );
   }, []);
 
+  const handleToggleBookmarks = useCallback(() => {
+    setVisibleSidePanel((currentPanel) =>
+      currentPanel === "bookmarks" ? null : "bookmarks",
+    );
+  }, []);
+
   const handleToggleShortcuts = () => {
     setVisibleSidePanel((currentPanel) =>
       currentPanel === "shortcuts" ? null : "shortcuts",
     );
   };
 
-  const handleCloseSidePanel = () => {
-    setVisibleSidePanel(null);
-  };
+  const handleCloseSidePanel = () => setVisibleSidePanel(null);
+
+  const handleHoverBookmark = useCallback(
+    (bookmark: RecordingBookmark | null) => {
+      editorBookmarks.setHoveredBookmarkId(bookmark?.id ?? null);
+    },
+    [editorBookmarks.setHoveredBookmarkId],
+  );
+
+  const handleSelectBookmark = useCallback(
+    (bookmark: RecordingBookmark) => {
+      const timelineSeconds = editorBookmarks.resolveTimelineSeconds(bookmark);
+      if (timelineSeconds === null) {
+        return;
+      }
+
+      editorBookmarks.setSelectedBookmarkId(bookmark.id);
+      setPlaybackSeconds(timelineSeconds);
+    },
+    [editorBookmarks, setPlaybackSeconds],
+  );
+
+  const handleClearSelectedBookmark = useCallback(() => {
+    editorBookmarks.setSelectedBookmarkId(null);
+  }, [editorBookmarks.setSelectedBookmarkId]);
 
   const isRouteHydrated = useEditorRouteHydration({
     hydrate,
@@ -104,7 +144,12 @@ function EditorPage({ projectId = null, source = null }: EditorPageProps) {
   });
   const isAssetRailHydrationEnabled = isMediaScopeReady && isRouteHydrated;
 
-  useEditorKeyboardShortcuts({ onToggleHistory: handleToggleHistory });
+  useEditorKeyboardShortcuts({
+    hasSelectedBookmark: editorBookmarks.selectedBookmarkId !== null,
+    onClearSelectedBookmark: handleClearSelectedBookmark,
+    onToggleBookmarks: handleToggleBookmarks,
+    onToggleHistory: handleToggleHistory,
+  });
 
   if (exportStatus !== "idle") {
     return (
@@ -136,11 +181,13 @@ function EditorPage({ projectId = null, source = null }: EditorPageProps) {
         actions={
           <EditorPageHeaderActions
             isClipboardBusy={isClipboardBusy}
+            isBookmarksVisible={isBookmarksVisible}
             isHistoryVisible={isHistoryVisible}
             isShortcutsVisible={isShortcutsVisible}
             league={scope.league}
             leagueOptions={editorMediaLeagueOptions}
             onLeagueChange={setLeague}
+            onToggleBookmarks={handleToggleBookmarks}
             onToggleHistory={handleToggleHistory}
             onToggleShortcuts={handleToggleShortcuts}
           />
@@ -166,13 +213,28 @@ function EditorPage({ projectId = null, source = null }: EditorPageProps) {
             scope={scope}
           />
           <EditorPreviewStage />
+          {isBookmarksVisible && (
+            <EditorBookmarksRail
+              bookmarks={editorBookmarks}
+              onClose={handleCloseSidePanel}
+              onHoverBookmark={handleHoverBookmark}
+              onSelectBookmark={handleSelectBookmark}
+            />
+          )}
           {isHistoryVisible && (
             <EditorHistoryRail onClose={handleCloseSidePanel} />
           )}
           {isShortcutsVisible && (
             <EditorShortcutsRail onClose={handleCloseSidePanel} />
           )}
-          <EditorTimeline />
+          <EditorTimeline
+            bookmarks={{
+              hoveredBookmark: editorBookmarks.highlightedBookmark,
+              markerBookmarks: editorBookmarks.markerBookmarks,
+              pinnedBookmark: editorBookmarks.pinnedBookmark,
+              showBookmarkMarkers: editorBookmarks.showBookmarkMarkers,
+            }}
+          />
         </EditorDragDropProvider>
         {isClipboardBusy && (
           <div

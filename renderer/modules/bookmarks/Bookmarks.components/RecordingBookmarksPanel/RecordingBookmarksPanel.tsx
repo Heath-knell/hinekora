@@ -1,4 +1,4 @@
-import { FiChevronLeft, FiChevronRight } from "react-icons/fi";
+import { FiChevronLeft, FiChevronRight, FiX } from "react-icons/fi";
 
 import type {
   BookmarkCategory,
@@ -13,15 +13,22 @@ import {
 } from "./RecordingBookmarksPanel.utils";
 
 interface RecordingBookmarksPanelProps {
+  activeCategoryFilter?: RecordingBookmarkCategoryFilter | null;
   bookmarks: RecordingBookmark[];
   categories: BookmarkCategory[];
   categoryFilter: RecordingBookmarkCategoryFilter;
   emptyMessage?: string;
+  errorMessage?: string | null;
   heightPixels: number | null;
   isTimelineTruncated?: boolean;
+  isLoading?: boolean;
   pageCount: number;
   pageIndex: number;
+  selectedBookmarkId?: string | null;
+  subtitle?: string;
+  title?: string;
   totalCount: number;
+  onClose?: () => void;
   onCategoryChange: (category: RecordingBookmarkCategoryFilter) => void;
   onHoverBookmark?: (bookmark: RecordingBookmark | null) => void;
   onNextPage: () => void;
@@ -33,12 +40,19 @@ function RecordingBookmarksPanel({
   bookmarks,
   categories,
   categoryFilter,
+  activeCategoryFilter = categoryFilter,
   emptyMessage = "No bookmarks are attached yet.",
+  errorMessage = null,
   heightPixels,
   isTimelineTruncated = false,
+  isLoading = false,
   pageCount,
   pageIndex,
+  selectedBookmarkId = null,
+  subtitle = "Latest markers",
+  title = "Bookmarks",
   totalCount,
+  onClose,
   onCategoryChange,
   onHoverBookmark,
   onNextPage,
@@ -59,16 +73,33 @@ function RecordingBookmarksPanel({
       className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-base-content/10 bg-base-200"
       style={panelStyle}
     >
-      <div className="border-base-content/10 border-b p-3">
-        <h2 className="m-0 font-bold text-sm">Bookmarks</h2>
-        <p className="m-0 text-base-content/55 text-xs">Latest markers</p>
+      <div className="flex items-center gap-2 border-base-content/10 border-b p-3">
+        <div className="min-w-0 flex-1">
+          <h2 className="m-0 font-bold text-sm">{title}</h2>
+          <p className="m-0 text-base-content/55 text-xs">{subtitle}</p>
+        </div>
+        {onClose && (
+          <div
+            className="tooltip tooltip-left no-drag"
+            data-tip="Close bookmarks panel"
+          >
+            <button
+              aria-label="Close bookmarks panel"
+              className="btn btn-ghost btn-xs"
+              type="button"
+              onClick={onClose}
+            >
+              <FiX size={15} />
+            </button>
+          </div>
+        )}
       </div>
       <div className="border-base-content/10 border-b p-3">
         <div className="flex flex-wrap gap-1.5">
           {filterCategories.map((category) => (
             <BookmarksCategoryFilterChip
               category={category}
-              isActive={categoryFilter === category}
+              isActive={activeCategoryFilter === category}
               key={category}
               onSelect={onCategoryChange}
             />
@@ -82,15 +113,28 @@ function RecordingBookmarksPanel({
         </p>
       )}
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto p-3">
-        {bookmarks.map((bookmark) => (
-          <RecordingBookmarksPanelItem
-            bookmark={bookmark}
-            key={bookmark.id}
-            {...(onHoverBookmark ? { onHover: onHoverBookmark } : {})}
-            onSelect={onSelectBookmark}
-          />
-        ))}
-        {bookmarks.length === 0 && (
+        {isLoading && (
+          <div className="grid flex-1 place-items-center text-base-content/55 text-sm">
+            <span className="loading loading-spinner loading-sm" />
+          </div>
+        )}
+        {!isLoading && errorMessage && (
+          <p className="m-0 rounded-md border border-error/30 bg-error/10 p-3 text-error text-sm">
+            {errorMessage}
+          </p>
+        )}
+        {!isLoading &&
+          !errorMessage &&
+          bookmarks.map((bookmark) => (
+            <RecordingBookmarksPanelItem
+              bookmark={bookmark}
+              isSelected={bookmark.id === selectedBookmarkId}
+              key={bookmark.id}
+              {...(onHoverBookmark ? { onHover: onHoverBookmark } : {})}
+              onSelect={onSelectBookmark}
+            />
+          ))}
+        {!isLoading && !errorMessage && bookmarks.length === 0 && (
           <p className="m-0 text-base-content/55 text-sm">{emptyMessage}</p>
         )}
       </div>

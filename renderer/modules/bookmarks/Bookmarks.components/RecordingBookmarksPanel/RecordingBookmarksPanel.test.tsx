@@ -71,6 +71,33 @@ describe("RecordingBookmarksPanel", () => {
     );
   });
 
+  it("allows category chips to render with no active chip", () => {
+    act(() => {
+      root.render(
+        <RecordingBookmarksPanel
+          activeCategoryFilter={null}
+          bookmarks={[]}
+          categories={["map"]}
+          categoryFilter={allRecordingBookmarkCategoriesValue}
+          heightPixels={null}
+          pageCount={1}
+          pageIndex={0}
+          totalCount={0}
+          onCategoryChange={vi.fn()}
+          onNextPage={vi.fn()}
+          onPreviousPage={vi.fn()}
+          onSelectBookmark={vi.fn()}
+        />,
+      );
+    });
+
+    const allCategoryButton = Array.from(
+      container.querySelectorAll("button"),
+    ).find((button) => button.textContent === "All");
+
+    expect(allCategoryButton?.className).not.toContain("shadow-sm");
+  });
+
   it("fires category, pagination, selection, and hover interactions", () => {
     const bookmark = createBookmark();
     const onCategoryChange = vi.fn();
@@ -88,6 +115,7 @@ describe("RecordingBookmarksPanel", () => {
           heightPixels={null}
           pageCount={2}
           pageIndex={0}
+          selectedBookmarkId={bookmark.id}
           totalCount={6}
           onCategoryChange={onCategoryChange}
           onHoverBookmark={onHoverBookmark}
@@ -111,6 +139,7 @@ describe("RecordingBookmarksPanel", () => {
       container.querySelectorAll("button"),
     ).find((button) => button.textContent?.includes("Qimah Reservoir"));
     expect(bookmarkButton).toBeDefined();
+    expect(bookmarkButton?.className).toContain("border-primary");
 
     act(() => {
       bookmarkButton?.dispatchEvent(

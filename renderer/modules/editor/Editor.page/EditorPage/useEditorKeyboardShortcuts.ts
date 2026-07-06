@@ -10,10 +10,16 @@ import {
 } from "./EditorPage.utils";
 
 interface UseEditorKeyboardShortcutsInput {
+  hasSelectedBookmark: boolean;
+  onClearSelectedBookmark: () => void;
+  onToggleBookmarks: () => void;
   onToggleHistory: () => void;
 }
 
 function useEditorKeyboardShortcuts({
+  hasSelectedBookmark,
+  onClearSelectedBookmark,
+  onToggleBookmarks,
   onToggleHistory,
 }: UseEditorKeyboardShortcutsInput): void {
   const {
@@ -64,12 +70,24 @@ function useEditorKeyboardShortcuts({
         return;
       }
 
+      if (event.key === "Escape" && hasSelectedBookmark) {
+        event.preventDefault();
+        onClearSelectedBookmark();
+        return;
+      }
+
       const usesModifier = event.ctrlKey || event.metaKey;
       if (usesModifier && !event.altKey) {
         const key = event.key.toLowerCase();
         if (key === "h") {
           event.preventDefault();
           onToggleHistory();
+          return;
+        }
+
+        if (key === "b") {
+          event.preventDefault();
+          onToggleBookmarks();
           return;
         }
 
@@ -206,9 +224,12 @@ function useEditorKeyboardShortcuts({
     activeClipId,
     copyProjectToClipboard,
     createProject,
+    hasSelectedBookmark,
     hoveredTimelineGap,
     hasProject,
     isProcessing,
+    onClearSelectedBookmark,
+    onToggleBookmarks,
     onToggleHistory,
     playbackSeconds,
     previewHasAudio,

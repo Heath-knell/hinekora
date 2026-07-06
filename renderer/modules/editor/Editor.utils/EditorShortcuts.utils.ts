@@ -67,6 +67,11 @@ const editorShortcutItems: EditorShortcutItem[] = [
   },
   {
     category: "editor",
+    keys: ["Ctrl", "B"],
+    label: "Toggle the recording bookmarks rail.",
+  },
+  {
+    category: "editor",
     keys: ["Ctrl", "H"],
     label: "Toggle the edit history rail.",
   },

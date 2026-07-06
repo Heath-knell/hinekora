@@ -256,19 +256,20 @@ export interface BookmarksSlice {
       hasInteracted: boolean;
       hoveredBookmarkId: string | null;
       pageIndex: number;
+      selectedBookmarkId: string | null;
     };
     closeManualRenameDialog: () => void;
     openManualRenameDialog: (input: { id: string; label: string }) => void;
     hydrate: () => Promise<void>;
     refresh: (query?: BookmarkLibraryQuery) => Promise<void>;
     deleteManual: (id: string) => Promise<void>;
-    markRecordingDetailInteracted: () => void;
     resetRecordingDetail: () => void;
     selectRecordingDetailCategory: (
       category: BookmarkCategory | typeof allBookmarkCategoriesValue,
     ) => void;
     setRecordingDetailHoveredBookmarkId: (id: string | null) => void;
     setRecordingDetailPageIndex: (pageIndex: number) => void;
+    setRecordingDetailSelectedBookmarkId: (id: string | null) => void;
     saveManualRename: (label: string) => Promise<void>;
     updateManual: (
       id: string,
