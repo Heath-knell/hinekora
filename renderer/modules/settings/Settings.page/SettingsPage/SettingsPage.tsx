@@ -15,6 +15,7 @@ import { AppSettingsCard } from "../../Settings.components/AppSettingsCard/AppSe
 import { GameLogSettingsCard } from "../../Settings.components/GameLogSettingsCard/GameLogSettingsCard";
 import { HelpSettingsCard } from "../../Settings.components/HelpSettingsCard/HelpSettingsCard";
 import { KeybindsSettingsCard } from "../../Settings.components/KeybindsSettingsCard/KeybindsSettingsCard";
+import { OverlaySettingsCard } from "../../Settings.components/OverlaySettingsCard/OverlaySettingsCard";
 import { PrivacySettingsCard } from "../../Settings.components/PrivacySettingsCard/PrivacySettingsCard";
 import { ProfileTransferSettingsCard } from "../../Settings.components/ProfileTransferSettingsCard/ProfileTransferSettingsCard";
 import { StorageSettingsCard } from "../../Settings.components/StorageSettingsCard/StorageSettingsCard";
@@ -24,6 +25,7 @@ const settingsCategories = [
   "Game",
   "App",
   "Keybinds",
+  "Overlay",
   "Data & Storage",
   "Privacy",
   "Help",
@@ -37,6 +39,7 @@ const settingsCategoryBySlug = {
   game: "Game",
   help: "Help",
   keybinds: "Keybinds",
+  overlay: "Overlay",
   privacy: "Privacy",
   profiles: "Profiles",
   troubleshooting: "Troubleshooting",
@@ -122,6 +125,7 @@ function SettingsPage({
               {activeCategory === "Game" && <GameLogSettingsCard />}
               {activeCategory === "App" && <AppSettingsCard />}
               {activeCategory === "Keybinds" && <KeybindsSettingsCard />}
+              {activeCategory === "Overlay" && <OverlaySettingsCard />}
               {activeCategory === "Data & Storage" && <StorageSettingsCard />}
               {activeCategory === "Privacy" && <PrivacySettingsCard />}
               {activeCategory === "Help" && <HelpSettingsCard />}

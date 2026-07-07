@@ -3,6 +3,8 @@ import { FiAlertTriangle } from "react-icons/fi";
 
 import { useSettingsShallow } from "~/renderer/store";
 
+import { SettingsToggleRow } from "../SettingsToggleRow/SettingsToggleRow";
+
 const PRIVACY_POLICY_URL =
   "https://github.com/navali-creations/Hinekora/blob/master/PRIVACY.md";
 
@@ -29,42 +31,19 @@ function PrivacySettingsCard() {
       </div>
 
       <div className="divide-y divide-base-content/10">
-        <div className="py-3">
-          <label className="grid cursor-pointer grid-cols-[minmax(0,1fr)_33px] gap-4">
-            <div className="min-w-0 [text-wrap:wrap]">
-              <span className="font-semibold text-sm">Crash Reporting</span>
-              <p className="mt-1 mb-0 text-base-content/60 text-sm">
-                Send anonymous error reports when something goes wrong. Only
-                your OS type, app version, and error details are included - no
-                usernames or file paths.
-              </p>
-            </div>
-            <input
-              className="toggle toggle-primary toggle-sm"
-              checked={settingsValue?.telemetryCrashReporting ?? false}
-              type="checkbox"
-              onChange={handleCrashReportingChange}
-            />
-          </label>
-        </div>
+        <SettingsToggleRow
+          checked={settingsValue?.telemetryCrashReporting ?? false}
+          description="Send anonymous error reports when something goes wrong. Only your OS type, app version, and error details are included - no usernames or file paths."
+          label="Crash Reporting"
+          onChange={handleCrashReportingChange}
+        />
 
-        <div className="py-3">
-          <label className="grid cursor-pointer grid-cols-[minmax(0,1fr)_33px] gap-4">
-            <div className="min-w-0 [text-wrap:wrap]">
-              <span className="font-semibold text-sm">Usage Analytics</span>
-              <p className="mt-1 mb-0 text-base-content/60 text-sm">
-                Help us understand which features are used most. No personal
-                data is collected.
-              </p>
-            </div>
-            <input
-              className="toggle toggle-primary toggle-sm"
-              checked={settingsValue?.telemetryUsageAnalytics ?? false}
-              type="checkbox"
-              onChange={handleUsageAnalyticsChange}
-            />
-          </label>
-        </div>
+        <SettingsToggleRow
+          checked={settingsValue?.telemetryUsageAnalytics ?? false}
+          description="Help us understand which features are used most. No personal data is collected."
+          label="Usage Analytics"
+          onChange={handleUsageAnalyticsChange}
+        />
 
         <div className="flex items-center justify-between gap-4 py-3">
           <span className="text-base-content/70 text-sm">Privacy Policy</span>

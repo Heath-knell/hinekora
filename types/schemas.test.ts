@@ -33,6 +33,8 @@ describe("shared schemas", () => {
       appStartMinimized: false,
       mainWindowBounds: null,
       recorderOverlayBounds: null,
+      recorderOverlayShowOnStartup: true,
+      auraOverlayShowEditingFrame: true,
       installedGames: ["poe1"],
       recordingStoragePath: null,
       keybindManualBookmark: "Alt+B",
@@ -78,6 +80,8 @@ describe("shared schemas", () => {
     );
     expect(appSettingsKeys).toContain("recordingHideOverlaysFromRecording");
     expect(appSettingsKeys).toContain("keybindManualBookmark");
+    expect(appSettingsKeys).toContain("recorderOverlayShowOnStartup");
+    expect(appSettingsKeys).toContain("auraOverlayShowEditingFrame");
     expect(appSettingsKeys).not.toContain("recordingHideOverlaysFromCapture");
   });
 

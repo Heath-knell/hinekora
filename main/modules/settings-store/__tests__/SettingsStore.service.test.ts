@@ -197,6 +197,8 @@ describe("SettingsStoreService", () => {
         SettingsStoreChannel.OverlayChanged,
         {
           activeGame: "poe2",
+          auraOverlayShowEditingFrame:
+            updatedSettings.auraOverlayShowEditingFrame,
           deathClipSeconds: updatedSettings.deathClipSeconds,
           selectedCaptureProfileId: updatedSettings.selectedCaptureProfileId,
           selectedCaptureProfileIdsByGame:
@@ -210,6 +212,8 @@ describe("SettingsStoreService", () => {
         SettingsStoreChannel.OverlayChanged,
         {
           activeGame: "poe2",
+          auraOverlayShowEditingFrame:
+            updatedSettings.auraOverlayShowEditingFrame,
           deathClipSeconds: updatedSettings.deathClipSeconds,
           selectedCaptureProfileId: updatedSettings.selectedCaptureProfileId,
           selectedCaptureProfileIdsByGame:

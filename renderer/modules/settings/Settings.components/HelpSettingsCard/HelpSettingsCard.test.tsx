@@ -163,57 +163,60 @@ describe("HelpSettingsCard", () => {
     );
   });
 
-  it("restores dismissed dashboard alerts from help settings", async () => {
+  it("toggles dismissed dashboard alerts from help settings", async () => {
     await renderHelpSettings();
-    const showAgainButton = Array.from(
-      container.querySelectorAll("button"),
-    ).find((button) => button.textContent?.includes("Show Again"));
+    const showGroupPlayDeathAlert = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Show Group play death clip alert"]',
+    );
 
     expect(container.textContent).toContain("Dismissible alerts");
+    expect(container.textContent).toContain("1 / 3 dismissed");
     expect(container.textContent).toContain("Dismissed");
+    expect(showGroupPlayDeathAlert?.checked).toBe(false);
 
     await act(async () => {
-      showAgainButton?.click();
+      showGroupPlayDeathAlert?.click();
     });
 
     expect(storeMocks.updateSettings).toHaveBeenCalledWith({
       groupPlayDeathAlertDismissed: false,
     });
     expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
-      "dismissible-alert-restored",
+      "dismissible-alert-visibility-toggled",
       {
         alertId: "group-play-death",
+        visible: true,
       },
     );
   });
 
-  it("restores the recorder settings info alert from help settings", async () => {
+  it("dismisses the recorder settings info alert from help settings", async () => {
     storeMocks.settingsValue = {
       ...createDefaultSettings(),
-      recorderSettingsInfoAlertDismissed: true,
+      recorderSettingsInfoAlertDismissed: false,
     };
 
     await renderHelpSettings();
-    const showAgainButton = Array.from(
-      container.querySelectorAll<HTMLButtonElement>("button"),
-    ).find(
-      (button) =>
-        button.textContent?.includes("Show Again") && !button.disabled,
-    );
+    const dismissRecorderSettingsAlert =
+      container.querySelector<HTMLInputElement>(
+        'input[aria-label="Dismiss Recorder settings info alert"]',
+      );
 
     expect(container.textContent).toContain("Recorder settings info alert");
+    expect(dismissRecorderSettingsAlert?.checked).toBe(true);
 
     await act(async () => {
-      showAgainButton?.click();
+      dismissRecorderSettingsAlert?.click();
     });
 
     expect(storeMocks.updateSettings).toHaveBeenCalledWith({
-      recorderSettingsInfoAlertDismissed: false,
+      recorderSettingsInfoAlertDismissed: true,
     });
     expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
-      "dismissible-alert-restored",
+      "dismissible-alert-visibility-toggled",
       {
         alertId: "recorder-settings-info",
+        visible: false,
       },
     );
   });
@@ -225,26 +228,25 @@ describe("HelpSettingsCard", () => {
     };
 
     await renderHelpSettings();
-    const showAgainButton = Array.from(
-      container.querySelectorAll<HTMLButtonElement>("button"),
-    ).find(
-      (button) =>
-        button.textContent?.includes("Show Again") && !button.disabled,
+    const showCaptureModeInfoAlert = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Show Capture mode info alert"]',
     );
 
     expect(container.textContent).toContain("Capture mode info alert");
+    expect(showCaptureModeInfoAlert?.checked).toBe(false);
 
     await act(async () => {
-      showAgainButton?.click();
+      showCaptureModeInfoAlert?.click();
     });
 
     expect(storeMocks.updateSettings).toHaveBeenCalledWith({
       captureModeInfoAlertDismissed: false,
     });
     expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
-      "dismissible-alert-restored",
+      "dismissible-alert-visibility-toggled",
       {
         alertId: "capture-mode-info",
+        visible: true,
       },
     );
   });

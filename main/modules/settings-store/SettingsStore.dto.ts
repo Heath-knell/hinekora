@@ -4,6 +4,7 @@ type SettingsStoreOverlaySnapshot = Partial<AppSettings> &
   Pick<
     AppSettings,
     | "activeGame"
+    | "auraOverlayShowEditingFrame"
     | "deathClipSeconds"
     | "selectedCaptureProfileId"
     | "selectedCaptureProfileIdsByGame"
@@ -20,6 +21,7 @@ export function createSettingsStoreOverlaySnapshot(
 ): SettingsStoreOverlaySnapshot {
   return {
     activeGame: settings.activeGame,
+    auraOverlayShowEditingFrame: settings.auraOverlayShowEditingFrame,
     deathClipSeconds: settings.deathClipSeconds,
     selectedCaptureProfileId: settings.selectedCaptureProfileId,
     selectedCaptureProfileIdsByGame: settings.selectedCaptureProfileIdsByGame,

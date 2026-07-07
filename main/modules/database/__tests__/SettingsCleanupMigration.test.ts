@@ -2,13 +2,59 @@ import { DatabaseSync } from "node:sqlite";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { appSettingsKeys } from "~/types";
 import { migration_20260630_000000_settings_cleanup } from "../migrations/20260630_000000_settings_cleanup";
 import { migration_20260702_010000_bookmarks } from "../migrations/20260702_010000_bookmarks";
 import { migration_20260707_000000_keybind_settings } from "../migrations/20260707_000000_keybind_settings";
 import { insertSetting, readSettings } from "./MigrationRunner.test-utils";
 
 let database: DatabaseSync | null = null;
+
+const expectedSettingsBackfillKeys = [
+  "activeGame",
+  "activeLeague",
+  "appCloseBehavior",
+  "appLaunchOnStartup",
+  "appStartMinimized",
+  "captureModeInfoAlertDismissed",
+  "deathClipSeconds",
+  "editorAutoPruneProjects",
+  "groupPlayDeathAlertDismissed",
+  "installedGames",
+  "keybindManualBookmark",
+  "keybindManualReplay",
+  "lastSeenAppVersion",
+  "mainWindowBounds",
+  "onboardingDismissedBeacons",
+  "poe1CharacterName",
+  "poe1ClientTxtPath",
+  "poe1SelectedLeague",
+  "poe2CharacterName",
+  "poe2ClientTxtPath",
+  "poe2SelectedLeague",
+  "recorderOverlayBounds",
+  "recorderSettingsInfoAlertDismissed",
+  "recordingAudioInputDeviceId",
+  "recordingAudioOutputDeviceId",
+  "recordingAutoStartMode",
+  "recordingClipQuality",
+  "recordingEncoder",
+  "recordingFps",
+  "recordingHideOverlaysFromRecording",
+  "recordingHideOverlaysFromRewind",
+  "recordingMaxStorageGb",
+  "recordingOutputResolution",
+  "recordingRunQuality",
+  "recordingStoragePath",
+  "recordingTrackBookmarksInRewind",
+  "selectedCaptureProfileId",
+  "selectedCaptureProfileIdsByGame",
+  "selectedProfileId",
+  "setupCompleted",
+  "setupStep",
+  "setupVersion",
+  "telemetryCrashReporting",
+  "telemetryUsageAnalytics",
+] as const;
 
 function createDatabase(): DatabaseSync {
   database = new DatabaseSync(":memory:");
@@ -226,7 +272,7 @@ describe("Settings cleanup migration", () => {
     });
   });
 
-  it("backfills missing current settings idempotently", () => {
+  it("backfills migration-owned settings idempotently", () => {
     const db = createDatabase();
 
     db.exec(`
@@ -246,7 +292,9 @@ describe("Settings cleanup migration", () => {
 
     const settings = readSettings(db);
 
-    expect(new Set(Object.keys(settings))).toEqual(new Set(appSettingsKeys));
+    expect(new Set(Object.keys(settings))).toEqual(
+      new Set(expectedSettingsBackfillKeys),
+    );
     expect(settings).toMatchObject({
       activeGame: "poe1",
       recordingHideOverlaysFromRecording: true,
@@ -257,6 +305,7 @@ describe("Settings cleanup migration", () => {
       keybindManualBookmark: "Alt+B",
       keybindManualReplay: "Alt+C",
     });
+    expect(settings).not.toHaveProperty("recordingHideOverlaysFromCapture");
   });
 
   it("preserves valid startup settings during settings cleanup", () => {

@@ -1,7 +1,9 @@
+import { useSettingsShallow } from "~/renderer/store";
+
 import {
-  DismissibleAlertRestoreRow,
   type DismissibleAlertSettingKey,
-} from "./DismissibleAlertRestoreRow/DismissibleAlertRestoreRow";
+  DismissibleAlertVisibilityRow,
+} from "./DismissibleAlertVisibilityRow/DismissibleAlertVisibilityRow";
 
 const dismissibleAlertRows: ReadonlyArray<{
   alertId: string;
@@ -33,20 +35,39 @@ const dismissibleAlertRows: ReadonlyArray<{
 ];
 
 function DismissibleAlertsSettingsSection() {
+  const dismissedCount = useSettingsShallow(
+    (settings) =>
+      dismissibleAlertRows.filter(
+        (row) => settings.value?.[row.settingKey] ?? false,
+      ).length,
+  );
+
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="font-semibold">Dismissible alerts</h2>
           <p className="mt-1 text-base-content/60 text-sm">
-            Restore dashboard alerts you have hidden.
+            Toggle on keeps an alert visible. Toggle off dismisses it until you
+            turn it back on.
           </p>
         </div>
       </div>
 
-      {dismissibleAlertRows.map((row) => (
-        <DismissibleAlertRestoreRow key={row.settingKey} {...row} />
-      ))}
+      <section className="min-w-0 rounded-md border border-base-content/8 bg-base-300/35 p-3">
+        <div className="mb-1 flex items-center justify-between gap-3">
+          <h4 className="truncate font-semibold text-sm">Dashboard</h4>
+          <span className="badge badge-ghost badge-sm shrink-0">
+            {dismissedCount} / {dismissibleAlertRows.length} dismissed
+          </span>
+        </div>
+
+        <div className="divide-y divide-base-content/10">
+          {dismissibleAlertRows.map((row) => (
+            <DismissibleAlertVisibilityRow key={row.settingKey} {...row} />
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

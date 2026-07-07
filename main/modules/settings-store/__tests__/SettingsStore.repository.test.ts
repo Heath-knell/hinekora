@@ -11,32 +11,38 @@ describe("SettingsStoreRepository", () => {
 
     expect(repository.get()).toMatchObject({
       activeGame: "poe1",
+      auraOverlayShowEditingFrame: true,
       deathClipSeconds: 10,
       groupPlayDeathAlertDismissed: false,
       onboardingDismissedBeacons: [],
       poe1CharacterName: "",
+      recorderOverlayShowOnStartup: true,
       recorderSettingsInfoAlertDismissed: false,
     });
 
     repository.setMany({
       activeGame: "poe2",
       activeLeague: "Mercenaries",
+      auraOverlayShowEditingFrame: false,
       deathClipSeconds: 15,
       groupPlayDeathAlertDismissed: true,
       onboardingDismissedBeacons: ["game-selector"],
       poe1CharacterName: "Ailucannon",
       poe2CharacterName: "Ailumonk",
+      recorderOverlayShowOnStartup: false,
       recorderSettingsInfoAlertDismissed: true,
     });
 
     expect(repository.get()).toMatchObject({
       activeGame: "poe2",
       activeLeague: "Mercenaries",
+      auraOverlayShowEditingFrame: false,
       deathClipSeconds: 15,
       groupPlayDeathAlertDismissed: true,
       onboardingDismissedBeacons: ["game-selector"],
       poe1CharacterName: "Ailucannon",
       poe2CharacterName: "Ailumonk",
+      recorderOverlayShowOnStartup: false,
       recorderSettingsInfoAlertDismissed: true,
     });
 

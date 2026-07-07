@@ -21,6 +21,12 @@ vi.mock(
   }),
 );
 vi.mock(
+  "../../Settings.components/OverlaySettingsCard/OverlaySettingsCard",
+  () => ({
+    OverlaySettingsCard: () => <div>Overlay settings card</div>,
+  }),
+);
+vi.mock(
   "../../Settings.components/PrivacySettingsCard/PrivacySettingsCard",
   () => ({
     PrivacySettingsCard: () => <div>Privacy settings card</div>,
@@ -144,12 +150,26 @@ describe("SettingsPage", () => {
     ).toBe("true");
   });
 
+  it("opens overlay as a standalone settings tab", async () => {
+    await renderSettingsPage("Overlay");
+
+    expect(container.textContent).toContain("Overlay settings card");
+    expect(container.textContent).not.toContain("App settings card");
+    expect(
+      container
+        .querySelector("#settings-tab-overlay")
+        ?.getAttribute("aria-selected"),
+    ).toBe("true");
+  });
+
   it("maps settings categories to stable route slugs", () => {
     expect(getSettingsCategorySlug("Help")).toBe("help");
     expect(getSettingsCategorySlug("Keybinds")).toBe("keybinds");
+    expect(getSettingsCategorySlug("Overlay")).toBe("overlay");
     expect(getSettingsCategorySlug("Data & Storage")).toBe("data-storage");
     expect(getSettingsCategoryFromSlug("help")).toBe("Help");
     expect(getSettingsCategoryFromSlug("keybinds")).toBe("Keybinds");
+    expect(getSettingsCategoryFromSlug("overlay")).toBe("Overlay");
     expect(getSettingsCategoryFromSlug("data-storage")).toBe("Data & Storage");
     expect(getSettingsCategoryFromSlug("missing")).toBeNull();
     expect(getSettingsCategoryFromSlug(null)).toBeNull();

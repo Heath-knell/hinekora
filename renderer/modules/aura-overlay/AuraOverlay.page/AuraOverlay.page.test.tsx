@@ -259,6 +259,31 @@ describe("AuraOverlayPage", () => {
     expect(container.textContent).toContain("Pointer aura");
   });
 
+  it("hides the full-screen editing frame when disabled in settings", async () => {
+    electronMocks.isAuraLocked.mockResolvedValue(false);
+    storeMocks.useSettingsSelector.mockImplementation((selector) =>
+      selector({
+        value: {
+          activeGame: "poe1",
+          auraOverlayShowEditingFrame: false,
+        },
+      }),
+    );
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createTestRoot(container);
+
+    await act(async () => {
+      root.render(<AuraOverlayPage />);
+      await flushPromises();
+    });
+
+    expect(container.textContent).toContain("Aura controls");
+    expect(
+      container.querySelector('main[aria-label="Aura overlay"]')?.className,
+    ).not.toContain("overlayEditing");
+  });
+
   it("projects legacy aura placements into the centered ultrawide safe area", async () => {
     storeMocks.useCapturePreviewShallow.mockImplementation((selector) =>
       selector({

@@ -41,6 +41,7 @@ import {
   logInfo,
   logWarn,
 } from "./utils/app-log";
+import { requestRecorderOverlayOnStartup } from "./utils/recorder-overlay-startup";
 import { scheduleRecordingStorageInitialization } from "./utils/recording-storage-startup";
 import { handleSquirrelStartupEvent } from "./utils/squirrel-startup";
 
@@ -219,8 +220,7 @@ async function bootstrap(): Promise<void> {
   managedRecorder.initializeAutoStart();
   logInfo("startup", "Managed recorder auto-start initialized");
 
-  await overlayWindows.showRecorderOverlay();
-  logInfo("startup", "Recorder overlay requested");
+  await requestRecorderOverlayOnStartup(settings, overlayWindows);
 
   app.on("activate", () => {
     void MainWindowService.getInstance().createMainWindow();

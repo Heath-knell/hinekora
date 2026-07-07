@@ -50,6 +50,9 @@ function AuraOverlayPage() {
   const activeGame = useSettingsSelector(
     (settings) => settings.value?.activeGame ?? "poe1",
   );
+  const showAuraEditingFrame = useSettingsSelector(
+    (settings) => settings.value?.auraOverlayShowEditingFrame ?? true,
+  );
   const profile =
     (routeProfileId
       ? profileItems.find((item) => item.id === routeProfileId)
@@ -185,7 +188,10 @@ function AuraOverlayPage() {
   return (
     <main
       aria-label="Aura overlay"
-      className={clsx(styles.overlay, canEditAuras && styles.overlayEditing)}
+      className={clsx(
+        styles.overlay,
+        canEditAuras && showAuraEditingFrame && styles.overlayEditing,
+      )}
       role="application"
     >
       {profile?.overlayPlacements.map((placement) => {

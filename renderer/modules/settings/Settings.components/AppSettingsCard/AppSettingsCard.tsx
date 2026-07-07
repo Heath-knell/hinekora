@@ -3,6 +3,7 @@ import type { ChangeEvent } from "react";
 import { useSettingsShallow } from "~/renderer/store";
 
 import type { AppCloseBehavior } from "~/types";
+import { SettingsToggleRow } from "../SettingsToggleRow/SettingsToggleRow";
 
 function AppSettingsCard() {
   const { settingsValue, updateSettings } = useSettingsShallow((settings) => ({
@@ -43,29 +44,19 @@ function AppSettingsCard() {
           </select>
         </label>
 
-        <div className="py-3">
-          <label className="grid cursor-pointer grid-cols-[minmax(0,1fr)_33px] gap-4">
-            <span className="font-semibold text-sm">Launch on startup</span>
-            <input
-              className="toggle toggle-primary toggle-sm"
-              checked={settingsValue?.appLaunchOnStartup ?? false}
-              type="checkbox"
-              onChange={handleLaunchOnStartupChange}
-            />
-          </label>
-        </div>
+        <SettingsToggleRow
+          ariaLabel="Launch on startup"
+          checked={settingsValue?.appLaunchOnStartup ?? false}
+          label="Launch on startup"
+          onChange={handleLaunchOnStartupChange}
+        />
 
-        <div className="py-3">
-          <label className="grid cursor-pointer grid-cols-[minmax(0,1fr)_33px] gap-4">
-            <span className="font-semibold text-sm">Start minimized</span>
-            <input
-              className="toggle toggle-primary toggle-sm"
-              checked={settingsValue?.appStartMinimized ?? false}
-              type="checkbox"
-              onChange={handleStartMinimizedChange}
-            />
-          </label>
-        </div>
+        <SettingsToggleRow
+          ariaLabel="Start minimized"
+          checked={settingsValue?.appStartMinimized ?? false}
+          label="Start minimized"
+          onChange={handleStartMinimizedChange}
+        />
       </div>
     </section>
   );
