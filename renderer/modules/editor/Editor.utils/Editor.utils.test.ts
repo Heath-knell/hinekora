@@ -12,6 +12,7 @@ import {
 } from "../Editor.slice/Editor.slice.test-utils";
 import {
   calculateEditorTimelineDuration,
+  calculateEditorTimelineExpandableDuration,
   calculateExpandableTimelineDuration,
   calculateFittedTimelineDuration,
   calculateTimelineContentScale,
@@ -397,6 +398,9 @@ describe("Editor utils", () => {
     });
 
     expect(calculateEditorTimelineDuration(trimmedProject)).toBe(30);
+    expect(calculateEditorTimelineExpandableDuration(trimmedProject)).toBe(
+      54.95,
+    );
     expect(
       calculateExpandableTimelineDuration({
         projectDurationSeconds: 26,

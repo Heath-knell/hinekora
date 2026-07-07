@@ -44,6 +44,7 @@ export {
 } from "./EditorTimelineClip.utils";
 export {
   calculateEditorTimelineDuration,
+  calculateEditorTimelineExpandableDuration,
   calculateExpandableTimelineDuration,
   calculateFittedTimelineDuration,
   calculateTimelineContentScale,

@@ -8,6 +8,7 @@ import {
 } from "../../Editor.slice/Editor.slice.constants";
 import {
   calculateEditorTimelineDuration,
+  calculateEditorTimelineExpandableDuration,
   calculateExpandableTimelineDuration,
   calculateFittedTimelineDuration,
   calculateTimelineContentScale,
@@ -147,11 +148,14 @@ function resolveEditorTimelineModel({
       .flatMap((track) => track.clips)
       .find((clip) => clip.id === selectedClipId) ?? null;
   const timelineDurationSeconds = calculateEditorTimelineDuration(project);
+  const visibleTimelineDurationSeconds = isTimelineFitToEdit
+    ? timelineDurationSeconds
+    : calculateEditorTimelineExpandableDuration(project);
   const visibleDurationSeconds =
     resolveEditorTimelineVisibleDurationFromDuration({
       isTimelineFitToEdit,
       minimumVisibleDurationSeconds,
-      timelineDurationSeconds,
+      timelineDurationSeconds: visibleTimelineDurationSeconds,
     });
   const timelineContentScale = calculateTimelineContentScale({
     visibleDurationSeconds,
@@ -206,10 +210,14 @@ function resolveEditorTimelineVisibleDuration({
   minimumVisibleDurationSeconds,
   project,
 }: ResolveEditorTimelineVisibleDurationInput) {
+  const timelineDurationSeconds = isTimelineFitToEdit
+    ? calculateEditorTimelineDuration(project)
+    : calculateEditorTimelineExpandableDuration(project);
+
   return resolveEditorTimelineVisibleDurationFromDuration({
     isTimelineFitToEdit,
     minimumVisibleDurationSeconds,
-    timelineDurationSeconds: calculateEditorTimelineDuration(project),
+    timelineDurationSeconds,
   });
 }
 

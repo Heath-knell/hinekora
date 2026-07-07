@@ -2,6 +2,8 @@ import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { EditorProject } from "~/main/modules/editor";
+
 const dndMocks = vi.hoisted(() => ({
   onDragEnd: null as ((event: Record<string, unknown>) => void) | null,
 }));
@@ -28,7 +30,11 @@ vi.mock("~/renderer/store", () => ({
   useEditorShallow: storeMocks.useEditorShallow,
 }));
 
-import { createEditorTestProject } from "../../Editor.slice/Editor.slice.test-utils";
+import {
+  createEditorTestAsset,
+  createEditorTestProject,
+  createEditorTestTimelineClip,
+} from "../../Editor.slice/Editor.slice.test-utils";
 import {
   editorMediaAssetDragType,
   editorVideoTrackDropType,
@@ -39,13 +45,13 @@ let container: HTMLDivElement;
 let root: Root;
 
 function configureEditorState(
-  overrides: { isTimelineFitToEdit?: boolean } = {},
+  overrides: { isTimelineFitToEdit?: boolean; project?: EditorProject } = {},
 ) {
   storeMocks.useEditorShallow.mockImplementation((selector) =>
     selector({
       addAssetToTimelineAt: storeMocks.addAssetToTimelineAt,
       isTimelineFitToEdit: overrides.isTimelineFitToEdit ?? false,
-      project: createEditorTestProject(),
+      project: overrides.project ?? createEditorTestProject(),
     }),
   );
 }
@@ -99,6 +105,52 @@ describe("EditorDragDropProvider", () => {
     expect(storeMocks.addAssetToTimelineAt).toHaveBeenCalledWith(
       "clip:asset-1",
       6.25,
+    );
+  });
+
+  it("drops media assets against the source-extension rail after long-source trims", async () => {
+    const asset = createEditorTestAsset({ durationSeconds: 54.95 });
+    const project = createEditorTestProject(asset, {
+      durationSeconds: 30,
+      tracks: [
+        {
+          clips: [
+            createEditorTestTimelineClip(asset, {
+              durationSeconds: 30,
+              outSeconds: 30,
+              sourceOutSeconds: 54.95,
+            }),
+          ],
+          id: "video-track",
+          kind: "video",
+          label: "Video",
+        },
+      ],
+    });
+    configureEditorState({ project });
+    await renderProvider();
+
+    act(() => {
+      dndMocks.onDragEnd?.({
+        canceled: false,
+        nativeEvent: { clientX: 50 },
+        operation: {
+          source: {
+            data: { assetKey: "clip:asset-1", kind: editorMediaAssetDragType },
+          },
+          target: {
+            data: { kind: editorVideoTrackDropType, trackId: "video-track" },
+            shape: {
+              boundingRectangle: { left: 0, width: 100 },
+            },
+          },
+        },
+      });
+    });
+
+    expect(storeMocks.addAssetToTimelineAt).toHaveBeenCalledWith(
+      "clip:asset-1",
+      34.344,
     );
   });
 

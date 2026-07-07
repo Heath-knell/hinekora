@@ -244,7 +244,7 @@ describe("EditorTimeline", () => {
     ).toBe("100%");
   });
 
-  it("keeps a short trailing tail after trimming", async () => {
+  it("keeps source extension visible after trimming a longer clip", async () => {
     const asset = createEditorTestAsset({ durationSeconds: 54.95 });
     configureEditorState({
       project: createEditorTestProject(asset, {
@@ -272,7 +272,7 @@ describe("EditorTimeline", () => {
       container
         .querySelector('[data-testid="track-video-track"]')
         ?.getAttribute("data-visible-duration"),
-    ).toBe("37.5");
+    ).toBe("68.688");
   });
 
   it("fits the rail duration to the current edit when fit mode is active", async () => {
@@ -307,7 +307,7 @@ describe("EditorTimeline", () => {
     ).toBe("30");
   });
 
-  it("keeps the visual rail duration stable while trimming the last clip", async () => {
+  it("keeps the source-extension rail duration stable while trimming the last clip", async () => {
     const asset = createEditorTestAsset({ durationSeconds: 54.95 });
     const createProjectWithClipDuration = (durationSeconds: number) =>
       createEditorTestProject(asset, {
@@ -337,10 +337,10 @@ describe("EditorTimeline", () => {
       container
         .querySelector('[data-testid="track-video-track"]')
         ?.getAttribute("data-visible-duration"),
-    ).toBe("37.5");
+    ).toBe("68.688");
 
     dragMocks.useEditorTimelineDrag.mockReturnValue({
-      activeTrimVisibleDurationSeconds: 37.5,
+      activeTrimVisibleDurationSeconds: 68.688,
       activeTimelineMarkerKind: "trim",
       activeTimelineMarkerSeconds: 20,
       clipDragPreview: null,
@@ -359,7 +359,7 @@ describe("EditorTimeline", () => {
       container
         .querySelector('[data-testid="track-video-track"]')
         ?.getAttribute("data-visible-duration"),
-    ).toBe("37.5");
+    ).toBe("68.688");
   });
 
   it("uses compact trim handles for every clip once any clip is too narrow", async () => {

@@ -1,9 +1,21 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("../../Editor.utils/Editor.utils", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../Editor.utils/Editor.utils")>();
+
+  return {
+    ...actual,
+    calculateTimelineContentScale: vi.fn(actual.calculateTimelineContentScale),
+  };
+});
 
 import {
   createEditorTestAsset,
   createEditorTestProject,
+  createEditorTestTimelineClip,
 } from "../../Editor.slice/Editor.slice.test-utils";
+import { calculateTimelineContentScale } from "../../Editor.utils/Editor.utils";
 import {
   createZoomTooltip,
   resolveEditorTimelineZoomControlState,
@@ -104,6 +116,44 @@ describe("EditorTimelineZoomControls utils", () => {
       isZoomOutDisabled: false,
       nextZoomIn: 1.5,
       nextZoomOut: 1,
+    });
+  });
+
+  it("checks zoom boundaries against the source-extension rail after long-source trims", () => {
+    const asset = createEditorTestAsset({ durationSeconds: 54.95 });
+    const project = createEditorTestProject(asset, {
+      durationSeconds: 30,
+      tracks: [
+        {
+          clips: [
+            createEditorTestTimelineClip(asset, {
+              durationSeconds: 30,
+              outSeconds: 30,
+              sourceOutSeconds: 54.95,
+            }),
+          ],
+          id: "video-track",
+          kind: "video",
+          label: "Video",
+        },
+      ],
+    });
+    vi.mocked(calculateTimelineContentScale).mockClear();
+
+    const state = resolveEditorTimelineZoomControlState({
+      isTimelineFitToEdit: false,
+      project,
+      selectedClipId: project.activeClipId,
+      zoom: 1.25,
+    });
+
+    expect(state).toMatchObject({
+      isZoomInDisabled: false,
+      isZoomOutDisabled: false,
+    });
+    expect(calculateTimelineContentScale).toHaveBeenNthCalledWith(1, {
+      visibleDurationSeconds: 68.688,
+      zoom: 1.25,
     });
   });
 

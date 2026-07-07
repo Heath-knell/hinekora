@@ -6,7 +6,7 @@ import {
   editorZoomStep,
 } from "../../Editor.slice/Editor.slice.constants";
 import {
-  calculateEditorTimelineDuration,
+  calculateEditorTimelineExpandableDuration,
   calculateExpandableTimelineDuration,
   calculateTimelineContentScale,
   clampEditorTimelineZoom,
@@ -84,7 +84,9 @@ function resolveEditorTimelineZoomControlState(input: {
   }
 
   const visibleDuration = calculateExpandableTimelineDuration({
-    projectDurationSeconds: calculateEditorTimelineDuration(input.project),
+    projectDurationSeconds: calculateEditorTimelineExpandableDuration(
+      input.project,
+    ),
   });
   const currentContentScale = calculateTimelineContentScale({
     visibleDurationSeconds: visibleDuration,

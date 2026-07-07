@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createEditorTestAsset,
   createEditorTestProject,
+  createEditorTestTimelineClip,
 } from "../../Editor.slice/Editor.slice.test-utils";
 import {
   formatEditorTimelineRailLeft,
@@ -170,6 +171,40 @@ describe("EditorTimeline utils", () => {
         project: longProject,
       }),
     ).toBe(50);
+  });
+
+  it("sizes expandable rails from the clip source range after end trims", () => {
+    const asset = createEditorTestAsset({ durationSeconds: 78.83 });
+    const project = createEditorTestProject(asset, {
+      durationSeconds: 57.24,
+      tracks: [
+        {
+          clips: [
+            createEditorTestTimelineClip(asset, {
+              durationSeconds: 57.24,
+              outSeconds: 57.24,
+              sourceOutSeconds: 78.83,
+            }),
+          ],
+          id: "video-track",
+          kind: "video",
+          label: "Video",
+        },
+      ],
+    });
+
+    expect(
+      resolveEditorTimelineVisibleDuration({
+        isTimelineFitToEdit: false,
+        project,
+      }),
+    ).toBe(98.538);
+    expect(
+      resolveEditorTimelineVisibleDuration({
+        isTimelineFitToEdit: true,
+        project,
+      }),
+    ).toBe(57.24);
   });
 
   it("ignores invalid visible duration floors and supports fit mode", () => {

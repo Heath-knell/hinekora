@@ -1,4 +1,8 @@
-import type { EditorProject, EditorTimelineTrack } from "~/main/modules/editor";
+import type {
+  EditorProject,
+  EditorTimelineClip,
+  EditorTimelineTrack,
+} from "~/main/modules/editor";
 
 import { calculateTimelineProjectDuration } from "~/types";
 import { roundToMilliseconds } from "./EditorTime.utils";
@@ -57,6 +61,44 @@ function calculateEditorTimelineDuration(
   }
 
   return Math.max(calculateTimelineDuration(project.tracks), 0);
+}
+
+function calculateEditorTimelineExpandableDuration(
+  project: EditorProject | null,
+): number {
+  if (!project) {
+    return 0;
+  }
+
+  return Math.max(
+    calculateEditorTimelineDuration(project),
+    ...project.tracks.flatMap((track) =>
+      track.clips.map(resolveTimelineClipExpandableEndSeconds),
+    ),
+  );
+}
+
+function resolveTimelineClipExpandableEndSeconds(
+  clip: EditorTimelineClip,
+): number {
+  const sourceOutSeconds = readFiniteTimelineSeconds(
+    clip.sourceOutSeconds,
+    clip.outSeconds,
+  );
+  const inSeconds = readFiniteTimelineSeconds(clip.inSeconds, 0);
+  const expandableDurationSeconds = Math.max(
+    clip.durationSeconds,
+    sourceOutSeconds - inSeconds,
+  );
+
+  return roundToMilliseconds(clip.startSeconds + expandableDurationSeconds);
+}
+
+function readFiniteTimelineSeconds(
+  value: number | null | undefined,
+  fallback: number,
+): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
 function calculateTimelineContentScale(input: {
@@ -289,6 +331,7 @@ function isTimelineMajorMarker(
 export type { EditorTimelineGap };
 export {
   calculateEditorTimelineDuration,
+  calculateEditorTimelineExpandableDuration,
   calculateExpandableTimelineDuration,
   calculateFittedTimelineDuration,
   calculateTimelineContentScale,

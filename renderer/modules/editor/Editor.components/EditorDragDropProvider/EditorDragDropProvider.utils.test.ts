@@ -35,35 +35,35 @@ describe("EditorDragDropProvider utils", () => {
   it("resolves dropped client positions into timeline seconds", () => {
     expect(
       resolveDropTimelineSeconds({
-        durationSeconds: 10,
         event: createDropEvent({ clientX: 50, left: 0, width: 100 }),
-        isTimelineFitToEdit: false,
         railPaddingPixels: 10,
+        timelineDurationSeconds: 10,
+        visibleDurationSeconds: 12.5,
       }),
     ).toBe(6.25);
     expect(
       resolveDropTimelineSeconds({
-        durationSeconds: 24,
         event: createDropEvent({ clientX: 100, left: 0, width: 200 }),
-        isTimelineFitToEdit: false,
         railPaddingPixels: 10,
+        timelineDurationSeconds: 24,
+        visibleDurationSeconds: 30,
       }),
     ).toBe(15);
     expect(
       resolveDropTimelineSeconds({
-        durationSeconds: 24,
         event: createDropEvent({ clientX: 100, left: 0, width: 200 }),
-        isTimelineFitToEdit: true,
         railPaddingPixels: 10,
+        timelineDurationSeconds: 24,
+        visibleDurationSeconds: 24,
       }),
     ).toBe(12);
   });
 
   it("resolves drops against the padded timeline rail", () => {
     const baseInput = {
-      durationSeconds: 10,
-      isTimelineFitToEdit: false,
       railPaddingPixels: 10,
+      timelineDurationSeconds: 10,
+      visibleDurationSeconds: 12.5,
     };
 
     expect(
@@ -83,10 +83,10 @@ describe("EditorDragDropProvider utils", () => {
   it("falls back to the timeline end when bounds are missing", () => {
     expect(
       resolveDropTimelineSeconds({
-        durationSeconds: 12,
         event: createDropEvent({}),
-        isTimelineFitToEdit: false,
         railPaddingPixels: 10,
+        timelineDurationSeconds: 12,
+        visibleDurationSeconds: 15,
       }),
     ).toBe(12);
   });
