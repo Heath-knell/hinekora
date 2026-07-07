@@ -14,6 +14,7 @@ type KeybindSettingsValue = Partial<Record<KeybindSettingKey, string | null>>;
 
 interface InternalKeybindConfig {
   accelerators: string[];
+  displayAccelerators?: string[];
   id: string;
   label: string;
   scope: "Aura" | "Crop" | "Editor" | "Timeline";
@@ -27,6 +28,7 @@ const internalKeybindConfigs: InternalKeybindConfig[] = [
   ...editorShortcutItems.map(
     (item, index): InternalKeybindConfig => ({
       accelerators: createInternalShortcutAccelerators(item.keys),
+      displayAccelerators: [item.keys.join("+")],
       id: `editor-shortcut-${index}`,
       label: trimTrailingPeriod(item.label),
       scope: item.category === "timeline" ? "Timeline" : "Editor",
@@ -46,12 +48,14 @@ const internalKeybindConfigs: InternalKeybindConfig[] = [
   },
   {
     accelerators: ["Ctrl+Z", "Meta+Z"],
+    displayAccelerators: ["Ctrl+Z"],
     id: "aura-undo-placement-edit",
     label: "Undo the last aura edit",
     scope: "Aura",
   },
   {
     accelerators: ["Ctrl+Y", "Meta+Y", "Ctrl+Shift+Z", "Meta+Shift+Z"],
+    displayAccelerators: ["Ctrl+Y", "Ctrl+Shift+Z"],
     id: "aura-redo-placement-edit",
     label: "Redo the last undone aura edit",
     scope: "Aura",
@@ -130,16 +134,6 @@ function findInternalGlobalConflict(
   }
 
   return null;
-}
-
-function formatInternalAccelerator(accelerator: string): string {
-  return (
-    Keybind.tryParse(accelerator)?.toDisplayLabel() ??
-    accelerator
-      .split("+")
-      .map((part) => part.trim().toUpperCase())
-      .join(" + ")
-  );
 }
 
 function readActionDataset(value: string | undefined): KeybindAction | null {
@@ -224,7 +218,6 @@ export type { KeybindSettingsValue };
 export {
   findDuplicateAction,
   findInternalGlobalConflict,
-  formatInternalAccelerator,
   internalKeybindConfigs,
   isKeybindEditingDisabled,
   readActionDataset,

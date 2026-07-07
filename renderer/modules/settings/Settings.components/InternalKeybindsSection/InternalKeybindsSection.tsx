@@ -1,8 +1,10 @@
+import { Fragment } from "react";
+
 import { useSettingsShallow } from "~/renderer/store";
 
+import { KeybindChord } from "../KeybindChord/KeybindChord";
 import {
   findInternalGlobalConflict,
-  formatInternalAccelerator,
   internalKeybindConfigs,
   type KeybindSettingsValue,
 } from "../KeybindsSettingsCard/KeybindsSettingsCard.utils";
@@ -31,6 +33,8 @@ function InternalKeybindsSection() {
             config.accelerators,
             settingsValue,
           );
+          const displayAccelerators =
+            config.displayAccelerators ?? config.accelerators;
 
           return (
             <div
@@ -54,13 +58,15 @@ function InternalKeybindsSection() {
               </div>
 
               <div className="flex min-w-0 flex-wrap justify-start gap-2 lg:justify-end">
-                {config.accelerators.map((accelerator) => (
-                  <span
-                    className="rounded border border-base-content/10 bg-base-200/70 px-2 py-1 font-semibold text-base-content/70 text-xs"
-                    key={`${config.id}-${accelerator}`}
-                  >
-                    {formatInternalAccelerator(accelerator)}
-                  </span>
+                {displayAccelerators.map((accelerator, index) => (
+                  <Fragment key={`${config.id}-${accelerator}`}>
+                    {index > 0 && (
+                      <span className="font-semibold text-base-content/45 text-xs">
+                        ;
+                      </span>
+                    )}
+                    <KeybindChord accelerator={accelerator} />
+                  </Fragment>
                 ))}
               </div>
             </div>

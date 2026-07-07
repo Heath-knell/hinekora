@@ -56,6 +56,27 @@ function getButtonByText(text: string): HTMLButtonElement {
   return button;
 }
 
+function getStatusNotice(): HTMLDivElement {
+  const notice = container.querySelector<HTMLDivElement>('[role="status"]');
+  if (!notice) {
+    throw new Error("Expected keybind status notice to render");
+  }
+
+  return notice;
+}
+
+function getSectionByHeading(text: string): HTMLElement {
+  const heading = Array.from(container.querySelectorAll("h2,h3")).find(
+    (candidate) => candidate.textContent === text,
+  );
+  const section = heading?.closest("section");
+  if (!section) {
+    throw new Error(`Expected ${text} section to render`);
+  }
+
+  return section;
+}
+
 describe("KeybindsSettingsCard", () => {
   beforeEach(() => {
     container = document.createElement("div");
@@ -126,8 +147,8 @@ describe("KeybindsSettingsCard", () => {
 
     expect(container.textContent).toContain("Global");
     expect(container.textContent).toContain("Internal");
-    expect(container.textContent).toContain("ALT + B");
-    expect(container.textContent).toContain("ALT + C");
+    expect(container.textContent).toContain("Alt + B");
+    expect(container.textContent).toContain("Alt + C");
     expect(container.textContent).toContain("Shortcut is unavailable");
 
     await act(async () => {
@@ -142,6 +163,16 @@ describe("KeybindsSettingsCard", () => {
     });
 
     expect(container.textContent).not.toContain("Shortcut is unavailable");
+  });
+
+  it("keeps the recorder safety notice visible", async () => {
+    await renderKeybindsSettingsCard();
+
+    const notice = getStatusNotice();
+
+    expect(notice.textContent).toContain(
+      "Global keybinds can only be changed while recording and rewind are stopped.",
+    );
   });
 
   it("shows and clears status load failures", async () => {
@@ -386,7 +417,7 @@ describe("KeybindsSettingsCard", () => {
       );
     });
 
-    expect(container.textContent).toContain("SHIFT + META");
+    expect(container.textContent).toContain("Shift + Meta");
 
     await act(async () => {
       window.dispatchEvent(
@@ -400,7 +431,7 @@ describe("KeybindsSettingsCard", () => {
     });
 
     expect(container.textContent).toContain(
-      "Manual replay already uses ALT + M.",
+      "Manual replay already uses Alt + M.",
     );
     expect(storeMocks.updateSettings).not.toHaveBeenCalled();
   });
@@ -487,8 +518,10 @@ describe("KeybindsSettingsCard", () => {
 
     await renderKeybindsSettingsCard();
 
-    expect(container.textContent).toContain("DELETE");
-    expect(container.textContent).toContain(
+    const internalSection = getSectionByHeading("Internal");
+
+    expect(internalSection.textContent).toContain("Delete;Backspace");
+    expect(internalSection.textContent).toContain(
       "Also used by global Manual bookmark.",
     );
   });
@@ -501,8 +534,11 @@ describe("KeybindsSettingsCard", () => {
 
     await renderKeybindsSettingsCard();
 
-    expect(container.textContent).toContain("META + B");
-    expect(container.textContent).toContain(
+    const internalSection = getSectionByHeading("Internal");
+
+    expect(internalSection.textContent).toContain("Ctrl+B");
+    expect(internalSection.textContent).not.toContain("Meta+B");
+    expect(internalSection.textContent).toContain(
       "Also used by global Manual bookmark.",
     );
   });

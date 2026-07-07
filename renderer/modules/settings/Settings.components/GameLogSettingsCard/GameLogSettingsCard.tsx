@@ -1,9 +1,9 @@
 import { type ChangeEvent, useState } from "react";
 import {
-  FiAlertCircle as AlertCircle,
   FiEye as Eye,
   FiEyeOff as EyeOff,
   FiFolder as FolderOpen,
+  FiInfo as Info,
 } from "react-icons/fi";
 
 import { useClientLogShallow, useSettingsShallow } from "~/renderer/store";
@@ -164,8 +164,8 @@ function GameLogSettingsCard() {
               Character names
             </h3>
           </div>
-          <div className="alert alert-soft alert-info grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2 py-2 text-sm">
-            <AlertCircle className="mt-0.5" size={16} />
+          <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2 rounded-lg border border-info bg-secondary px-4 py-3 text-[0.8125rem] text-info leading-relaxed shadow-sm">
+            <Info className="mt-0.5" size={16} />
             <p className="m-0">
               Optional. This is mainly used for group play. Add the character
               you are playing so Hinekora can ignore teammate death lines and

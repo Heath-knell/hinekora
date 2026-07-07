@@ -1,3 +1,5 @@
+import { FiInfo } from "react-icons/fi";
+
 import { InternalKeybindsSection } from "~/renderer/modules/settings/Settings.components/InternalKeybindsSection/InternalKeybindsSection";
 import { KeybindsSettingsRow } from "~/renderer/modules/settings/Settings.components/KeybindsSettingsRow/KeybindsSettingsRow";
 import { useSettingsShallow } from "~/renderer/store";
@@ -12,6 +14,9 @@ import {
 import { useKeybindsSettingsCapture } from "./useKeybindsSettingsCapture/useKeybindsSettingsCapture";
 import { useKeybindsSettingsRecorderStatus } from "./useKeybindsSettingsRecorderStatus/useKeybindsSettingsRecorderStatus";
 import { useKeybindsSettingsRegistrationStatus } from "./useKeybindsSettingsRegistrationStatus/useKeybindsSettingsRegistrationStatus";
+
+const KEYBIND_EDITING_NOTICE =
+  "Global keybinds can only be changed while recording and rewind are stopped.";
 
 function KeybindsSettingsCard() {
   const { settingsValue, updateSettings } = useSettingsShallow((settings) => ({
@@ -54,11 +59,13 @@ function KeybindsSettingsCard() {
         </p>
       </div>
 
-      {editingDisabledMessage && (
-        <div className="alert alert-info mb-4 py-2 text-sm" role="alert">
-          {editingDisabledMessage}
-        </div>
-      )}
+      <div
+        className="mb-4 grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2 rounded-lg border border-info bg-secondary px-4 py-3 text-[0.8125rem] text-info leading-relaxed shadow-sm"
+        role="status"
+      >
+        <FiInfo className="mt-0.5" size={18} />
+        <span>{editingDisabledMessage ?? KEYBIND_EDITING_NOTICE}</span>
+      </div>
 
       <div className="mb-2">
         <h3 className="m-0 font-semibold text-base-content/85 text-sm">

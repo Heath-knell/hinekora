@@ -111,8 +111,30 @@ const displayKeyNames = new Map<string, string>([
   ["Return", "ENTER"],
   ["Space", "SPACE"],
 ]);
+const titleDisplayKeyNames = new Map<string, string>([
+  ["Esc", "Esc"],
+  ["num0", "Num0"],
+  ["num1", "Num1"],
+  ["num2", "Num2"],
+  ["num3", "Num3"],
+  ["num4", "Num4"],
+  ["num5", "Num5"],
+  ["num6", "Num6"],
+  ["num7", "Num7"],
+  ["num8", "Num8"],
+  ["num9", "Num9"],
+  ["numadd", "NumAdd"],
+  ["numdec", "NumDec"],
+  ["numdiv", "NumDiv"],
+  ["nummult", "NumMult"],
+  ["numsub", "NumSub"],
+  ["Plus", "+"],
+  ["Return", "Enter"],
+  ["Space", "Space"],
+]);
 
 type KeybindModifier = "Alt" | "Ctrl" | "Meta" | "Shift";
+type KeybindDisplayStyle = "title" | "upper";
 type KeybindAction = "manualBookmark" | "manualReplay";
 type KeybindSettingKey = "keybindManualBookmark" | "keybindManualReplay";
 type KeybindModifierInput = Pick<
@@ -179,11 +201,14 @@ class Keybind {
     return new Keybind(createAccelerator(modifiers, key));
   }
 
-  static previewUserInput(input: KeybindUserInput): string {
+  static previewUserInput(
+    input: KeybindUserInput,
+    style: KeybindDisplayStyle = "upper",
+  ): string {
     const modifiers = collectUserInputModifiers(input);
     const key = normalizeUserInputKey(input);
 
-    return formatDisplayParts([...modifiers, ...(key ? [key] : [])]);
+    return formatDisplayParts([...modifiers, ...(key ? [key] : [])], style);
   }
 
   static tryParse(input: string | null | undefined): Keybind | null {
@@ -198,8 +223,14 @@ class Keybind {
     }
   }
 
-  toDisplayLabel(): string {
-    return formatDisplayParts(this.accelerator.split("+"));
+  toDisplayLabel(style: KeybindDisplayStyle = "upper"): string {
+    return this.toDisplayParts(style).join(" + ");
+  }
+
+  toDisplayParts(style: KeybindDisplayStyle = "upper"): string[] {
+    return this.accelerator
+      .split("+")
+      .map((part) => formatKeybindDisplayPart(part, style));
   }
 
   toElectronAccelerator(): string {
@@ -319,14 +350,32 @@ function normalizeKeyName(key: string, code?: string): string | null {
   return null;
 }
 
-function formatDisplayParts(parts: string[]): string {
-  return parts
-    .map((part) => displayKeyNames.get(part) ?? part.toUpperCase())
-    .join(" + ");
+function formatKeybindDisplayPart(
+  part: string,
+  style: KeybindDisplayStyle = "upper",
+): string {
+  if (style === "title") {
+    return titleDisplayKeyNames.get(part) ?? part;
+  }
+
+  return displayKeyNames.get(part) ?? part.toUpperCase();
 }
 
-export type { KeybindAction, KeybindSettingKey, KeybindUserInput };
+function formatDisplayParts(
+  parts: string[],
+  style: KeybindDisplayStyle = "upper",
+): string {
+  return parts.map((part) => formatKeybindDisplayPart(part, style)).join(" + ");
+}
+
+export type {
+  KeybindAction,
+  KeybindDisplayStyle,
+  KeybindSettingKey,
+  KeybindUserInput,
+};
 export {
+  formatKeybindDisplayPart,
   Keybind,
   KeybindAcceleratorSchema,
   keybindActionConfigs,

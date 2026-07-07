@@ -51,7 +51,7 @@ function useKeybindsSettingsCapture({
     }
 
     const recordInput = (input: KeybindUserInput) => {
-      setActivePreview(Keybind.previewUserInput(input));
+      setActivePreview(Keybind.previewUserInput(input, "title"));
 
       try {
         const keybind = Keybind.fromUserInput(input);
@@ -66,7 +66,7 @@ function useKeybindsSettingsCapture({
         );
         if (duplicateAction) {
           setCaptureError(
-            `${keybindActionConfigs[duplicateAction].label} already uses ${keybind.toDisplayLabel()}.`,
+            `${keybindActionConfigs[duplicateAction].label} already uses ${keybind.toDisplayLabel("title")}.`,
           );
           return;
         }

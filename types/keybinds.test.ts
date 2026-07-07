@@ -58,6 +58,29 @@ describe("Keybind", () => {
     ).toBe("ALT + B");
   });
 
+  it("formats title-case display labels for settings UI", () => {
+    expect(new Keybind("shift + alt + b").toDisplayLabel("title")).toBe(
+      "Alt + Shift + B",
+    );
+    expect(new Keybind("alt+plus").toDisplayLabel("title")).toBe("Alt + +");
+    expect(new Keybind("ctrl+numadd").toDisplayParts("title")).toEqual([
+      "Ctrl",
+      "NumAdd",
+    ]);
+    expect(
+      Keybind.previewUserInput(
+        {
+          altKey: false,
+          ctrlKey: false,
+          key: "Meta",
+          metaKey: true,
+          shiftKey: true,
+        },
+        "title",
+      ),
+    ).toBe("Shift + Meta");
+  });
+
   it("records single-key keyboard input", () => {
     const keybind = Keybind.fromUserInput({
       altKey: false,

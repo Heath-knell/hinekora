@@ -32,10 +32,12 @@ function KeybindsSettingsRow({
 }: KeybindsSettingsRowProps) {
   const config = keybindActionConfigs[action];
   const savedKeybind = Keybind.tryParse(savedAccelerator);
+  const registeredKeybind = Keybind.tryParse(registrationStatus?.accelerator);
+  const displayKeybind = registeredKeybind ?? savedKeybind;
   const displayLabel = isActive
     ? activePreview || "Press key"
-    : (registrationStatus?.displayLabel ??
-      savedKeybind?.toDisplayLabel() ??
+    : (displayKeybind?.toDisplayLabel("title") ??
+      registrationStatus?.displayLabel ??
       "No Keybind Set");
   const hasSavedAccelerator = savedAccelerator !== null;
   const isDefault =
@@ -43,7 +45,7 @@ function KeybindsSettingsRow({
   const statusText = resolveStatusText(registrationStatus?.error ?? null);
 
   return (
-    <div className="grid gap-3 py-3 lg:grid-cols-[minmax(0,1fr)_minmax(320px,420px)] lg:items-center">
+    <div className="grid gap-3 py-3 lg:grid-cols-[minmax(0,1fr)_max-content] lg:items-center">
       <div className="min-w-0">
         <h3 className="m-0 font-semibold text-base-content/85 text-sm">
           {config.label}
@@ -58,14 +60,14 @@ function KeybindsSettingsRow({
         <div
           aria-live="polite"
           className={clsx(
-            "input input-bordered input-sm flex min-w-0 flex-1 items-center overflow-hidden",
+            "input input-bordered input-sm flex w-28 shrink-0 items-center justify-center overflow-hidden text-center",
             {
               "border-error/70 bg-error/10 text-error": isActive || statusText,
               "text-base-content/40": !isActive && !hasSavedAccelerator,
             },
           )}
         >
-          <span className="min-w-0 truncate font-semibold text-xs">
+          <span className="min-w-0 truncate text-center font-semibold text-xs">
             {displayLabel}
           </span>
         </div>
