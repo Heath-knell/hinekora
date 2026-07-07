@@ -1,3 +1,62 @@
+## 0.8.0
+
+### Minor Changes
+
+- [`a548924`](https://github.com/navali-creations/hinekora/commit/a5489244bbcbf85727e4780758339d0ce4f29429) Thanks [@sbsrnt](https://github.com/sbsrnt)!
+
+  **Added:** Recording bookmarks in the editor.
+
+  The editor can now load bookmarks for the selected recording clip, show matching markers on the timeline, and keep the bookmark list aligned while clips are selected or trimmed.
+
+  - **Editor bookmarks:** Open the bookmarks panel with Ctrl+B, filter by category, hover bookmarks to preview their timeline span, and press Escape to clear the selected bookmark.
+  - **Timeline editing:** Bookmark markers and highlighted ranges follow the selected recording clip and update as trim handles reveal or hide bookmarked moments.
+  - **Multi-recording edits:** Selecting another recording clip switches the bookmark list and timeline markers to that recording without showing bookmarks from other clips.
+
+- [`dd5ff39`](https://github.com/navali-creations/hinekora/commit/dd5ff39c90b0013a8a26400218c24a1f279068d6) Thanks [@sbsrnt](https://github.com/sbsrnt)!
+
+  **Added:** Global keybindings for capture moments.
+
+  Hinekora can now handle capture shortcuts even when Hinekora or Path of Exile is not the focused window, so recording bookmarks and rewind clips can be saved without switching apps.
+
+  - **Recording bookmarks:** Press Alt+B by default to add a manual bookmark while session recording is active.
+  - **Manual replays:** Press Alt+C by default to save a manual replay while rewind is active.
+  - **Settings:** Change, clear, or reset these shortcuts from the Keybinds tab, with internal shortcut conflicts shown before they interfere with focused app controls.
+
+- [`5810de0`](https://github.com/navali-creations/hinekora/commit/5810de0bccb54bee070b10518f938fe426210baa) Thanks [@sbsrnt](https://github.com/sbsrnt)!
+
+  **Added:** Overlay settings for startup visibility.
+
+  The Settings page now has an Overlay tab for choosing how overlays behave when Hinekora starts and when aura positions are being edited.
+
+  - **Recording overlay:** Hide the recording overlay by default on startup, then show or hide it later from the app bar overlay button.
+  - **Aura overlay:** Turn off the border and glow shown while the aura overlay is unlocked for editing.
+  - **Help settings:** Dismissible alerts now use visible/dismissed toggles that match beacon controls.
+
+### Patch Changes
+
+- [`29b40f5`](https://github.com/navali-creations/hinekora/commit/29b40f5865f0614c26c5d9a31a7c8257d9afc358) Thanks [@sbsrnt](https://github.com/sbsrnt)!
+
+  **Fixed:** Keep the editor timeline aligned after trimming longer clips.
+
+  The editor timeline now keeps the visible ruler, clip rail, zoom controls, and media drops in sync when a clip is trimmed shorter than its original source video.
+
+  - **Timeline trimming:** Trimming the end of a longer clip no longer makes the timeline rail collapse to the shortened edit length.
+  - **Media drops:** Dropping new media onto the timeline now lands at the expected point on the visible rail.
+  - **Zoom controls:** Timeline zoom boundaries use the same visible duration as the editor timeline.
+
+- [`5fa6f17`](https://github.com/navali-creations/hinekora/commit/5fa6f1781852f0c6991803349a5ff5a332f7e7df) Thanks [@sbsrnt](https://github.com/sbsrnt)!
+
+  **Fixed:** Hide unavailable replay clips from the editor media picker.
+
+  Missing or corrupted clip files no longer appear as usable media in the editor, and the Clips page now makes unavailable clips clearly non-playable while still letting you delete the stale entry.
+
+  - **Editor My Media:** Death clips and manual replays with missing video files are filtered out before pagination.
+  - **Clips page:** Missing clips show an unavailable media indicator, cannot be opened or revealed, and keep delete available for cleanup.
+
+- [`b0c84d3`](https://github.com/navali-creations/hinekora/commit/b0c84d3c8c49f309ece9a589eec5861d8cb79f59) Thanks [@sbsrnt](https://github.com/sbsrnt)!
+
+  **Fixed:** Rebuilt Path of Exile detection around a dedicated Windows watcher so brief game-status blips no longer stop recording or rewind unexpectedly.
+
 ## 0.7.0
 
 ### Minor Changes
