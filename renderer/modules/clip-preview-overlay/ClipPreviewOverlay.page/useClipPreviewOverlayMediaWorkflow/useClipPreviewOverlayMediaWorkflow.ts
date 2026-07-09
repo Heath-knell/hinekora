@@ -3,10 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { trackEvent } from "~/renderer/modules/umami";
 import { useClipPreviewOverlayShallow } from "~/renderer/store";
 
-import {
-  type ClipPreviewTrimRange,
-  createClipPreviewMediaUrl,
-} from "../../ClipPreviewOverlay.utils/ClipPreviewOverlay.utils";
+import type { ClipPreviewTrimRange } from "../../ClipPreviewOverlay.utils/ClipPreviewOverlay.utils";
 import { useClipPreviewOverlayPlayback } from "../useClipPreviewOverlayPlayback/useClipPreviewOverlayPlayback";
 import { useClipPreviewOverlayPlaybackPresentation } from "../useClipPreviewOverlayPlaybackPresentation/useClipPreviewOverlayPlaybackPresentation";
 
@@ -42,11 +39,15 @@ function useClipPreviewOverlayMediaWorkflow() {
   }));
   const clip = detail?.clip ?? null;
   const clipPath = clip?.processedClipPath ?? clip?.originalObsPath ?? null;
-  const baseVideoSrc = useMemo(
-    () => (clip?.id && clipPath ? createClipPreviewMediaUrl(clip.id) : null),
-    [clip?.id, clipPath],
-  );
-  const videoSrc = baseVideoSrc ? `${baseVideoSrc}?v=${mediaVersion}` : null;
+  const baseVideoSrc = detail?.mediaUrl ?? null;
+  const videoSrc = useMemo(() => {
+    if (!baseVideoSrc) {
+      return null;
+    }
+
+    const separator = baseVideoSrc.includes("?") ? "&" : "?";
+    return `${baseVideoSrc}${separator}v=${mediaVersion}`;
+  }, [baseVideoSrc, mediaVersion]);
   const durationSeconds = Math.max(
     0,
     detail?.durationSeconds ??
@@ -56,7 +57,9 @@ function useClipPreviewOverlayMediaWorkflow() {
       0,
   );
   const isProcessing = isCopying || isSaving;
-  const hasPlayableClipFile = Boolean(clip && clipPath && durationSeconds > 0);
+  const hasPlayableClipFile = Boolean(
+    clip && baseVideoSrc && durationSeconds > 0,
+  );
   const canUseClip = hasPlayableClipFile && Boolean(videoSrc) && isMediaReady;
   const isPreparingClip = Boolean(
     (clip &&
@@ -137,10 +140,7 @@ function useClipPreviewOverlayMediaWorkflow() {
   }, [clip]);
 
   const handleTrimChange = useCallback(
-    (
-      nextTrim: ClipPreviewTrimRange,
-      options?: { previewMedia?: boolean; previewSeconds: number },
-    ) => {
+    (nextTrim: ClipPreviewTrimRange, options?: { previewSeconds: number }) => {
       if (isProcessing) {
         return;
       }
@@ -151,9 +151,7 @@ function useClipPreviewOverlayMediaWorkflow() {
       setSaveMessage(null);
       const currentPlaybackSeconds = getPlaybackSeconds();
       if (options) {
-        seekPreview(options.previewSeconds, {
-          previewMedia: options.previewMedia === true,
-        });
+        seekPreview(options.previewSeconds);
       } else if (currentPlaybackSeconds < nextTrim.inSeconds) {
         seekPreview(nextTrim.inSeconds);
       } else if (currentPlaybackSeconds > nextTrim.outSeconds) {

@@ -137,7 +137,7 @@ describe("ClipPreviewTrimRail", () => {
         inSeconds: 5,
         outSeconds: 8,
       },
-      { previewMedia: true, previewSeconds: 5 },
+      { previewSeconds: 5 },
     );
   });
 
@@ -171,7 +171,7 @@ describe("ClipPreviewTrimRail", () => {
         inSeconds: 5,
         outSeconds: 8,
       },
-      { previewMedia: true, previewSeconds: 5 },
+      { previewSeconds: 5 },
     );
   });
 
@@ -195,7 +195,7 @@ describe("ClipPreviewTrimRail", () => {
         inSeconds: 2,
         outSeconds: 7,
       },
-      { previewMedia: true, previewSeconds: 7 },
+      { previewSeconds: 7 },
     );
   });
 });

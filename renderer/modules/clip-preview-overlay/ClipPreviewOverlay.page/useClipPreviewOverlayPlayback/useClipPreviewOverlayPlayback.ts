@@ -25,7 +25,6 @@ interface StartPlaybackClockInput {
 
 interface SeekPreviewOptions {
   preservePlayback?: boolean;
-  previewMedia?: boolean;
 }
 
 interface UseClipPreviewOverlayPlaybackInput {

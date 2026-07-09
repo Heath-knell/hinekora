@@ -1,3 +1,5 @@
+import type { QuickClipTrimRange } from "~/types";
+
 enum WindowName {
   Main = "main",
   RecorderOverlay = "recorder-overlay",
@@ -9,10 +11,7 @@ enum WindowName {
 type MainWindowOpenEditorClipOptions =
   | {
       title?: string | null;
-      trim: {
-        inSeconds: number;
-        outSeconds: number;
-      };
+      trim: QuickClipTrimRange;
     }
   | {
       title?: null;

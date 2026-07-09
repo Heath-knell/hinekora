@@ -1,4 +1,9 @@
-import type { GameId, ReplayClip, ReplayClipKind } from "~/types";
+import type {
+  GameId,
+  QuickClipTrimRange,
+  ReplayClip,
+  ReplayClipKind,
+} from "~/types";
 import type { ManagedReplayKind } from "../managed-recorder/ManagedRecorder.dto";
 
 export interface DeathEvent {
@@ -27,10 +32,7 @@ export interface ReplayClipListFilter {
   league?: string;
 }
 
-export interface ReplayClipTrimInput {
-  inSeconds: number;
-  outSeconds: number;
-}
+export type ReplayClipTrimInput = QuickClipTrimRange;
 
 export interface ReplayClipCopyInput {
   id: string;

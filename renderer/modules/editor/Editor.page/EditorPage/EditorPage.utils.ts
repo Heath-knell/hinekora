@@ -4,11 +4,10 @@ import type {
 } from "~/main/modules/editor";
 import { formatBytes } from "~/renderer/modules/media-library/MediaLibrary.utils/MediaLibrary.utils";
 
+import type { QuickClipTrimRange } from "~/types";
 import { formatEditorTimestamp } from "../../Editor.utils/Editor.utils";
 
-interface EditorRouteTrimDraft {
-  inSeconds: number;
-  outSeconds: number;
+interface EditorRouteTrimDraft extends QuickClipTrimRange {
   title?: string | null;
 }
 

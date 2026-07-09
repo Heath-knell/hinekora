@@ -1,13 +1,6 @@
-import { quickClipTrimMinimumSeconds } from "~/types";
+import { type QuickClipTrimRange, quickClipTrimMinimumSeconds } from "~/types";
 
-export function createClipPreviewMediaUrl(clipId: string): string {
-  return `hinekora-media://replay-clip/${encodeURIComponent(clipId)}`;
-}
-
-export interface ClipPreviewTrimRange {
-  inSeconds: number;
-  outSeconds: number;
-}
+export type ClipPreviewTrimRange = QuickClipTrimRange;
 
 export function resolveClipPreviewRouteClipId(hash: string): string | null {
   const [, query = ""] = hash.split("?");

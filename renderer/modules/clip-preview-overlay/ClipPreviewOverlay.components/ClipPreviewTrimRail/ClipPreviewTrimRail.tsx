@@ -17,7 +17,7 @@ interface ClipPreviewTrimRailProps {
   onSeek: (seconds: number, options?: { preservePlayback?: boolean }) => void;
   onTrimChange: (
     trim: ClipPreviewTrimRange,
-    options?: { previewMedia?: boolean; previewSeconds: number },
+    options?: { previewSeconds: number },
   ) => void;
 }
 

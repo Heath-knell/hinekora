@@ -32,6 +32,8 @@ import {
   clearIpcWindowRolesForTests,
   registerIpcWindowRole,
 } from "~/main/utils/ipc-window-roles";
+import * as EditorFiles from "~/main/modules/editor/Editor.files";
+import * as EditorFfmpeg from "~/main/modules/editor/Editor.ffmpeg";
 
 import { createDefaultSettings } from "~/types";
 import { ReplayClipsChannel } from "../ReplayClips.channels";
@@ -1109,6 +1111,108 @@ describe("ReplayClipsService file actions", () => {
     expect(FileClipboard.copyFileToClipboard).not.toHaveBeenCalled();
   });
 
+  it("renders with source and output being the same path for clipboard exports", async () => {
+    const sourcePath = join(root, "same-output.mp4");
+    writeFileSync(sourcePath, "source");
+    const renderEditorExportWithFfmpeg = vi
+      .spyOn(EditorFfmpeg, "renderEditorExportWithFfmpeg")
+      .mockImplementation(async ({ outputPath }) => {
+        writeFileSync(outputPath, "trimmed");
+      });
+
+    await expect(
+      (service as unknown as { renderReplayClipQuickTrim: () => Promise<void> })
+        .renderReplayClipQuickTrim({
+          sourcePath,
+          outputPath: sourcePath,
+          trim: { inSeconds: 0, outSeconds: 5 },
+        }),
+    ).resolves.toBeUndefined();
+
+    expect(renderEditorExportWithFfmpeg).toHaveBeenCalled();
+    expect(readFileSync(sourcePath, "utf8")).toBe("trimmed");
+  });
+
+  it("renders trimmed clips without progress callback support", async () => {
+    const sourcePath = join(root, "no-progress.mp4");
+    const outputPath = join(root, "no-progress-output.mp4");
+    writeFileSync(sourcePath, "source");
+    const renderEditorExportWithFfmpeg = vi
+      .spyOn(EditorFfmpeg, "renderEditorExportWithFfmpeg")
+      .mockImplementation(async ({ outputPath: tempOutputPath }) => {
+        writeFileSync(tempOutputPath, "trimmed");
+      });
+
+    await expect(
+      (service as unknown as { renderReplayClipQuickTrim: () => Promise<void> })
+        .renderReplayClipQuickTrim({
+          sourcePath,
+          outputPath,
+          trim: { inSeconds: 0.5, outSeconds: 3.4 },
+        }),
+    ).resolves.toBeUndefined();
+
+    expect(renderEditorExportWithFfmpeg).toHaveBeenCalled();
+    expect(readFileSync(outputPath, "utf8")).toBe("trimmed");
+  });
+
+  it("handles trimmed clipboard cleanup failures through progress handlers", async () => {
+    const path = join(root, "2026-06-12_10-30-00.mp4");
+    writeFileSync(path, "video");
+    repository.upsert(
+      createReplayClip({
+        durationSeconds: 20,
+        processedClipPath: path,
+        targetDurationSeconds: 20,
+      }),
+    );
+    vi.spyOn(
+      service as unknown as {
+        renderReplayClipQuickTrim: (input: {
+          outputPath: string;
+          sourcePath: string;
+          trim: { inSeconds: number; outSeconds: number };
+        }) => Promise<void>;
+      },
+      "renderReplayClipQuickTrim",
+    ).mockResolvedValue(undefined);
+
+    vi.spyOn(EditorFiles, "cleanupEditorClipboardOutputDirectory").mockRejectedValue(
+      new Error("cleanup failed"),
+    );
+    vi.spyOn(FileClipboard, "copyFileToClipboard").mockResolvedValue({
+      ok: true,
+      error: null,
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    await expect(
+      service.copyClipToClipboard({
+        id: "clip-1",
+        trim: { inSeconds: 2, outSeconds: 8 },
+      }),
+    ).resolves.toEqual({
+      ok: true,
+      error: null,
+    });
+
+    expect(
+      warn.mock.calls.some(([message]) =>
+        String(message).includes("Replay clip clipboard cleanup failed"),
+      ),
+    ).toBe(true);
+  });
+
+  it("forces the queue to continue when a queued operation rejects", async () => {
+    const first = service["queueClipFileOperation"]("clip-1", async () => {
+      throw new Error("queued fail");
+    });
+    const second = service["queueClipFileOperation"]("clip-1", async () => "next");
+
+    await expect(first).rejects.toThrow("queued fail");
+    await expect(second).resolves.toBe("next");
+  });
+
   it("queues copy and update operations for the same clip", async () => {
     const path = join(root, "2026-06-12_10-30-00.mp4");
     const updateRender = createDeferred();
@@ -1289,6 +1393,74 @@ describe("ReplayClipsService file actions", () => {
       vi.doUnmock("~/main/modules/editor/Editor.ffmpeg");
       vi.resetModules();
     }
+  });
+
+  it("cleans up source when updating a trimmed renamed clip", async () => {
+    const path = join(root, "2026-06-12_10-30-00-death-20s.mp4");
+    const outputPath = join(root, "Renamed.mp4");
+    writeFileSync(path, "video");
+    repository.upsert(
+      createReplayClip({
+        durationSeconds: 20,
+        processedClipPath: path,
+        targetDurationSeconds: 20,
+      }),
+    );
+    vi.spyOn(
+      service as unknown as {
+        renderReplayClipQuickTrim: (input: {
+          outputPath: string;
+          sourcePath: string;
+          trim: { inSeconds: number; outSeconds: number };
+        }) => Promise<void>;
+      },
+      "renderReplayClipQuickTrim",
+    ).mockImplementation(async (input) => {
+      writeFileSync(input.outputPath, "trimmed");
+    });
+
+    await expect(
+      service.updateClipFile({
+        id: "clip-1",
+        name: "Renamed",
+        trim: { inSeconds: 1, outSeconds: 10 },
+      }),
+    ).resolves.toMatchObject({ ok: true });
+    expect(existsSync(path)).toBe(false);
+    expect(existsSync(outputPath)).toBe(true);
+  });
+
+  it("returns failed update when trimmed output cannot be persisted", async () => {
+    const path = join(root, "2026-06-12_10-30-00-death-15s.mp4");
+    writeFileSync(path, "video");
+    repository.upsert(
+      createReplayClip({
+        durationSeconds: 20,
+        processedClipPath: path,
+        targetDurationSeconds: 20,
+      }),
+    );
+    vi.spyOn(
+      service as unknown as {
+        renderReplayClipQuickTrim: (input: {
+          outputPath: string;
+          sourcePath: string;
+          trim: { inSeconds: number; outSeconds: number };
+        }) => Promise<void>;
+      },
+      "renderReplayClipQuickTrim",
+    ).mockResolvedValue(undefined);
+
+    await expect(
+      service.updateClipFile({
+        id: "clip-1",
+        name: "Renamed",
+        trim: { inSeconds: 1, outSeconds: 10 },
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringContaining("ENOENT:"),
+    });
   });
 
   it("returns safe errors when clip clipboard copy throws", async () => {
@@ -1937,6 +2109,314 @@ describe("ReplayClipsService file actions", () => {
     expect(new ReplayClipsService()).toBeInstanceOf(ReplayClipsService);
   });
 
+  it("covers copy input validation and trim clamp edge cases", () => {
+    const internals = service as unknown as {
+      resolveReplayClipQuickTrim: (
+        trim: { inSeconds: number; outSeconds: number },
+        durationSeconds: number,
+      ) => {
+        inSeconds: number;
+        outSeconds: number;
+      };
+      validateCopyInput: (
+        value: unknown,
+      ) => {
+        id: string;
+        operationRequestId: string;
+        trim?: { inSeconds: number; outSeconds: number };
+      };
+    };
+
+    const copiedTrim = internals.resolveReplayClipQuickTrim(
+      {
+        inSeconds: Number.NaN,
+        outSeconds: Number.NaN,
+      },
+      60,
+    );
+
+    expect(copiedTrim).toEqual({
+      inSeconds: 0,
+      outSeconds: 0.1,
+    });
+
+    expect(internals.validateCopyInput({ id: "clip-1", operationRequestId: "op" }))
+      .toEqual({
+        id: "clip-1",
+        operationRequestId: "op",
+      });
+  });
+
+  it("covers replay clip service internals for edge branches", async () => {
+    const internals = service as unknown as {
+      queueClipFileOperation: <T>(
+        clipId: string,
+        operation: () => Promise<T>,
+      ) => Promise<T>;
+      sendOperationProgress: (
+        sender: { isDestroyed?: () => boolean; send?: (channel: string, payload: unknown) => void } | undefined,
+        progress: { operationRequestId: string; progress: number },
+      ) => void;
+      showClipPreviewOverlay: (clip: unknown) => void;
+      resolveReplayClipRenameTarget: (
+        sourcePath: string,
+        name: string | null,
+      ) => string | null;
+    };
+
+    await expect(
+      internals
+        .queueClipFileOperation("clip-1", () => {
+          return Promise.reject(new Error("boom"));
+        })
+        .catch(() => undefined),
+    ).resolves.toBeUndefined();
+    await expect(
+      internals.queueClipFileOperation("clip-1", () => Promise.resolve("ok")),
+    ).resolves.toBe("ok");
+
+    vi.spyOn(OverlayWindowsService, "getInstance").mockReturnValue({
+      showClipPreviewOverlay: () =>
+        Promise.reject(new Error("overlay failed")),
+    } as unknown as OverlayWindowsService);
+    internals.showClipPreviewOverlay(
+      createReplayClip({
+        id: "clip-overlay",
+        processedClipPath: join(root, "clip-overlay.mp4"),
+      }),
+    );
+    await Promise.resolve();
+
+    expect(
+      () =>
+        void internals.sendOperationProgress(undefined, {
+          operationRequestId: "op",
+          progress: 0.5,
+        }),
+    ).not.toThrow();
+    internals.sendOperationProgress(
+      {
+        isDestroyed: () => true,
+      } as unknown as { isDestroyed: () => boolean },
+      { operationRequestId: "op", progress: 0.25 },
+    );
+    internals.sendOperationProgress(
+      {
+        isDestroyed: () => false,
+        send: () => {
+          throw new Error("send failed");
+        },
+      } as unknown as {
+        isDestroyed: () => boolean;
+        send: (_channel: string, _payload: unknown) => void;
+      },
+      { operationRequestId: "op", progress: 0.75 },
+    );
+
+    const sourcePath = join(root, "renamed.mp4");
+    const sourceConflict = join(root, "renamed (2).mp4");
+    const secondConflict = join(root, "renamed (3).mp4");
+    writeFileSync(sourcePath, "source");
+    writeFileSync(sourceConflict, "conflict");
+    writeFileSync(secondConflict, "conflict");
+    expect(internals.resolveReplayClipRenameTarget(sourcePath, "Renamed")).toBeNull();
+    expect(
+      internals.resolveReplayClipRenameTarget(sourceConflict, "Renamed"),
+    ).toBeNull();
+
+    await expect(service.copyClipToClipboard("missing-clip")).resolves.toEqual({
+      ok: false,
+      error: "Clip was not found",
+    });
+    await expect(service.updateClipFile({ id: "missing-clip" })).resolves.toEqual({
+      ok: false,
+      detail: null,
+      error: "Clip was not found",
+    });
+    repository.upsert(
+      createReplayClip({ id: "pathless-clip", originalObsPath: null, processedClipPath: null }),
+    );
+    await expect(service.updateClipFile({ id: "pathless-clip" })).resolves.toEqual({
+      ok: false,
+      detail: null,
+      error: "Clip file path is not available",
+    });
+
+    repository.upsert(
+      createReplayClip({
+        id: "renamed-clip",
+        processedClipPath: join(root, "2026-07-09_10-00-00.mp4"),
+      }),
+    );
+    writeFileSync(join(root, "2026-07-09_10-00-00.mp4"), "video");
+    await expect(service.updateClipFile({ id: "renamed-clip" })).resolves.toMatchObject({
+      ok: true,
+      error: null,
+      detail: expect.anything(),
+    });
+  });
+
+  it("covers remaining helper branches in clip update and queue internals", async () => {
+    const helperService = service as unknown as {
+      queueClipFileOperation: <T>(clipId: string, operation: () => Promise<T>) => Promise<T>;
+      renderReplayClipQuickTrim: (input: {
+        onProgress?: (progress: number) => void;
+        outputPath: string;
+        sourcePath: string;
+        trim: { inSeconds: number; outSeconds: number };
+      }) => Promise<void>;
+      resolveReplayClipRenameTarget: (
+        sourcePath: string,
+        name: string | null,
+      ) => string | null;
+      resolveReplayClipQuickTrim: (
+        trim: { inSeconds: number; outSeconds: number },
+        durationSeconds: number,
+      ) => { inSeconds: number; outSeconds: number };
+      createUpdatedClipForStoredPath: (input: {
+        clip: ReturnType<typeof createReplayClip>;
+        durationSeconds: number | null;
+        path: string;
+        sizeBytes: number;
+      }) => ReturnType<typeof createReplayClip>;
+      clipFileOperationQueues: Map<string, Promise<unknown>>;
+    };
+
+    const sourcePath = join(root, "2026-06-12_10-30-00.mp4");
+    const sourceWithoutExt = join(root, "source-without-extension");
+    writeFileSync(sourcePath, "video");
+    writeFileSync(sourceWithoutExt, "video");
+    const renameOutput = join(root, "renamed-output.mp4");
+    vi.spyOn(EditorFfmpeg, "renderEditorExportWithFfmpeg").mockImplementation(
+      async ({ outputPath }) => {
+        writeFileSync(outputPath, "trimmed");
+      },
+    );
+
+    repository.upsert(
+      createReplayClip({
+        id: "clip-helpers",
+        durationSeconds: 20,
+        processedClipPath: sourcePath,
+        targetDurationSeconds: 20,
+      }),
+    );
+
+    const onProgress = vi.fn();
+    const renderEditorExportWithFfmpeg = vi
+      .spyOn(EditorFfmpeg, "renderEditorExportWithFfmpeg")
+      .mockImplementation(async ({ outputPath }) => {
+        writeFileSync(outputPath, "trimmed");
+      });
+
+    const updateResult = await service.updateClipFile(
+      {
+        id: "clip-helpers",
+        trim: { inSeconds: 1, outSeconds: 4 },
+        operationRequestId: "op",
+      },
+      { onProgress },
+    );
+    expect(updateResult).toMatchObject({ ok: true });
+    expect(renderEditorExportWithFfmpeg).toHaveBeenCalledWith(
+      expect.objectContaining({
+        onProgress: expect.any(Function),
+      }),
+    );
+
+    await expect(
+      helperService.queueClipFileOperation("clip-helpers", async () => Promise.resolve("done")),
+    ).resolves.toBe("done");
+
+    helperService.clipFileOperationQueues.set(
+      "clip-helpers",
+      Promise.reject(new Error("seed")),
+    );
+    await expect(
+      helperService.queueClipFileOperation("clip-helpers", async () => "chained"),
+    ).resolves.toBe("chained");
+
+    expect(helperService.resolveReplayClipRenameTarget(sourceWithoutExt, "Renamed")).toBe(
+      resolve(join(root, "Renamed.mp4")),
+    );
+    expect(
+      helperService.resolveReplayClipRenameTarget(sourceWithoutExt, "\n\t"),
+    ).toBeNull();
+    expect(
+      helperService.resolveReplayClipRenameTarget(sourceWithoutExt, "A\tB"),
+    ).toBe(resolve(join(root, "A B.mp4")));
+    expect(
+      helperService.resolveReplayClipRenameTarget(sourceWithoutExt, ".mp4"),
+    ).toBe(resolve(join(root, ".mp4.mp4")));
+
+    await expect(
+      helperService.renderReplayClipQuickTrim({
+        sourcePath,
+        outputPath: renameOutput,
+        trim: { inSeconds: 1, outSeconds: 5 },
+        onProgress: vi.fn(),
+      }),
+    ).resolves.toBeUndefined();
+
+    const clipWithNoProcessedPath = createReplayClip({
+      id: "clip-no-processed",
+      durationSeconds: 20,
+      originalObsPath: sourcePath,
+      processedClipPath: null,
+    });
+    const updatedClip = helperService.createUpdatedClipForStoredPath({
+      clip: clipWithNoProcessedPath,
+      durationSeconds: 10,
+      path: sourcePath,
+      sizeBytes: 12,
+    });
+    expect(updatedClip.processedClipPath).toBeNull();
+
+    expect(helperService.resolveReplayClipQuickTrim({ inSeconds: 0, outSeconds: 20 }, Infinity))
+      .toEqual({ inSeconds: 0, outSeconds: 20 });
+
+    await expect(
+      service.updateClipFile({
+        id: "clip-helpers",
+        trim: { inSeconds: 0.0004, outSeconds: 20 },
+      }),
+    ).resolves.toMatchObject({ ok: true });
+  });
+
+  it("resolves rename targets and validates update operation ids", () => {
+    const internals = service as unknown as {
+      resolveReplayClipRenameTarget: (
+        sourcePath: string,
+        name: string | null,
+      ) => string | null;
+      validateUpdateInput: (
+        value: unknown,
+      ) => {
+        id: string;
+        name?: string;
+        trim?: { inSeconds: number; outSeconds: number };
+        operationRequestId?: string;
+      };
+    };
+
+    const sourcePath = join(root, "clip-source.mp4");
+    const existingBase = join(root, "renamed.mp4");
+    writeFileSync(sourcePath, "video");
+    writeFileSync(existingBase, "other");
+    const renameTarget = internals.resolveReplayClipRenameTarget(
+      sourcePath,
+      "Renamed",
+    );
+
+    expect(renameTarget).toBe(resolve(root, "Renamed (2).mp4"));
+
+    expect(internals.validateUpdateInput({ id: "clip-1", operationRequestId: "op" }))
+      .toEqual({
+        id: "clip-1",
+        operationRequestId: "op",
+      });
+  });
+
   it("registers IPC handlers with validation", async () => {
     const { handlers } = mockIpcMainHandlers();
     const ipcService = new ReplayClipsService();
@@ -1989,6 +2469,54 @@ describe("ReplayClipsService file actions", () => {
       deletedIds: ["clip-1"],
       failed: [],
     });
+    const sendProgress = vi.fn();
+    vi.spyOn(ipcService, "updateClipFile").mockImplementation(
+      (
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        _input: any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        options?: any,
+      ) => {
+        options?.onProgress?.({
+          operationRequestId: "op",
+          progress: 0.4,
+        });
+
+        return Promise.resolve({
+          detail: {
+            clip,
+            durationSeconds: null,
+            mediaUrl: "hinekora-media://replay-clip/clip-1",
+          },
+          error: null,
+          ok: true,
+        });
+      },
+    );
+    vi.spyOn(ipcService, "copyClipToClipboard").mockImplementation(
+      (
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        _input: any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        options?: any,
+      ) => {
+        options?.onProgress?.({
+          operationRequestId: "op",
+          progress: 0.6,
+        });
+
+        return Promise.resolve({ ok: true, error: null });
+      },
+    );
+    const eventWithProgress = {
+      sender: {
+        id: 42,
+        isDestroyed: () => false,
+        send: sendProgress,
+      },
+    };
+    registerIpcWindowRole({ id: 42 }, WindowName.Main);
+    registerIpcWindowRole({ id: 42 }, WindowName.ClipPreviewOverlay);
 
     expect(await handlers.get(ReplayClipsChannel.Get)?.({}, "clip-1")).toEqual({
       clip,
@@ -2033,10 +2561,11 @@ describe("ReplayClipsService file actions", () => {
     );
     expect(
       await handlers.get(ReplayClipsChannel.Update)?.(
-        {},
+        eventWithProgress,
         {
           id: "clip-1",
           name: "Renamed clip",
+          operationRequestId: "op",
           trim: { inSeconds: 1, outSeconds: 2 },
         },
       ),
@@ -2077,13 +2606,22 @@ describe("ReplayClipsService file actions", () => {
       handlers.get(ReplayClipsChannel.Open)?.(clipPreviewEvent, "clip-1"),
     ).toThrow(`${ReplayClipsChannel.Open} is not available from this window`);
     expect(
-      await handlers.get(ReplayClipsChannel.Copy)?.(clipPreviewEvent, {
+      await handlers.get(ReplayClipsChannel.Copy)?.(eventWithProgress, {
         id: "clip-1",
+        operationRequestId: "op",
         trim: { inSeconds: 1, outSeconds: 2 },
       }),
     ).toEqual({
       ok: true,
       error: null,
+    });
+    expect(sendProgress).toHaveBeenCalledWith(ReplayClipsChannel.OperationProgress, {
+      operationRequestId: "op",
+      progress: 0.4,
+    });
+    expect(sendProgress).toHaveBeenCalledWith(ReplayClipsChannel.OperationProgress, {
+      operationRequestId: "op",
+      progress: 0.6,
     });
     expect(
       await handlers.get(ReplayClipsChannel.Delete)?.({}, "clip-1"),

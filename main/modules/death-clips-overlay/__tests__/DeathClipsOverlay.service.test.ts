@@ -343,5 +343,19 @@ describe("DeathClipsOverlayService", () => {
     expect(electronMocks.BrowserWindow).toHaveBeenLastCalledWith(
       expect.objectContaining({ x: 240, y: 80, width: 560, height: 520 }),
     );
+
+    service.hide();
+    anchorBounds = {
+      x: 20,
+      y: 530,
+      width: 360,
+      height: 96,
+    };
+    const aboveClampedWindow = createFakeWindow();
+    electronMocks.browserWindowFactory.mockReturnValueOnce(aboveClampedWindow);
+    await service.showClip(createClip({ id: "above-using-clamp" }));
+    expect(electronMocks.BrowserWindow).toHaveBeenLastCalledWith(
+      expect.objectContaining({ x: 20, y: 2, width: 560, height: 520 }),
+    );
   });
 });

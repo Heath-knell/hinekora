@@ -68,6 +68,7 @@ import {
   resolveEditorFfmpegPath,
   runEditorFfmpeg,
 } from "../Editor.ffmpeg";
+import * as EditorFiles from "../Editor.files";
 import { EditorService } from "../Editor.service";
 
 const emptyProject: EditorProject = {
@@ -1643,6 +1644,57 @@ describe("EditorService IPC", () => {
     } finally {
       await rm(tempPath, { force: true, recursive: true });
       await rm(cleanupTempPath, { force: true, recursive: true });
+    }
+  });
+
+  it("survives clipboard cleanup failures during copy", async () => {
+    const tempPath = await mkdtemp(join(tmpdir(), "hinekora-editor-copy-cleanup-"));
+    const cleanupEditorClipboardOutputDirectory = vi
+      .spyOn(EditorFiles, "cleanupEditorClipboardOutputDirectory")
+      .mockRejectedValue(new Error("cleanup crashed"));
+    const renderExportWithFfmpeg = vi.fn(
+      async (input: { outputPath: string }) => {
+        await writeFile(input.outputPath, "clipboard");
+      },
+    );
+    const service = new EditorService({ renderExportWithFfmpeg });
+    const internals = service as unknown as {
+      createExportClips: () => Array<{
+        durationSeconds: number;
+        inSeconds: number;
+        outSeconds: number;
+        source: { path: string };
+        startSeconds: number;
+      }>;
+    };
+    vi.spyOn(internals, "createExportClips").mockReturnValue([
+      {
+        durationSeconds: 1,
+        inSeconds: 0,
+        outSeconds: 1,
+        source: { path: join(tempPath, "source.mp4") },
+        startSeconds: 0,
+      },
+    ]);
+    vi.spyOn(app, "getPath").mockReturnValue(tempPath);
+    vi.spyOn(FileClipboard, "copyFileToClipboard").mockResolvedValue({
+      ok: true,
+      error: null,
+    });
+
+    try {
+      await expect(
+        service.copyProjectToClipboard({
+          clips: [createExportClip()],
+          durationSeconds: 1,
+          fileName: "copy.mp4",
+          resolution: "720p",
+        }),
+      ).resolves.toEqual({ ok: true, error: null });
+      expect(cleanupEditorClipboardOutputDirectory).toHaveBeenCalledTimes(1);
+    } finally {
+      cleanupEditorClipboardOutputDirectory.mockRestore?.();
+      await rm(tempPath, { force: true, recursive: true });
     }
   });
 

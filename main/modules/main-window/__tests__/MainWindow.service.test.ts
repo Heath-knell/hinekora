@@ -925,6 +925,44 @@ describe("MainWindowService", () => {
     expect(electronMocks.BrowserWindow).not.toHaveBeenCalled();
   });
 
+  it("validates editor clip options with title and trim combinations", () => {
+    const service = new MainWindowService();
+    const internals = service as unknown as {
+      validateOpenEditorClipOptions: (
+        value: unknown,
+      ) => { trim?: { inSeconds: number; outSeconds: number }; title?: string } | null;
+    };
+
+    expect(internals.validateOpenEditorClipOptions(undefined)).toBeNull();
+    expect(internals.validateOpenEditorClipOptions({})).toEqual({});
+    expect(
+      internals.validateOpenEditorClipOptions({
+        title: "Renamed clip",
+        trim: { inSeconds: 1.25, outSeconds: 4.5 },
+      }),
+    ).toEqual({
+      trim: {
+        inSeconds: 1.25,
+        outSeconds: 4.5,
+      },
+      title: "Renamed clip",
+    });
+    expect(
+      internals.validateOpenEditorClipOptions({
+        trim: { inSeconds: 1.25, outSeconds: 4.5 },
+      }),
+    ).toEqual({
+      trim: {
+        inSeconds: 1.25,
+        outSeconds: 4.5,
+      },
+    });
+
+    expect(() =>
+      internals.validateOpenEditorClipOptions({ title: "Renamed clip" }),
+    ).toThrow("clip title requires clip trim");
+  });
+
   it("skips editor navigation when the main window is destroyed", async () => {
     const service = new MainWindowService();
     const fakeWindow = new FakeWindow();
@@ -954,3 +992,4 @@ describe("MainWindowService", () => {
     expect(fakeWindow.webContents.executeJavaScript).not.toHaveBeenCalled();
   });
 });
+

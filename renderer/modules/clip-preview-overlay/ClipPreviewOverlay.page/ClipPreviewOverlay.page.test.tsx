@@ -138,7 +138,7 @@ describe("ClipPreviewOverlayPage", () => {
     storeMocks.getClip.mockResolvedValue({
       clip,
       durationSeconds: 10,
-      mediaUrl: "hinekora-media://replay-clip/clip-1",
+      mediaUrl: "hinekora-media://replay-clip/main-provided-clip-1",
     });
     operationProgressListener = null;
     statusChangedListener = null;
@@ -176,7 +176,7 @@ describe("ClipPreviewOverlayPage", () => {
           processedClipPath: "C:\\clips\\Renamed clip.mp4",
         }),
         durationSeconds: 10,
-        mediaUrl: "hinekora-media://replay-clip/clip-1",
+        mediaUrl: "hinekora-media://replay-clip/main-provided-clip-1",
       },
       error: null,
       ok: true,
@@ -239,7 +239,11 @@ describe("ClipPreviewOverlayPage", () => {
   it("routes overlay actions to fullscreen, editor, save, clipboard, and explorer handlers", async () => {
     await renderPage();
     await flushPromises();
-    await markPreviewVideoReady();
+    const video = await markPreviewVideoReady();
+
+    expect(video.getAttribute("src")).toBe(
+      "hinekora-media://replay-clip/main-provided-clip-1?v=0",
+    );
 
     expect(container.textContent).toContain("Continue in editor");
     expect(container.textContent).toContain("Save clip");

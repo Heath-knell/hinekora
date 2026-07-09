@@ -12,6 +12,7 @@ import type {
   EditorWorkspace,
 } from "~/main/modules/editor";
 
+import type { QuickClipTrimRange } from "~/types";
 import type {
   EditorTimelineGap,
   TimelineTrimEdge,
@@ -53,9 +54,7 @@ interface HydrateMediaAssetsOptions {
   force?: boolean;
 }
 
-interface EditorSingleClipTrimDraft {
-  inSeconds: number;
-  outSeconds: number;
+interface EditorSingleClipTrimDraft extends QuickClipTrimRange {
   source: EditorMediaReference;
   title?: string | null;
 }

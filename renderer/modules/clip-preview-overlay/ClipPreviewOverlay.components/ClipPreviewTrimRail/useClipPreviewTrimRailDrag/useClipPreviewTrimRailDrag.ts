@@ -15,7 +15,7 @@ interface UseClipPreviewTrimRailDragInput {
   onSeek: (seconds: number, options?: { preservePlayback?: boolean }) => void;
   onTrimChange: (
     trim: ClipPreviewTrimRange,
-    options?: { previewMedia?: boolean; previewSeconds: number },
+    options?: { previewSeconds: number },
   ) => void;
 }
 
@@ -76,7 +76,6 @@ function useClipPreviewTrimRailDrag({
       outSeconds: edge === "end" ? seconds : currentTrim.outSeconds,
     });
     onTrimChange(nextTrim, {
-      previewMedia: true,
       previewSeconds: edge === "end" ? nextTrim.outSeconds : nextTrim.inSeconds,
     });
   };
@@ -105,7 +104,6 @@ function useClipPreviewTrimRailDrag({
       trimDurationSeconds: state.trimDurationSeconds,
     });
     onTrimChange(nextTrim, {
-      previewMedia: true,
       previewSeconds: nextTrim.inSeconds,
     });
   };
