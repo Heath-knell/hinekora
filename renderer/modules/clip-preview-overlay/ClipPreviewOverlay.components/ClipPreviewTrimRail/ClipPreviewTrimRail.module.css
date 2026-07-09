@@ -1,4 +1,6 @@
 .rail {
+  --clip-preview-trim-handle-width: 12px;
+
   display: grid;
   gap: 0.35rem;
   min-width: 0;
@@ -9,6 +11,7 @@
   position: relative;
   min-width: 0;
   height: 0.8rem;
+  margin-inline: var(--clip-preview-trim-handle-width);
   color: color-mix(in oklch, var(--color-base-content) 68%, transparent);
   font-size: 0.72rem;
   line-height: 1;
@@ -56,13 +59,13 @@
 
 .track {
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   height: 36px;
+  margin-inline: var(--clip-preview-trim-handle-width);
   border: 1px solid
     color-mix(in oklch, var(--color-base-content) 14%, transparent);
   border-radius: 6px;
-  background:
-    repeating-linear-gradient(
+  background: repeating-linear-gradient(
       90deg,
       color-mix(in oklch, var(--color-base-content) 11%, transparent) 0 1px,
       transparent 1px 12px
@@ -77,6 +80,15 @@
   bottom: 0;
   z-index: 10;
   background: rgb(0 0 0 / 58%);
+  pointer-events: none;
+}
+
+.shade:first-of-type {
+  border-radius: 6px 0 0 6px;
+}
+
+.shade:nth-of-type(2) {
+  border-radius: 0 6px 6px 0;
 }
 
 .selection {
@@ -85,7 +97,7 @@
   bottom: 0;
   z-index: 20;
   border: 1px solid color-mix(in oklch, var(--color-base-content) 82%, white);
-  border-radius: 6px;
+  border-radius: 0;
   padding: 0;
   background: color-mix(in oklch, var(--color-primary) 13%, transparent);
   box-shadow: 0 0 0 1px rgb(0 0 0 / 34%);
@@ -107,7 +119,7 @@
   right: 0;
   bottom: 0;
   left: 0;
-  z-index: 35;
+  z-index: 45;
   pointer-events: none;
   transform: translate3d(0, 0, 0);
   will-change: transform;
@@ -115,13 +127,14 @@
 
 .playhead {
   position: absolute;
-  top: 0;
-  bottom: 0;
+  top: -6px;
+  bottom: -6px;
   left: 0;
-  width: 2px;
+  width: 4px;
   border-radius: 999px;
-  background: var(--color-base-content);
-  box-shadow: 0 0 0 1px rgb(0 0 0 / 35%);
+  background: vaR(--color-primary);
+  box-shadow: 0 0 10px var(--color-primary);
+  transform: translateX(-50%);
 }
 
 .handle {
@@ -130,9 +143,9 @@
   bottom: 0;
   z-index: 40;
   display: grid;
-  width: 12px;
+  width: var(--clip-preview-trim-handle-width);
   place-items: center;
-  border: 0;
+  border: 1px solid color-mix(in oklch, var(--color-base-content) 74%, white);
   background: color-mix(in oklch, var(--color-base-content) 22%, transparent);
   color: color-mix(in oklch, var(--color-base-content) 92%, white);
   cursor: ew-resize;
@@ -149,14 +162,12 @@
 }
 
 .handleStart {
-  border-right: 1px solid
-    color-mix(in oklch, var(--color-base-content) 56%, transparent);
-  border-radius: 6px 3px 3px 6px;
+  border-right: 0;
+  border-radius: 4px 0 0 4px;
+  transform: translateX(-100%);
 }
 
 .handleEnd {
-  border-left: 1px solid
-    color-mix(in oklch, var(--color-base-content) 56%, transparent);
-  border-radius: 3px 6px 6px 3px;
-  transform: translateX(-100%);
+  border-left: 0;
+  border-radius: 0 4px 4px 0;
 }
