@@ -249,7 +249,9 @@ function ClipDetailPage({ clipId }: ClipDetailPageProps) {
               <div>
                 <div className="text-base-content/55 text-xs">Length</div>
                 <div className="font-semibold text-sm">
-                  {formatDurationSeconds(clip.targetDurationSeconds)}
+                  {formatDurationSeconds(
+                    clip.durationSeconds ?? clip.targetDurationSeconds,
+                  )}
                 </div>
               </div>
               <div>

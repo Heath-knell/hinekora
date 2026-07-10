@@ -25,12 +25,8 @@ import type {
   RunRecordingLibraryQuery,
 } from "~/main/modules/recording-storage/RecordingStorage.dto";
 import type {
-  ReplayClipCopyInput,
-  ReplayClipFileActionResult,
   ReplayClipLibraryPage,
   ReplayClipLibraryQuery,
-  ReplayClipUpdateInput,
-  ReplayClipUpdateResult,
   ReplayClipView,
 } from "~/main/modules/replay-clips";
 import type { SettingsStoreScopedSnapshot } from "~/main/modules/settings-store/SettingsStore.dto";
@@ -203,12 +199,6 @@ export interface ReplayClipsSlice {
     hydrateLibrary: (query: ReplayClipLibraryQuery) => Promise<void>;
     refreshLibrary: () => Promise<void>;
     saveManualReplay: () => Promise<void>;
-    updateClip: (
-      input: ReplayClipUpdateInput,
-    ) => Promise<ReplayClipUpdateResult>;
-    copyClip: (
-      input: string | ReplayClipCopyInput,
-    ) => Promise<ReplayClipFileActionResult>;
     openClip: (id: string) => Promise<void>;
     revealClip: (id: string) => Promise<void>;
     deleteClip: (id: string) => Promise<void>;

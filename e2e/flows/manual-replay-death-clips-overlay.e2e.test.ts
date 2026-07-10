@@ -8,6 +8,9 @@ import {
   setupDashboardE2E,
 } from "../helpers/dashboard-fixture";
 
+const clipPreviewMediaDataUrl =
+  "data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAMUbW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAA+gAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAj90cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAA+gAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAABAAAAAQAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAAPoAAAAAAABAAAAAAG3bWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAABAAAAAQABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABYm1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAASJzdGJsAAAAvnN0c2QAAAAAAAAAAQAAAK5hdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAABAAEABIAAAASAAAAAAAAAABFUxhdmM2MS4xOS4xMDEgbGlieDI2NAAAAAAAAAAAAAAAGP//AAAANGF2Y0MBZAAK/+EAF2dkAAqs2V7ARAAAAwAEAAADAAg8SJZYAQAGaOvjyyLA/fj4AAAAABBwYXNwAAAAAQAAAAEAAAAUYnRydAAAAAAAABYoAAAAAAAAABhzdHRzAAAAAAAAAAEAAAABAABAAAAAABxzdHNjAAAAAAAAAAEAAAABAAAAAQAAAAEAAAAUc3RzegAAAAAAAALFAAAAAQAAABRzdGNvAAAAAAAAAAEAAANEAAAAYXVkdGEAAABZbWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAbWRpcmFwcGwAAAAAAAAAAAAAAAAsaWxzdAAAACSpdG9vAAAAHGRhdGEAAAABAAAAAExhdmY2MS43LjEwMAAAAAhmcmVlAAACzW1kYXQAAAKtBgX//6ncRem95tlIt5Ys2CDZI+7veDI2NCAtIGNvcmUgMTY0IHIzMTA2IGVhYTY4ZmEgLSBILjI2NC9NUEVHLTQgQVZDIGNvZGVjIC0gQ29weWxlZnQgMjAwMy0yMDIzIC0gaHR0cDovL3d3dy52aWRlb2xhbi5vcmcveDI2NC5odG1sIC0gb3B0aW9uczogY2FiYWM9MSByZWY9MyBkZWJsb2NrPTE6MDowIGFuYWx5c2U9MHgzOjB4MTEzIG1lPWhleCBzdWJtZT03IHBzeT0xIHBzeV9yZD0xLjAwOjAuMDAgbWl4ZWRfcmVmPTEgbWVfcmFuZ2U9MTYgY2hyb21hX21lPTEgdHJlbGxpcz0xIDh4OGRjdD0xIGNxbT0wIGRlYWR6b25lPTIxLDExIGZhc3RfcHNraXA9MSBjaHJvbWFfcXBfb2Zmc2V0PS0yIHRocmVhZHM9MSBsb29rYWhlYWRfdGhyZWFkcz0xIHNsaWNlZF90aHJlYWRzPTAgbnI9MCBkZWNpbWF0ZT0xIGludGVybGFjZWQ9MCBibHVyYXlfY29tcGF0PTAgY29uc3RyYWluZWRfaW50cmE9MCBiZnJhbWVzPTMgYl9weXJhbWlkPTIgYl9hZGFwdD0xIGJfYmlhcz0wIGRpcmVjdD0xIHdlaWdodGI9MSBvcGVuX2dvcD0wIHdlaWdodHA9MiBrZXlpbnQ9MjUwIGtleWludF9taW49MSBzY2VuZWN1dD00MCBpbnRyYV9yZWZyZXNoPTAgcmNfbG9va2FoZWFkPTQwIHJjPWNyZiBtYnRyZWU9MSBjcmY9MjMuMCBxY29tcD0wLjYwIHFwbWluPTAgcXBtYXg9NjkgcXBzdGVwPTQgaXBfcmF0aW89MS40MCBhcT0xOjEuMDAAgAAAABBliIQAFf/+98nvwKbr29+B";
+
 function createReplayClipDetail(
   id: string,
   status: ReplayClipDetail["clip"]["status"] = "ready",
@@ -17,7 +20,7 @@ function createReplayClipDetail(
 
   return {
     durationSeconds,
-    mediaUrl: status === "ready" ? `hinekora-media://replay-clip/${id}` : null,
+    mediaUrl: status === "ready" ? "/__e2e_clip_preview.mp4" : null,
     clip: {
       createdAt,
       deathTimestamp: createdAt,
@@ -180,6 +183,13 @@ async function setupReadyClipPreviewOverlay(
     replayClipOperationDelayMs?: number;
   },
 ) {
+  await page.route("**/__e2e_clip_preview.mp4*", (route) =>
+    route.fulfill({
+      body: Buffer.from(clipPreviewMediaDataUrl.split(",")[1] ?? "", "base64"),
+      contentType: "video/mp4",
+      status: 200,
+    }),
+  );
   const replayClipDetails: Record<string, ReplayClipDetail> = {
     [input.clipId]: createReplayClipDetail(
       input.clipId,
@@ -327,15 +337,19 @@ test("covers manual replay and death clip overlay actions", async ({
     })
     .toBe(1);
 
+  const beforeTimelineSeek = await getClipPreviewVideoState(page);
   await clickTimelineAtPercent(page, 0.5);
   await expectPlaybackTimestamp(page, "06.00 / 12.00");
   await expect
     .poll(async () => {
       const state = await getClipPreviewVideoState(page);
 
-      return { pauseCalls: state.pauseCalls, playCalls: state.playCalls };
+      return {
+        pauseCalls: state.pauseCalls - beforeTimelineSeek.pauseCalls,
+        playCalls: state.playCalls - beforeTimelineSeek.playCalls,
+      };
     })
-    .toEqual({ pauseCalls: 1, playCalls: 2 });
+    .toEqual({ pauseCalls: 1, playCalls: 1 });
 
   await page.getByLabel("Pause replay").click();
   await expect(page.getByLabel("Play replay")).toBeVisible();

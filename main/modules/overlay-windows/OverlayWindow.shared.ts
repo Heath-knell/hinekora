@@ -35,7 +35,7 @@ function applyGameOverlayContentProtection(
     return;
   }
 
-  window.setContentProtection(false);
+  window.setContentProtection(enabled);
 }
 
 function configureGameOverlayWindow(

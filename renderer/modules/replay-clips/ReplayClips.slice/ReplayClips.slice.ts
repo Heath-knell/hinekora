@@ -27,7 +27,7 @@ function getReplayClipSortValue(
     case "sourceLeague":
       return clip.sourceLeague;
     case "targetDurationSeconds":
-      return clip.targetDurationSeconds;
+      return clip.durationSeconds ?? clip.targetDurationSeconds;
     case "sizeBytes":
       return clip.sizeBytes;
     default:
@@ -239,34 +239,9 @@ export const createReplayClipsSlice: BoundStoreStateCreator<
         });
         trackEvent("clip-manual-save-requested");
       },
-      updateClip: async (input) => {
-        const result = await window.electron.replayClips.update(input);
-        if (!result.ok || !result.detail) {
-          set((state) => {
-            state.replayClips.error = result.error ?? "Clip update failed";
-          });
-          return result;
-        }
-
-        patchReplayClipState(result.detail.clip);
-        trackEvent("clip-updated");
-        return result;
-      },
       openClip: async (id: string) => {
         await window.electron.replayClips.open(id);
         trackEvent("clip-opened");
-      },
-      copyClip: async (input) => {
-        const result = await window.electron.replayClips.copy(input);
-        if (!result.ok) {
-          set((state) => {
-            state.replayClips.error = result.error ?? "Clip copy failed";
-          });
-          return result;
-        }
-
-        trackEvent("clip-copied");
-        return result;
       },
       revealClip: async (id: string) => {
         await window.electron.replayClips.reveal(id);

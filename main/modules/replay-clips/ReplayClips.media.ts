@@ -2,6 +2,8 @@ import { stat } from "node:fs/promises";
 import { extname } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { parseMediaRange } from "./ReplayClips.range";
+
 const HINEKORA_MEDIA_SCHEME = "hinekora-media";
 const REPLAY_CLIP_MEDIA_HOST = "replay-clip";
 const RUN_RECORDING_MEDIA_HOST = "run-recording";
@@ -14,15 +16,13 @@ interface HinekoraMediaRequestTarget {
   kind: HinekoraMediaKind;
 }
 
-interface MediaByteRange {
-  end: number;
-  start: number;
-}
-
 type MediaFileFetcher = (url: string, init: RequestInit) => Promise<Response>;
 
-export function createReplayClipMediaUrl(id: string): string {
-  return createHinekoraMediaUrl(REPLAY_CLIP_MEDIA_HOST, id);
+export function createReplayClipMediaUrl(
+  id: string,
+  version?: string | null,
+): string {
+  return createHinekoraMediaUrl(REPLAY_CLIP_MEDIA_HOST, id, version);
 }
 
 export function createRunRecordingMediaUrl(id: string): string {
@@ -82,6 +82,7 @@ export async function createReplayClipMediaFileResponse(
   if (rangeHeader && !range) {
     const responseHeaders = new Headers({
       "Accept-Ranges": "bytes",
+      "Cache-Control": "no-store",
       "Content-Range": `bytes */${fileSize}`,
     });
     applyMediaCorsHeaders(responseHeaders, corsOrigin);
@@ -97,6 +98,7 @@ export async function createReplayClipMediaFileResponse(
   // Electron applies file byte ranges but reports them as headerless 200s.
   const responseHeaders = new Headers(fileResponse.headers);
   responseHeaders.set("Accept-Ranges", "bytes");
+  responseHeaders.set("Cache-Control", "no-store");
   if (!responseHeaders.has("Content-Type")) {
     responseHeaders.set("Content-Type", resolveMediaContentType(clipPath));
   }
@@ -124,47 +126,6 @@ async function resolveMediaFileSize(clipPath: string): Promise<number | null> {
   } catch {
     return null;
   }
-}
-
-function parseMediaRange(
-  rangeHeader: string,
-  fileSize: number,
-): MediaByteRange | null {
-  const match = /^bytes=(\d*)-(\d*)$/i.exec(rangeHeader.trim());
-  if (!match) {
-    return null;
-  }
-
-  const startText = match[1] ?? "";
-  const endText = match[2] ?? "";
-  if (!startText && !endText) {
-    return null;
-  }
-  if (!startText) {
-    const suffixLength = Number(endText);
-    if (!Number.isInteger(suffixLength) || suffixLength <= 0) {
-      return null;
-    }
-
-    return {
-      start: Math.max(fileSize - suffixLength, 0),
-      end: fileSize - 1,
-    };
-  }
-
-  const start = Number(startText);
-  const end = endText ? Number(endText) : fileSize - 1;
-  if (
-    !Number.isInteger(start) ||
-    !Number.isInteger(end) ||
-    start < 0 ||
-    end < start ||
-    start >= fileSize
-  ) {
-    return null;
-  }
-
-  return { start, end: Math.min(end, fileSize - 1) };
 }
 
 function applyMediaCorsHeaders(
@@ -217,8 +178,14 @@ function resolveMediaContentType(clipPath: string): string {
   }
 }
 
-function createHinekoraMediaUrl(host: string, id: string): string {
-  return `${HINEKORA_MEDIA_SCHEME}://${host}/${encodeURIComponent(id)}`;
+function createHinekoraMediaUrl(
+  host: string,
+  id: string,
+  version?: string | null,
+): string {
+  const url = `${HINEKORA_MEDIA_SCHEME}://${host}/${encodeURIComponent(id)}`;
+
+  return version ? `${url}?v=${encodeURIComponent(version)}` : url;
 }
 
 function resolveMediaKind(host: string): HinekoraMediaKind | null {

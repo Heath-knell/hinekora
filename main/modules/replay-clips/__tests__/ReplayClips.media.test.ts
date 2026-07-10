@@ -32,6 +32,9 @@ describe("ReplayClips.media", () => {
     expect(createReplayClipMediaUrl("clip one")).toBe(
       "hinekora-media://replay-clip/clip%20one",
     );
+    expect(createReplayClipMediaUrl("clip one", "updated now")).toBe(
+      "hinekora-media://replay-clip/clip%20one?v=updated%20now",
+    );
     expect(createRunRecordingMediaUrl("recording-1")).toBe(
       "hinekora-media://run-recording/recording-1",
     );
@@ -47,6 +50,11 @@ describe("ReplayClips.media", () => {
     ).toBe(null);
     expect(
       resolveHinekoraMediaRequestTarget("hinekora-media://other/item"),
+    ).toBe(null);
+    expect(
+      resolveHinekoraMediaRequestTarget(
+        "hinekora-media://replay-clip/%E0%A4%A",
+      ),
     ).toBe(null);
   });
 
@@ -80,6 +88,7 @@ describe("ReplayClips.media", () => {
     expect(rangeResponse.status).toBe(206);
     expect(rangeResponse.headers.get("Content-Length")).toBe("3");
     expect(rangeResponse.headers.get("Content-Range")).toBe("bytes 1-3/6");
+    expect(rangeResponse.headers.get("Cache-Control")).toBe("no-store");
     await expect(rangeResponse.text()).resolves.toBe("bcd");
 
     const suffixResponse = await createReplayClipMediaFileResponse(
@@ -221,6 +230,28 @@ describe("ReplayClips.media", () => {
       fetchFile,
     );
     expect(blockedResponse.status).toBe(403);
+
+    for (const origin of ["null", "file://"]) {
+      const localResponse = await createMediaFileResponse(
+        path,
+        new Request("hinekora-media://replay-clip/clip-1", {
+          headers: { origin },
+        }),
+        fetchFile,
+      );
+      expect(localResponse.headers.get("Access-Control-Allow-Origin")).toBe(
+        origin,
+      );
+    }
+
+    const malformedOriginResponse = await createMediaFileResponse(
+      path,
+      new Request("hinekora-media://replay-clip/clip-1", {
+        headers: { origin: "://invalid" },
+      }),
+      fetchFile,
+    );
+    expect(malformedOriginResponse.status).toBe(403);
 
     const methodResponse = await createMediaFileResponse(
       path,

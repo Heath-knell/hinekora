@@ -1,28 +1,17 @@
 import type { RefObject, SyntheticEvent } from "react";
-import { useCallback, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 
 import { trackEvent } from "~/renderer/modules/umami";
 
 import {
   type ClipPreviewTrimRange,
-  clampClipPreviewPlaybackSeconds,
   roundClipPreviewSeconds,
 } from "../../ClipPreviewOverlay.utils/ClipPreviewOverlay.utils";
-
-interface SeekPreviewOptions {
-  preservePlayback?: boolean;
-}
-
-interface ClipPreviewPlaybackPresentationMetrics {
-  frameCallbacks: number;
-  maxFrameCallbackGapMs: number;
-  presentationUpdates: number;
-}
-
-interface ClipPreviewPlaybackPresentationMetricsState
-  extends ClipPreviewPlaybackPresentationMetrics {
-  lastFrameCallbackTimeMs: number | null;
-}
+import { useClipPreviewOverlaySeek } from "../useClipPreviewOverlaySeek/useClipPreviewOverlaySeek";
+import {
+  type ClipPreviewPlaybackPresentationMetrics,
+  useClipPreviewOverlayVideoFrames,
+} from "../useClipPreviewOverlayVideoFrames/useClipPreviewOverlayVideoFrames";
 
 interface UseClipPreviewOverlayPlaybackInput {
   canUseClip: boolean;
@@ -33,6 +22,7 @@ interface UseClipPreviewOverlayPlaybackInput {
   isPlaying: boolean;
   setDurationOverrideSeconds: (durationOverrideSeconds: number | null) => void;
   setMediaReady: (isMediaReady: boolean) => void;
+  setMediaError: (mediaError: string | null) => void;
   setMuted: (isMuted: boolean) => void;
   setPlaying: (isPlaying: boolean) => void;
   setTrim: (trim: ClipPreviewTrimRange) => void;
@@ -46,18 +36,6 @@ function seekVideo(video: HTMLVideoElement, seconds: number): void {
   video.currentTime = seconds;
 }
 
-function clearPendingSeek(
-  pendingSeekSecondsRef: RefObject<number | null>,
-  seconds: number,
-): void {
-  if (
-    pendingSeekSecondsRef.current !== null &&
-    Math.abs(pendingSeekSecondsRef.current - seconds) < 0.01
-  ) {
-    pendingSeekSecondsRef.current = null;
-  }
-}
-
 function useClipPreviewOverlayPlayback({
   canUseClip,
   clipId,
@@ -67,6 +45,7 @@ function useClipPreviewOverlayPlayback({
   isPlaying,
   setDurationOverrideSeconds,
   setMediaReady,
+  setMediaError,
   setMuted,
   setPlaying,
   setTrim,
@@ -78,28 +57,7 @@ function useClipPreviewOverlayPlayback({
   const pendingSeekSecondsRef = useRef<number | null>(null);
   const resumePlaybackAfterSeekRef = useRef(false);
   const videoSrcRef = useRef(videoSrc);
-  const presentationMetricsRef =
-    useRef<ClipPreviewPlaybackPresentationMetricsState>({
-      frameCallbacks: 0,
-      lastFrameCallbackTimeMs: null,
-      maxFrameCallbackGapMs: 0,
-      presentationUpdates: 0,
-    });
   const videoRef = useRef<HTMLVideoElement>(null);
-
-  const consumePlaybackPresentationMetrics = useCallback(() => {
-    const metrics = presentationMetricsRef.current;
-    const snapshot: ClipPreviewPlaybackPresentationMetrics = {
-      frameCallbacks: metrics.frameCallbacks,
-      maxFrameCallbackGapMs: metrics.maxFrameCallbackGapMs,
-      presentationUpdates: metrics.presentationUpdates,
-    };
-    metrics.frameCallbacks = 0;
-    metrics.maxFrameCallbackGapMs = 0;
-    metrics.presentationUpdates = 0;
-
-    return snapshot;
-  }, []);
 
   useEffect(() => {
     if (videoSrcRef.current === videoSrc) {
@@ -111,134 +69,26 @@ function useClipPreviewOverlayPlayback({
     resumePlaybackAfterSeekRef.current = false;
   }, [videoSrc]);
 
-  useEffect(() => {
-    if (!isPlaying) {
-      return;
-    }
-
-    const video = videoRef.current;
-    if (!video || typeof video.requestVideoFrameCallback !== "function") {
-      return;
-    }
-
-    let videoFrameCallbackId: number | null = null;
-    presentationMetricsRef.current.lastFrameCallbackTimeMs = null;
-    const renderPresentedFrame: VideoFrameRequestCallback = (
-      timeMs,
-      metadata,
-    ) => {
-      if (video.paused || video.ended) {
-        videoFrameCallbackId = null;
-        return;
-      }
-
-      const metrics = presentationMetricsRef.current;
-      metrics.frameCallbacks += 1;
-      if (metrics.lastFrameCallbackTimeMs !== null) {
-        metrics.maxFrameCallbackGapMs = Math.max(
-          metrics.maxFrameCallbackGapMs,
-          timeMs - metrics.lastFrameCallbackTimeMs,
-        );
-      }
-      metrics.lastFrameCallbackTimeMs = timeMs;
-      metrics.presentationUpdates += 1;
-      const pendingSeekSeconds = pendingSeekSecondsRef.current;
-      if (pendingSeekSeconds !== null) {
-        if (!video.seeking) {
-          pendingSeekSecondsRef.current = null;
-          updatePlaybackFrame(
-            clampClipPreviewPlaybackSeconds(
-              metadata.mediaTime,
-              durationSeconds,
-            ),
-          );
-        } else {
-          updatePlaybackFrame(pendingSeekSeconds);
-        }
-      } else if (!video.seeking) {
-        const presentedSeconds = clampClipPreviewPlaybackSeconds(
-          metadata.mediaTime,
-          durationSeconds,
-        );
-        if (presentedSeconds >= trim.outSeconds) {
-          updatePlaybackFrame(trim.outSeconds);
-          video.pause();
-          setPlaying(false);
-          videoFrameCallbackId = null;
-          return;
-        }
-
-        updatePlaybackFrame(presentedSeconds);
-      }
-      videoFrameCallbackId =
-        video.requestVideoFrameCallback(renderPresentedFrame);
-    };
-
-    videoFrameCallbackId =
-      video.requestVideoFrameCallback(renderPresentedFrame);
-
-    return () => {
-      presentationMetricsRef.current.lastFrameCallbackTimeMs = null;
-      if (videoFrameCallbackId !== null) {
-        video.cancelVideoFrameCallback(videoFrameCallbackId);
-      }
-    };
-  }, [
-    durationSeconds,
-    isPlaying,
-    setPlaying,
-    trim.outSeconds,
-    updatePlaybackFrame,
-  ]);
-
-  const seekPreview = (seconds: number, options?: SeekPreviewOptions) => {
-    const nextSeconds = clampClipPreviewPlaybackSeconds(
-      seconds,
+  const { consumePlaybackPresentationMetrics } =
+    useClipPreviewOverlayVideoFrames({
       durationSeconds,
-    );
-    const video = videoRef.current;
-    pendingSeekSecondsRef.current = nextSeconds;
-    const shouldResumePlayback =
-      options?.preservePlayback === true &&
-      Boolean(
-        video &&
-          canUseClip &&
-          (resumePlaybackAfterSeekRef.current || !video.paused),
-      );
-    resumePlaybackAfterSeekRef.current = shouldResumePlayback;
-
-    if (video && !video.paused) {
-      video.pause();
-    }
-    setPlaying(false);
-    syncPlaybackPresentation(nextSeconds);
-    const resumeImmediately = () => {
-      if (!resumePlaybackAfterSeekRef.current || !video) {
-        return;
-      }
-
-      resumePlaybackAfterSeekRef.current = false;
-      void video.play().catch((error: unknown) => {
-        console.warn("[clip-preview] Could not resume preview", { error });
-        setPlaying(false);
-      });
-    };
-    if (
-      video &&
-      canUseClip &&
-      video.readyState >= HTMLMediaElement.HAVE_METADATA
-    ) {
-      if (Math.abs(video.currentTime - nextSeconds) < 0.01) {
-        clearPendingSeek(pendingSeekSecondsRef, nextSeconds);
-        resumeImmediately();
-      } else {
-        seekVideo(video, nextSeconds);
-      }
-    } else {
-      clearPendingSeek(pendingSeekSecondsRef, nextSeconds);
-      resumeImmediately();
-    }
-  };
+      isPlaying,
+      pendingSeekSecondsRef,
+      setPlaying,
+      trimOutSeconds: trim.outSeconds,
+      updatePlaybackFrame,
+      videoRef,
+    });
+  const { handleSeeked, handleSeeking, seekPreview } =
+    useClipPreviewOverlaySeek({
+      canUseClip,
+      durationSeconds,
+      pendingSeekSecondsRef,
+      resumePlaybackAfterSeekRef,
+      setPlaying,
+      syncPlaybackPresentation,
+      videoRef,
+    });
 
   const handleEnterFullscreen = () => {
     const video = videoRef.current;
@@ -313,6 +163,7 @@ function useClipPreviewOverlayPlayback({
   };
 
   const handleLoadStart = () => {
+    setMediaError(null);
     setMediaReady(false);
   };
 
@@ -359,36 +210,6 @@ function useClipPreviewOverlayPlayback({
     setPlaying(true);
   };
 
-  const handleSeeking = () => {
-    const pendingSeconds = pendingSeekSecondsRef.current;
-    if (pendingSeconds !== null) {
-      syncPlaybackPresentation(pendingSeconds);
-    }
-  };
-
-  const handleSeeked = () => {
-    const video = videoRef.current;
-    const pendingSeconds = pendingSeekSecondsRef.current;
-    if (pendingSeconds !== null) {
-      syncPlaybackPresentation(pendingSeconds);
-      if (!video) {
-        pendingSeekSecondsRef.current = null;
-        resumePlaybackAfterSeekRef.current = false;
-      } else if (resumePlaybackAfterSeekRef.current) {
-        resumePlaybackAfterSeekRef.current = false;
-        void video.play().catch((error: unknown) => {
-          pendingSeekSecondsRef.current = null;
-          console.warn("[clip-preview] Could not resume preview", { error });
-          setPlaying(false);
-        });
-      } else if (Math.abs(video.currentTime - pendingSeconds) < 0.1) {
-        pendingSeekSecondsRef.current = null;
-      }
-    } else if (video) {
-      syncPlaybackPresentation(roundClipPreviewSeconds(video.currentTime));
-    }
-  };
-
   const handleCanPlay = () => {
     setMediaReady(true);
   };
@@ -423,6 +244,11 @@ function useClipPreviewOverlayPlayback({
     pendingSeekSecondsRef.current = null;
     resumePlaybackAfterSeekRef.current = false;
     const mediaError = event.currentTarget.error;
+    setMediaReady(false);
+    setPlaying(false);
+    setMediaError(
+      mediaError?.message || "The replay preview could not be loaded.",
+    );
     console.warn("[clip-preview] Replay video failed to load", {
       clipId,
       code: mediaError?.code ?? null,

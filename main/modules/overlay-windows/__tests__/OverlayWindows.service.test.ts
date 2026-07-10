@@ -378,6 +378,52 @@ describe("OverlayWindowsService", () => {
     expect(deathClipsOverlay.hide).toHaveBeenCalledTimes(1);
   });
 
+  it("restores clip preview resources after failures and guards repeated transitions", async () => {
+    const service = new OverlayWindowsService();
+    const internals = service as unknown as {
+      auraManagerOverlays: {
+        restoreRequestedOverlay(): Promise<void>;
+        setClipPreviewSuspended(suspended: boolean): void;
+      };
+      clipPreviewResourceRestoreEnabled: boolean;
+      deathClipsOverlay: {
+        showClip(clip: ReplayClip): Promise<void>;
+      };
+      restoreClipPreviewResources(): void;
+      suspendClipPreviewResources(): void;
+    };
+    const setClipPreviewSuspended = vi
+      .spyOn(internals.auraManagerOverlays, "setClipPreviewSuspended")
+      .mockImplementation(() => undefined);
+    const restoreRequestedOverlay = vi
+      .spyOn(internals.auraManagerOverlays, "restoreRequestedOverlay")
+      .mockResolvedValue(undefined);
+    vi.spyOn(internals.deathClipsOverlay, "showClip").mockRejectedValue(
+      new Error("preview failed"),
+    );
+
+    await expect(
+      service.showClipPreviewOverlay({} as ReplayClip),
+    ).rejects.toThrow("preview failed");
+    expect(setClipPreviewSuspended).toHaveBeenNthCalledWith(1, true);
+    expect(setClipPreviewSuspended).toHaveBeenNthCalledWith(2, false);
+    expect(restoreRequestedOverlay).toHaveBeenCalledTimes(1);
+
+    setClipPreviewSuspended.mockClear();
+    restoreRequestedOverlay.mockClear();
+    internals.suspendClipPreviewResources();
+    internals.suspendClipPreviewResources();
+    expect(setClipPreviewSuspended).toHaveBeenCalledTimes(1);
+    expect(setClipPreviewSuspended).toHaveBeenCalledWith(true);
+
+    internals.clipPreviewResourceRestoreEnabled = false;
+    internals.restoreClipPreviewResources();
+    internals.restoreClipPreviewResources();
+    expect(setClipPreviewSuspended).toHaveBeenCalledTimes(2);
+    expect(setClipPreviewSuspended).toHaveBeenLastCalledWith(false);
+    expect(restoreRequestedOverlay).not.toHaveBeenCalled();
+  });
+
   it("applies the overlay capture protection setting to open overlay windows", async () => {
     let handleSettingsChange:
       | ((settings: {

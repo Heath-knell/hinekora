@@ -148,7 +148,7 @@ class StateTransferService {
         return { ok: false, path: null, error: null };
       }
 
-      const bundle = this.createBundle();
+      const bundle = await this.createBundle();
       await fs.writeFile(
         result.filePath,
         JSON.stringify(bundle, null, 2),
@@ -245,7 +245,7 @@ class StateTransferService {
     }
   }
 
-  private createBundle(): StateBundle {
+  private async createBundle(): Promise<StateBundle> {
     return StateBundleSchema.parse({
       format: "hinekora-state",
       formatVersion: 1,
@@ -255,7 +255,7 @@ class StateTransferService {
         profiles: ProfilesService.getInstance().list(),
         captureProfiles: CaptureProfilesService.getInstance().list(),
         settings: SettingsStoreService.getInstance().get(),
-        replayClips: ReplayClipsService.getInstance().list(),
+        replayClips: await ReplayClipsService.getInstance().list(),
       },
     });
   }

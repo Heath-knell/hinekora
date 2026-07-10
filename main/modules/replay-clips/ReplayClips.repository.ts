@@ -429,7 +429,7 @@ class ReplayClipsRepository {
       case "sourceLeague":
         return "source_league";
       case "targetDurationSeconds":
-        return "target_duration_seconds";
+        return sql<number>`coalesce(duration_seconds, target_duration_seconds)`;
       case "sizeBytes":
         return "size_bytes";
       case "createdAt":

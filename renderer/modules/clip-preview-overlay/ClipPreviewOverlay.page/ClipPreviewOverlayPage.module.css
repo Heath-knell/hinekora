@@ -216,6 +216,12 @@
     infinite;
 }
 
+.previewErrorActions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
 .bottomBar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

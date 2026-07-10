@@ -158,7 +158,9 @@ function ReplayClipsPanel({
 
     tableColumns.push(
       {
-        accessorKey: "targetDurationSeconds",
+        id: "targetDurationSeconds",
+        accessorFn: (clip) =>
+          clip.durationSeconds ?? clip.targetDurationSeconds,
         header: "Length",
         cell: ({ getValue }) => formatDurationSeconds(getValue<number>()),
       },

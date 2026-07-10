@@ -153,6 +153,35 @@ describe("DiagLogService", () => {
       error: "nested must be a primitive log value",
       ok: false,
     });
+    expect(await handler?.({}, { event: "media-event" })).toEqual({
+      success: true,
+    });
+    expect(
+      await handler?.(
+        {},
+        {
+          event: "media-event",
+          fields: Object.fromEntries(
+            Array.from({ length: 33 }, (_, index) => [`field${index}`, index]),
+          ),
+        },
+      ),
+    ).toEqual({
+      error: "fields has too many entries",
+      ok: false,
+    });
+    expect(
+      await handler?.(
+        {},
+        {
+          event: "media-event",
+          fields: { "Invalid-field": true },
+        },
+      ),
+    ).toEqual({
+      error: "field name is not supported",
+      ok: false,
+    });
   });
 
   it("falls back to the default logs directory when app logging is not configured", () => {

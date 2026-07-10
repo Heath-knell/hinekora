@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, renameSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, statSync } from "node:fs";
+import { mkdir, rename } from "node:fs/promises";
 import { basename, dirname, join, normalize, resolve } from "node:path";
 
 import { app, screen } from "electron";
@@ -1855,7 +1856,10 @@ class ManagedRecorderService {
 
     const savedPath =
       options.kind === "manual"
-        ? this.moveBufferedReplayToDirectory(detectedPath, replayDirectory)
+        ? await this.moveBufferedReplayToDirectory(
+            detectedPath,
+            replayDirectory,
+          )
         : detectedPath;
 
     if (options.restartBufferAfterSave) {
@@ -1869,10 +1873,10 @@ class ManagedRecorderService {
     return savedPath;
   }
 
-  private moveBufferedReplayToDirectory(
+  private async moveBufferedReplayToDirectory(
     path: string,
     directory: string,
-  ): string {
+  ): Promise<string> {
     const sourceDirectory = resolve(dirname(path));
     const targetDirectory = resolve(directory);
     /* v8 ignore next -- Current save paths only move when source and target differ. */
@@ -1880,9 +1884,9 @@ class ManagedRecorderService {
       return path;
     }
 
-    mkdirSync(targetDirectory, { recursive: true });
+    await mkdir(targetDirectory, { recursive: true });
     const targetPath = join(targetDirectory, basename(path));
-    renameSync(path, targetPath);
+    await rename(path, targetPath);
     logInfo(MANAGED_RECORDER_LOG_SCOPE, "Buffered replay moved", {
       ...createSafePathLogFields(targetPath, "recording"),
     });

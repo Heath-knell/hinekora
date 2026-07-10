@@ -103,6 +103,7 @@ afterEach(() => {
   electronMocks.getDisplayMatching.mockReset();
   electronMocks.isPackaged = true;
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
 
@@ -144,6 +145,20 @@ describe("DeathClipsOverlayService", () => {
     expect(
       (service as unknown as { clipPreviewWindow: unknown }).clipPreviewWindow,
     ).toBeNull();
+  });
+
+  it("adds renderer diagnostics to the clip preview route when enabled", async () => {
+    vi.stubEnv("HINEKORA_CLIP_PREVIEW_DIAGNOSTICS", "1");
+    const clipWindow = createFakeWindow();
+    electronMocks.browserWindowFactory.mockReturnValue(clipWindow);
+    const { coordinator, service } = createService();
+    coordinator.setPoeFocusActive(true);
+
+    await service.showClip(createClip());
+
+    expect(clipWindow.loadFile).toHaveBeenCalledWith(expect.any(String), {
+      hash: `/${WindowName.ClipPreviewOverlay}?clipId=clip-1&diagnostics=1`,
+    });
   });
 
   it("logs clip preview overlay open and close events", async () => {

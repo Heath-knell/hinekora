@@ -1516,6 +1516,13 @@ describe("EditorService IPC", () => {
       expect(
         (
           await internals.handleExportMediaRequest(
+            new Request("hinekora-editor-export://export/not-remembered"),
+          )
+        ).status,
+      ).toBe(404);
+      expect(
+        (
+          await internals.handleExportMediaRequest(
             new Request("https://example.test/export-2"),
           )
         ).status,

@@ -357,6 +357,58 @@ describe("ClipPreviewOverlayPage", () => {
     );
   });
 
+  it("saves a mute-only edit", async () => {
+    await renderPage();
+    await flushPromises();
+    await markPreviewVideoReady();
+
+    expect(findButton("Save clip").disabled).toBe(true);
+    await act(async () => {
+      findButtonByLabel("Mute replay").click();
+    });
+    expect(findButton("Save clip").disabled).toBe(false);
+
+    await act(async () => {
+      findButton("Save clip").click();
+    });
+    await flushPromises();
+
+    expect(storeMocks.updateClip).toHaveBeenCalledWith({
+      id: "clip-1",
+      muteAudio: true,
+      operationRequestId: expect.any(String),
+    });
+  });
+
+  it("shows media errors and retries with a fresh media URL", async () => {
+    await renderPage();
+    await flushPromises();
+    const video = container.querySelector("video");
+    if (!(video instanceof HTMLVideoElement)) {
+      throw new Error("Expected preview video");
+    }
+    Object.defineProperty(video, "error", {
+      configurable: true,
+      value: { code: 3, message: "Decode failed" },
+    });
+
+    await act(async () => {
+      video.dispatchEvent(new Event("error", { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain("Preview unavailable");
+    expect(container.textContent).toContain("Decode failed");
+    expect(container.querySelector("video")).toBeNull();
+
+    await act(async () => {
+      findButton("Retry").click();
+    });
+
+    expect(container.querySelector("video")?.getAttribute("src")).toBe(
+      "hinekora-media://replay-clip/main-provided-clip-1?v=1",
+    );
+  });
+
   it("updates timer and playhead only when a video frame is presented", async () => {
     let videoFrameCallback: VideoFrameRequestCallback | null = null;
     let videoFrameCallbackId = 0;
@@ -395,6 +447,7 @@ describe("ClipPreviewOverlayPage", () => {
     });
 
     await act(async () => {
+      video.dispatchEvent(new Event("play", { bubbles: true }));
       video.dispatchEvent(new Event("play", { bubbles: true }));
     });
 
@@ -495,6 +548,12 @@ describe("ClipPreviewOverlayPage", () => {
         videoWidth: 1920,
       }),
     });
+    expect(
+      storeMocks.writeClipPreviewEvent.mock.calls.filter(
+        ([input]) =>
+          input.event === "media-event" && input.fields?.mediaEvent === "play",
+      ),
+    ).toHaveLength(1);
     expect(storeMocks.writeClipPreviewEvent).toHaveBeenCalledWith({
       event: "playback-health",
       fields: expect.objectContaining({

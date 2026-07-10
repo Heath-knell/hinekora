@@ -1,6 +1,8 @@
 import { readFileSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+import { parseMediaRange } from "~/main/modules/replay-clips/ReplayClips.range";
+
 function fetchLocalFileForTests(
   url: string,
   init: RequestInit,
@@ -32,7 +34,7 @@ function fetchLocalFileForTests(
     );
   }
 
-  const parsedRange = parseRange(range, data.length);
+  const parsedRange = parseMediaRange(range, data.length);
   if (!parsedRange) {
     headers.set("Content-Range", `bytes */${data.length}`);
     return Promise.resolve(new Response(null, { headers, status: 416 }));
@@ -50,41 +52,6 @@ function fetchLocalFileForTests(
       status: 206,
     }),
   );
-}
-
-function parseRange(
-  header: string,
-  size: number,
-): { start: number; end: number } | null {
-  const match = /^bytes=(\d*)-(\d*)$/i.exec(header.trim());
-  if (!match) {
-    return null;
-  }
-  const startText = match[1] ?? "";
-  const endText = match[2] ?? "";
-  if (!startText && !endText) {
-    return null;
-  }
-  if (!startText) {
-    const suffixLength = Number(endText);
-    if (!Number.isInteger(suffixLength) || suffixLength <= 0) {
-      return null;
-    }
-    return { start: Math.max(size - suffixLength, 0), end: size - 1 };
-  }
-
-  const start = Number(startText);
-  const end = endText ? Number(endText) : size - 1;
-  if (
-    !Number.isInteger(start) ||
-    !Number.isInteger(end) ||
-    start < 0 ||
-    end < start ||
-    start >= size
-  ) {
-    return null;
-  }
-  return { start, end: Math.min(end, size - 1) };
 }
 
 export { fetchLocalFileForTests };

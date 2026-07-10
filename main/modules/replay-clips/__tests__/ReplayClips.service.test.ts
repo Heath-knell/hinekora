@@ -41,6 +41,7 @@ import {
 
 import { createDefaultSettings } from "~/types";
 import { ReplayClipsChannel } from "../ReplayClips.channels";
+import { resolveReplayClipRenameTarget } from "../ReplayClips.file-operations";
 import { ReplayClipsRepository } from "../ReplayClips.repository";
 import { ReplayClipsService } from "../ReplayClips.service";
 
@@ -174,14 +175,14 @@ describe("ReplayClipsService file actions", () => {
     ReplayClipsService.resetForTests();
   });
 
-  it("lists stored clip file sizes", () => {
+  it("lists stored clip file sizes", async () => {
     const path = join(root, "2026-06-12_10-30-00-death-10s.mp4");
     writeFileSync(path, "clip-data");
     repository.upsert(
       createReplayClip({ originalObsPath: path, processedClipPath: path }),
     );
 
-    expect(service.list()).toEqual([
+    await expect(service.list()).resolves.toEqual([
       expect.objectContaining({
         processedClipPath: resolve(path),
         sizeBytes: 9,
@@ -208,9 +209,11 @@ describe("ReplayClipsService file actions", () => {
     );
 
     expect(service.getClip("clip-1")).toEqual({
-      clip: expect.objectContaining({ id: "clip-1", sizeBytes: 9 }),
+      clip: expect.objectContaining({ id: "clip-1", sizeBytes: 0 }),
       durationSeconds: null,
-      mediaUrl: "hinekora-media://replay-clip/clip-1",
+      mediaUrl: expect.stringMatching(
+        /^hinekora-media:\/\/replay-clip\/clip-1\?v=/,
+      ),
     });
     expect(service.getClip("missing-media")).toEqual({
       clip: expect.objectContaining({ id: "missing-media", sizeBytes: 0 }),
@@ -244,7 +247,9 @@ describe("ReplayClipsService file actions", () => {
           sizeBytes: 9,
         }),
         durationSeconds: null,
-        mediaUrl: "hinekora-media://replay-clip/clip-1",
+        mediaUrl: expect.stringMatching(
+          /^hinekora-media:\/\/replay-clip\/clip-1\?v=/,
+        ),
       },
       error: null,
       ok: true,
@@ -264,6 +269,78 @@ describe("ReplayClipsService file actions", () => {
         originalObsPath: resolve(join(directory, "Boss kill.mp4")),
         processedClipPath: resolve(join(directory, "Boss kill.mp4")),
       }),
+    );
+  });
+
+  it("restores the original file when clip persistence fails", async () => {
+    const directory = join(root, "Death Clips");
+    mkdirSync(directory);
+    const sourcePath = join(directory, "clip-1.mp4");
+    const targetPath = join(directory, "Boss kill.mp4");
+    writeFileSync(sourcePath, "clip-data");
+    repository.upsert(
+      createReplayClip({
+        id: "clip-1",
+        originalObsPath: sourcePath,
+        processedClipPath: sourcePath,
+      }),
+    );
+    vi.spyOn(ReplayClipsRepository.prototype, "upsert").mockImplementation(
+      () => {
+        throw new Error("database failed");
+      },
+    );
+
+    await expect(
+      service.updateClipFile({ id: "clip-1", name: "Boss kill" }),
+    ).resolves.toEqual({
+      detail: null,
+      error: "database failed",
+      ok: false,
+    });
+
+    expect(readFileSync(sourcePath, "utf8")).toBe("clip-data");
+    expect(existsSync(targetPath)).toBe(false);
+    expect(repository.get("clip-1")).toMatchObject({
+      originalObsPath: resolve(sourcePath),
+      processedClipPath: resolve(sourcePath),
+    });
+  });
+
+  it("serializes rename target allocation across clips", async () => {
+    const directory = join(root, "Death Clips");
+    mkdirSync(directory);
+    const firstPath = join(directory, "clip-1.mp4");
+    const secondPath = join(directory, "clip-2.mp4");
+    writeFileSync(firstPath, "first");
+    writeFileSync(secondPath, "second");
+    repository.upsert(
+      createReplayClip({
+        id: "clip-1",
+        originalObsPath: firstPath,
+        processedClipPath: firstPath,
+      }),
+    );
+    repository.upsert(
+      createReplayClip({
+        id: "clip-2",
+        originalObsPath: secondPath,
+        processedClipPath: secondPath,
+      }),
+    );
+
+    const [first, second] = await Promise.all([
+      service.updateClipFile({ id: "clip-1", name: "Boss" }),
+      service.updateClipFile({ id: "clip-2", name: "Boss" }),
+    ]);
+
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    expect(first.detail?.clip.fileName).toBe("Boss.mp4");
+    expect(second.detail?.clip.fileName).toBe("Boss (2).mp4");
+    expect(readFileSync(join(directory, "Boss.mp4"), "utf8")).toBe("first");
+    expect(readFileSync(join(directory, "Boss (2).mp4"), "utf8")).toBe(
+      "second",
     );
   });
 
@@ -314,7 +391,9 @@ describe("ReplayClipsService file actions", () => {
         {
           clip: expect.objectContaining({ id: "clip-1", sizeBytes: 9 }),
           durationSeconds: null,
-          mediaUrl: "hinekora-media://replay-clip/clip-1",
+          mediaUrl: expect.stringMatching(
+            /^hinekora-media:\/\/replay-clip\/clip-1\?v=/,
+          ),
         },
       ],
       totalCount: 1,
@@ -626,7 +705,7 @@ describe("ReplayClipsService file actions", () => {
     });
   });
 
-  it("delegates clip library filtering to the repository", () => {
+  it("delegates clip library filtering to the repository", async () => {
     repository.upsert(
       createReplayClip({ id: "death-clip", kind: "death", sourceGame: "poe2" }),
     );
@@ -638,12 +717,14 @@ describe("ReplayClipsService file actions", () => {
       }),
     );
 
-    expect(service.list({ game: "poe2", kind: "manual" })).toEqual([
+    await expect(
+      service.list({ game: "poe2", kind: "manual" }),
+    ).resolves.toEqual([
       expect.objectContaining({ id: "manual-clip", kind: "manual" }),
     ]);
   });
 
-  it("returns paged clip library data sorted in the main process", () => {
+  it("returns paged clip library data sorted in the main process", async () => {
     const smallPath = join(root, "2026-06-12_10-30-00-death-10s.mp4");
     const largePath = join(root, "2026-06-12_10-31-00-death-10s.mp4");
     writeFileSync(smallPath, "small");
@@ -677,7 +758,7 @@ describe("ReplayClipsService file actions", () => {
       }),
     );
 
-    expect(
+    await expect(
       service.listLibrary({
         game: "poe2",
         kind: "death",
@@ -686,7 +767,7 @@ describe("ReplayClipsService file actions", () => {
         sortBy: "sizeBytes",
         sortDirection: "desc",
       }),
-    ).toMatchObject({
+    ).resolves.toMatchObject({
       availableLeagues: ["Hardcore", "Standard"],
       pageCount: 2,
       pageIndex: 0,
@@ -696,7 +777,7 @@ describe("ReplayClipsService file actions", () => {
     });
   });
 
-  it("refreshes stale clip library sizes when media files are missing", () => {
+  it("refreshes stale clip library sizes when media files are missing", async () => {
     const missingPath = join(root, "2026-06-12_10-32-00-death-10s.mp4");
     repository.upsert(
       createReplayClip({
@@ -707,7 +788,7 @@ describe("ReplayClipsService file actions", () => {
       }),
     );
 
-    const page = service.listLibrary({ kind: "death" });
+    const page = await service.listLibrary({ kind: "death" });
 
     expect(page.items).toEqual([
       expect.objectContaining({ id: "stale-size", sizeBytes: 0 }),
@@ -715,7 +796,7 @@ describe("ReplayClipsService file actions", () => {
     expect(repository.get("stale-size")?.sizeBytes).toBe(0);
   });
 
-  it("refreshes clip size from available media paths while ignoring stale alternates", () => {
+  it("refreshes clip size from available media paths while ignoring stale alternates", async () => {
     const availablePath = join(root, "2026-06-12_10-33-00-death-10s.mp4");
     const missingPath = join(root, "2026-06-12_10-34-00-death-10s.mp4");
     writeFileSync(availablePath, "available");
@@ -729,7 +810,7 @@ describe("ReplayClipsService file actions", () => {
       }),
     );
 
-    const page = service.listLibrary({ kind: "death" });
+    const page = await service.listLibrary({ kind: "death" });
 
     expect(page.items).toEqual([
       expect.objectContaining({
@@ -740,7 +821,24 @@ describe("ReplayClipsService file actions", () => {
     expect(repository.get("partially-stale-size")?.sizeBytes).toBe(9);
   });
 
-  it("sorts clip library rows by display fields and applies query defaults", () => {
+  it("does not count directories as replay clip media", async () => {
+    const directoryPath = join(root, "2026-06-12_10-35-00.mp4");
+    mkdirSync(directoryPath);
+    repository.upsert(
+      createReplayClip({
+        id: "directory-media",
+        processedClipPath: directoryPath,
+        sizeBytes: 4096,
+      }),
+    );
+
+    await expect(service.list()).resolves.toEqual([
+      expect.objectContaining({ id: "directory-media", sizeBytes: 0 }),
+    ]);
+    expect(repository.get("directory-media")?.sizeBytes).toBe(0);
+  });
+
+  it("sorts clip library rows by display fields and applies query defaults", async () => {
     const alphaPath = join(root, "alpha-death.mp4");
     const betaPath = join(root, "beta-death.mp4");
     const missingPath = join(root, "missing-death.mp4");
@@ -753,6 +851,7 @@ describe("ReplayClipsService file actions", () => {
         sourceGame: "poe1",
         sourceLeague: "Alpha",
         processedClipPath: alphaPath,
+        durationSeconds: 1,
         targetDurationSeconds: 30,
         createdAt: "2026-06-12T10:00:00.000Z",
       }),
@@ -792,7 +891,7 @@ describe("ReplayClipsService file actions", () => {
       }),
     );
 
-    expect(service.listLibrary()).toMatchObject({
+    await expect(service.listLibrary()).resolves.toMatchObject({
       pageIndex: 0,
       pageSize: 20,
       sortBy: "createdAt",
@@ -800,30 +899,38 @@ describe("ReplayClipsService file actions", () => {
       totalCount: 4,
     });
     expect(
-      service
-        .listLibrary({ sortBy: "name", sortDirection: "asc" })
-        .items.map((clip) => clip.id),
+      (
+        await service.listLibrary({ sortBy: "name", sortDirection: "asc" })
+      ).items.map((clip) => clip.id),
     ).toEqual(["no-path", "alpha", "beta", "missing-path"]);
     expect(
-      service
-        .listLibrary({ sortBy: "sourceLeague", sortDirection: "asc" })
-        .items.map((clip) => clip.id),
+      (
+        await service.listLibrary({
+          sortBy: "sourceLeague",
+          sortDirection: "asc",
+        })
+      ).items.map((clip) => clip.id),
     ).toEqual(["alpha", "missing-path", "beta", "no-path"]);
     expect(
-      service
-        .listLibrary({
+      (
+        await service.listLibrary({
           sortBy: "targetDurationSeconds",
           sortDirection: "asc",
         })
-        .items.map((clip) => clip.id),
-    ).toEqual(["beta", "no-path", "missing-path", "alpha"]);
+      ).items.map((clip) => clip.id),
+    ).toEqual(["alpha", "beta", "no-path", "missing-path"]);
     expect(
-      service
-        .listLibrary({ sortBy: "createdAt", sortDirection: "asc" })
-        .items.map((clip) => clip.id),
+      (
+        await service.listLibrary({
+          sortBy: "createdAt",
+          sortDirection: "asc",
+        })
+      ).items.map((clip) => clip.id),
     ).toEqual(["alpha", "beta", "missing-path", "no-path"]);
     expect(
-      service.listLibrary({ league: "Alpha" }).items.map((clip) => clip.id),
+      (await service.listLibrary({ league: "Alpha" })).items.map(
+        (clip) => clip.id,
+      ),
     ).toEqual(["alpha"]);
   });
 
@@ -1090,6 +1197,7 @@ describe("ReplayClipsService file actions", () => {
       service.copyClipToClipboard(
         {
           id: "clip-1",
+          muteAudio: true,
           operationRequestId: "copy-request-1",
           trim: { inSeconds: 2, outSeconds: 8 },
         },
@@ -1103,6 +1211,49 @@ describe("ReplayClipsService file actions", () => {
     expect(onProgress).toHaveBeenCalledWith({
       operationRequestId: "copy-request-1",
       progress: 0.42,
+    });
+  });
+
+  it("reports muted full-range clipboard render progress", async () => {
+    const path = join(root, "2026-06-12_10-30-00.mp4");
+    writeFileSync(path, "video");
+    repository.upsert(
+      createReplayClip({
+        durationSeconds: 20,
+        processedClipPath: path,
+        targetDurationSeconds: 20,
+      }),
+    );
+    vi.spyOn(FileClipboard, "copyFileToClipboard").mockResolvedValue({
+      ok: true,
+      error: null,
+    });
+    vi.spyOn(
+      service as unknown as {
+        renderReplayClipQuickTrim: (
+          input: ReplayClipQuickTrimRenderInput,
+        ) => Promise<void>;
+      },
+      "renderReplayClipQuickTrim",
+    ).mockImplementation(async (input) => {
+      input.onProgress?.(0.75);
+      writeFileSync(input.outputPath, "muted");
+    });
+    const onProgress = vi.fn();
+
+    await expect(
+      service.copyClipToClipboard(
+        {
+          id: "clip-1",
+          muteAudio: true,
+          operationRequestId: "muted-copy",
+        },
+        { onProgress },
+      ),
+    ).resolves.toEqual({ ok: true, error: null });
+    expect(onProgress).toHaveBeenCalledWith({
+      operationRequestId: "muted-copy",
+      progress: 0.75,
     });
   });
 
@@ -1300,6 +1451,24 @@ describe("ReplayClipsService file actions", () => {
     await expect(second).resolves.toBe("next");
   });
 
+  it("recovers the global stored-file mutation queue after rejection", async () => {
+    const internals = service as unknown as {
+      queueStoredFileMutation<T>(operation: () => Promise<T>): Promise<T>;
+      storedFileMutationQueue: Promise<unknown>;
+    };
+    const first = internals.queueStoredFileMutation(async () => {
+      throw new Error("mutation failed");
+    });
+    await expect(first).rejects.toThrow("mutation failed");
+
+    internals.storedFileMutationQueue = Promise.reject(
+      new Error("stale queue failure"),
+    );
+    await expect(
+      internals.queueStoredFileMutation(async () => "recovered"),
+    ).resolves.toBe("recovered");
+  });
+
   it("queues copy and update operations for the same clip", async () => {
     const path = join(root, "2026-06-12_10-30-00.mp4");
     const updateRender = createDeferred();
@@ -1342,7 +1511,7 @@ describe("ReplayClipsService file actions", () => {
     });
     await Promise.resolve();
 
-    expect(renderOrder).toEqual(["update"]);
+    await vi.waitFor(() => expect(renderOrder).toEqual(["update"]));
     updateRender.resolve();
     await expect(updatePromise).resolves.toMatchObject({ ok: true });
     await expect(copyPromise).resolves.toEqual({ ok: true, error: null });
@@ -1382,7 +1551,7 @@ describe("ReplayClipsService file actions", () => {
     const deletePromise = service.deleteClip("clip-1");
     await Promise.resolve();
 
-    expect(renderOrder).toEqual(["update"]);
+    await vi.waitFor(() => expect(renderOrder).toEqual(["update"]));
     expect(repository.get("clip-1")).not.toBeNull();
     expect(existsSync(path)).toBe(true);
     updateRender.resolve();
@@ -1392,7 +1561,7 @@ describe("ReplayClipsService file actions", () => {
     expect(existsSync(path)).toBe(false);
   });
 
-  it("keeps in-place trim updates successful when temp cleanup fails", async () => {
+  it("keeps in-place trim updates successful when backup cleanup fails", async () => {
     vi.resetModules();
     const path = join(root, "2026-06-12_10-30-00.mp4");
     let resetDynamicDatabase: () => void = () => {};
@@ -1410,9 +1579,10 @@ describe("ReplayClipsService file actions", () => {
           ) => {
             if (
               renderedTempOutputPath &&
-              resolve(String(targetPath)) === resolve(renderedTempOutputPath)
+              resolve(String(targetPath)) !== resolve(renderedTempOutputPath) &&
+              String(targetPath).includes(".hinekora-")
             ) {
-              throw new Error("temp cleanup failed");
+              throw new Error("backup cleanup failed");
             }
 
             return actual.rm(targetPath, options);
@@ -1502,7 +1672,9 @@ describe("ReplayClipsService file actions", () => {
         },
         "renderReplayClipQuickTrim",
       )
-      .mockResolvedValue(undefined);
+      .mockImplementation(async (input) => {
+        writeFileSync(input.outputPath, "muted");
+      });
 
     await expect(
       service.updateClipFile({
@@ -1514,7 +1686,7 @@ describe("ReplayClipsService file actions", () => {
     });
 
     expect(renderReplayClipQuickTrim).toHaveBeenCalledWith({
-      outputPath: resolve(path),
+      outputPath: expect.stringContaining(".hinekora-"),
       muteAudio: true,
       sourcePath: resolve(path),
       trim: { inSeconds: 0, outSeconds: 20 },
@@ -1640,6 +1812,73 @@ describe("ReplayClipsService file actions", () => {
     });
     expect(existsSync(path)).toBe(false);
     expect(repository.get("clip-1")).toBeNull();
+  });
+
+  it("retains files still referenced by another clip", async () => {
+    const path = join(root, "2026-06-12_10-30-00.mp4");
+    writeFileSync(path, "video");
+    repository.upsert(
+      createReplayClip({ id: "clip-1", processedClipPath: path }),
+    );
+    repository.upsert(
+      createReplayClip({ id: "clip-2", processedClipPath: path }),
+    );
+
+    await expect(service.deleteClip("clip-1")).resolves.toEqual({
+      ok: true,
+      error: null,
+    });
+
+    expect(existsSync(path)).toBe(true);
+    expect(repository.get("clip-1")).toBeNull();
+    expect(repository.get("clip-2")).not.toBeNull();
+
+    await (
+      service as unknown as {
+        deleteStoredPathIfUnreferenced(path: string): Promise<void>;
+      }
+    ).deleteStoredPathIfUnreferenced(path);
+    expect(existsSync(path)).toBe(true);
+  });
+
+  it("logs obsolete replay cleanup failures without rejecting updates", async () => {
+    vi.resetModules();
+    vi.doMock("node:fs/promises", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("node:fs/promises")>();
+
+      return {
+        ...actual,
+        rm: vi.fn(async () => {
+          throw new Error("remove failed");
+        }),
+      };
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    try {
+      const { ReplayClipsService: MockedReplayClipsService } = await import(
+        "../ReplayClips.service"
+      );
+      const internals = Object.create(MockedReplayClipsService.prototype) as {
+        deleteStoredPathIfUnreferenced(path: string): Promise<void>;
+        isStoredPathReferenced(path: string): boolean;
+      };
+      internals.isStoredPathReferenced = () => false;
+
+      await expect(
+        internals.deleteStoredPathIfUnreferenced(
+          join(root, "obsolete-replay.mp4"),
+        ),
+      ).resolves.toBeUndefined();
+      expect(
+        warn.mock.calls.some(([message]) =>
+          String(message).includes("Obsolete replay file cleanup failed"),
+        ),
+      ).toBe(true);
+    } finally {
+      vi.doUnmock("node:fs/promises");
+      vi.resetModules();
+    }
   });
 
   it("reports clip file cleanup failures after deleting database rows", async () => {
@@ -2314,6 +2553,8 @@ describe("ReplayClipsService file actions", () => {
 
   it("covers replay clip service internals for edge branches", async () => {
     const internals = service as unknown as {
+      getClipView(id: string): unknown;
+      getStoredClipMediaPath(id: string): string | null;
       queueClipFileOperation: <T>(
         clipId: string,
         operation: () => Promise<T>,
@@ -2344,6 +2585,19 @@ describe("ReplayClipsService file actions", () => {
     await expect(
       internals.queueClipFileOperation("clip-1", () => Promise.resolve("ok")),
     ).resolves.toBe("ok");
+
+    const originalOnlyPath = join(root, "2026-06-12_10-36-00.mp4");
+    repository.upsert(
+      createReplayClip({
+        id: "original-only",
+        originalObsPath: originalOnlyPath,
+        processedClipPath: null,
+      }),
+    );
+    expect(internals.getStoredClipMediaPath("original-only")).toBe(
+      resolve(originalOnlyPath),
+    );
+    expect(internals.getClipView("missing-view")).toBeNull();
 
     vi.spyOn(OverlayWindowsService, "getInstance").mockReturnValue({
       showClipPreviewOverlay: () => Promise.reject(new Error("overlay failed")),
@@ -2388,12 +2642,12 @@ describe("ReplayClipsService file actions", () => {
     writeFileSync(sourcePath, "source");
     writeFileSync(sourceConflict, "conflict");
     writeFileSync(secondConflict, "conflict");
-    expect(
-      internals.resolveReplayClipRenameTarget(sourcePath, "Renamed"),
-    ).toBeNull();
-    expect(
-      internals.resolveReplayClipRenameTarget(sourceConflict, "Renamed"),
-    ).toBeNull();
+    await expect(
+      resolveReplayClipRenameTarget(sourcePath, "Renamed"),
+    ).resolves.toBeNull();
+    await expect(
+      resolveReplayClipRenameTarget(sourceConflict, "Renamed"),
+    ).resolves.toBeNull();
 
     await expect(service.copyClipToClipboard("missing-clip")).resolves.toEqual({
       ok: false,
@@ -2523,18 +2777,18 @@ describe("ReplayClipsService file actions", () => {
       ),
     ).resolves.toBe("chained");
 
-    expect(
-      helperService.resolveReplayClipRenameTarget(sourceWithoutExt, "Renamed"),
-    ).toBe(resolve(join(root, "Renamed.mp4")));
-    expect(
-      helperService.resolveReplayClipRenameTarget(sourceWithoutExt, "\n\t"),
-    ).toBeNull();
-    expect(
-      helperService.resolveReplayClipRenameTarget(sourceWithoutExt, "A\tB"),
-    ).toBe(resolve(join(root, "A B.mp4")));
-    expect(
-      helperService.resolveReplayClipRenameTarget(sourceWithoutExt, ".mp4"),
-    ).toBe(resolve(join(root, ".mp4.mp4")));
+    await expect(
+      resolveReplayClipRenameTarget(sourceWithoutExt, "Renamed"),
+    ).resolves.toBe(resolve(join(root, "Renamed.mp4")));
+    await expect(
+      resolveReplayClipRenameTarget(sourceWithoutExt, "\n\t"),
+    ).resolves.toBeNull();
+    await expect(
+      resolveReplayClipRenameTarget(sourceWithoutExt, "A\tB"),
+    ).resolves.toBe(resolve(join(root, "A B.mp4")));
+    await expect(
+      resolveReplayClipRenameTarget(sourceWithoutExt, ".mp4"),
+    ).resolves.toBe(resolve(join(root, ".mp4.mp4")));
 
     await expect(
       helperService.renderReplayClipQuickTrim({
@@ -2574,12 +2828,8 @@ describe("ReplayClipsService file actions", () => {
     ).resolves.toMatchObject({ ok: true });
   });
 
-  it("resolves rename targets and validates update operation ids", () => {
+  it("resolves rename targets and validates update operation ids", async () => {
     const internals = service as unknown as {
-      resolveReplayClipRenameTarget: (
-        sourcePath: string,
-        name: string | null,
-      ) => string | null;
       validateUpdateInput: (value: unknown) => {
         id: string;
         name?: string;
@@ -2593,7 +2843,7 @@ describe("ReplayClipsService file actions", () => {
     const existingBase = join(root, "renamed.mp4");
     writeFileSync(sourcePath, "video");
     writeFileSync(existingBase, "other");
-    const renameTarget = internals.resolveReplayClipRenameTarget(
+    const renameTarget = await resolveReplayClipRenameTarget(
       sourcePath,
       "Renamed",
     );
@@ -2640,8 +2890,8 @@ describe("ReplayClipsService file actions", () => {
       fileName: null,
       hasMediaFile: false,
     };
-    vi.spyOn(ipcService, "list").mockReturnValue([clip]);
-    vi.spyOn(ipcService, "listLibrary").mockReturnValue({
+    vi.spyOn(ipcService, "list").mockResolvedValue([clip]);
+    vi.spyOn(ipcService, "listLibrary").mockResolvedValue({
       availableLeagues: ["Standard"],
       items: [clipView],
       pageCount: 1,
@@ -2780,6 +3030,10 @@ describe("ReplayClipsService file actions", () => {
     expect(
       await handlers.get(ReplayClipsChannel.SaveManualReplay)?.({}),
     ).toEqual(rendererClip);
+    vi.mocked(ipcService.saveManualReplay).mockResolvedValueOnce(null);
+    expect(
+      await handlers.get(ReplayClipsChannel.SaveManualReplay)?.({}),
+    ).toBeNull();
     expect(
       await handlers.get(ReplayClipsChannel.Update)?.(eventWithProgress, {
         id: "clip-1",
@@ -3028,6 +3282,107 @@ describe("ReplayClipsService replay-trigger workflow", () => {
         lineHash: expect.stringMatching(/^[a-f0-9]{32}$/),
       }),
     );
+  });
+
+  it("coalesces overlapping manual and death triggers into one clip", async () => {
+    const replayPath = join(root, "2026-06-12_10-30-00.mp4");
+    const saveGate = createDeferred();
+    writeFileSync(replayPath, "video");
+    vi.spyOn(SettingsStoreService, "getInstance").mockReturnValue({
+      get: () => ({
+        ...createDefaultSettings(),
+        activeGame: "poe1",
+        activeLeague: "Standard",
+        deathClipSeconds: 10,
+        recordingStoragePath: root,
+      }),
+    } as unknown as SettingsStoreService);
+    const saveReplay = vi.fn().mockImplementation(async () => {
+      await saveGate.promise;
+      return { ok: true, path: replayPath, error: null };
+    });
+    vi.spyOn(ManagedRecorderService, "getInstance").mockReturnValue({
+      getStatus: () => ({
+        available: true,
+        initialized: true,
+        bufferActive: true,
+        gameRunning: true,
+        recording: true,
+        isStartingRecording: false,
+        isStoppingRecording: false,
+        runRecordingActive: false,
+        runtime: "packaged_obs",
+        runtimePath: null,
+        outputDirectory: root,
+        outputResolution: "native",
+        fps: 60,
+        encoder: "hardware_h264",
+        lastRecordingPath: null,
+        runRecordingPath: null,
+        activeSessionDirectory: null,
+        recordingStartedAt: null,
+        runRecordingStartedAt: null,
+        error: null,
+      }),
+      saveReplay,
+    } as unknown as ManagedRecorderService);
+    vi.spyOn(OverlayWindowsService, "getInstance").mockReturnValue({
+      showClipPreviewOverlay: vi.fn(),
+    } as unknown as OverlayWindowsService);
+    vi.spyOn(RecordingStorageService, "getInstance").mockReturnValue({
+      cleanup: vi.fn(),
+    } as unknown as RecordingStorageService);
+
+    const first = service.saveManualReplay();
+    await vi.waitFor(() => expect(saveReplay).toHaveBeenCalledTimes(1));
+    const second = service.handleDeathEvent({
+      game: "poe1",
+      line: "You have died.",
+      lineHash: "overlapping-death",
+      detectedAt: "2026-06-12T10:00:00.000Z",
+    });
+    saveGate.resolve();
+
+    const [manualClip, deathClip] = await Promise.all([first, second]);
+    expect(manualClip?.id).toBe(deathClip?.id);
+    expect(repository.list()).toHaveLength(1);
+    expect(saveReplay).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not clear a newer active replay request when an older request settles", async () => {
+    let settleRequest!: (
+      clip: ReturnType<typeof createReplayClip> | null,
+    ) => void;
+    const pendingRequest = new Promise<ReturnType<
+      typeof createReplayClip
+    > | null>((resolveRequest) => {
+      settleRequest = resolveRequest;
+    });
+    const internals = service as unknown as {
+      activeReplayTriggerRequest: Promise<ReturnType<
+        typeof createReplayClip
+      > | null> | null;
+      handleReplayTriggerExclusive: () => Promise<ReturnType<
+        typeof createReplayClip
+      > | null>;
+    };
+    vi.spyOn(internals, "handleReplayTriggerExclusive").mockReturnValue(
+      pendingRequest,
+    );
+    const olderRequest = service.handleReplayTrigger({
+      detectedAt: "2026-06-12T10:00:00.000Z",
+      game: "poe1",
+      kind: "manual",
+      line: "Manual replay save",
+      lineHash: "older-request",
+    });
+    const newerRequest = Promise.resolve(null);
+    internals.activeReplayTriggerRequest = newerRequest;
+
+    settleRequest(null);
+    await expect(olderRequest).resolves.toBeNull();
+    expect(internals.activeReplayTriggerRequest).toBe(newerRequest);
+    internals.activeReplayTriggerRequest = null;
   });
 
   it("skips death replay saves when the managed replay buffer is inactive", async () => {

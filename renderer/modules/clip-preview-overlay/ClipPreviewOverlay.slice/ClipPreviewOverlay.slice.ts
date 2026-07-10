@@ -13,6 +13,7 @@ interface ClipPreviewOverlayState {
   detailError: string | null;
   durationOverrideSeconds: number | null;
   isMediaReady: boolean;
+  mediaError: string | null;
   isMuted: boolean;
   isPlaying: boolean;
   hasCopied: boolean;
@@ -37,6 +38,7 @@ interface ClipPreviewOverlaySlice {
     setDetail: (detail: ReplayClipDetail | null) => void;
     setDetailError: (detailError: string | null) => void;
     setMediaReady: (isMediaReady: boolean) => void;
+    setMediaError: (mediaError: string | null) => void;
     setMuted: (isMuted: boolean) => void;
     setPlaying: (isPlaying: boolean) => void;
     setDurationOverrideSeconds: (
@@ -60,6 +62,7 @@ const createInitialClipPreviewOverlayState = (): ClipPreviewOverlayState => ({
   detailError: null,
   durationOverrideSeconds: null,
   isMediaReady: false,
+  mediaError: null,
   isMuted: false,
   isPlaying: false,
   hasCopied: false,
@@ -97,6 +100,7 @@ const createClipPreviewOverlaySlice: BoundStoreStateCreator<
         state.clipPreviewOverlay.operationProgress = 0;
         state.clipPreviewOverlay.saveMessage = null;
         state.clipPreviewOverlay.isMediaReady = false;
+        state.clipPreviewOverlay.mediaError = null;
         state.clipPreviewOverlay.isMuted = false;
         state.clipPreviewOverlay.isPlaying = false;
         state.clipPreviewOverlay.titleDraft = "";
@@ -131,6 +135,11 @@ const createClipPreviewOverlaySlice: BoundStoreStateCreator<
     setMediaReady: (isMediaReady) => {
       set((state) => {
         state.clipPreviewOverlay.isMediaReady = isMediaReady;
+      });
+    },
+    setMediaError: (mediaError) => {
+      set((state) => {
+        state.clipPreviewOverlay.mediaError = mediaError;
       });
     },
     setMuted: (isMuted) => {

@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
-import { mkdir, readdir, rm, stat } from "node:fs/promises";
-import { basename, join, parse } from "node:path";
+import { access, mkdir, readdir, rm, stat } from "node:fs/promises";
+import { join, parse } from "node:path";
+
+import { normalizeMediaFileStem } from "~/main/utils/media-file-name";
 
 interface CreateEditorExportOutputPathInput {
   fileName: string;
@@ -35,7 +36,7 @@ async function createEditorExportOutputPath(
   let candidate = join(outputDirectory, normalizedFileName);
   let suffix = 2;
 
-  while (existsSync(candidate)) {
+  while (await fileExists(candidate)) {
     candidate = join(
       outputDirectory,
       `${parsed.name} (${suffix})${parsed.ext}`,
@@ -62,7 +63,7 @@ async function cleanupEditorClipboardOutputDirectory(
   input: CleanupEditorClipboardOutputDirectoryInput,
 ): Promise<void> {
   const outputDirectory = resolveEditorClipboardOutputDirectory(input.tempPath);
-  if (!existsSync(outputDirectory)) {
+  if (!(await fileExists(outputDirectory))) {
     return;
   }
 
@@ -131,21 +132,20 @@ function createEditorExportTempOutputPath(outputPath: string): string {
 }
 
 function normalizeEditorExportFileName(fileName: string): string {
-  const parsed = parse(basename(fileName));
-  const name = Array.from(
-    /* v8 ignore next -- basename/parse fallback branches are defensive for malformed names. */
-    (parsed.name || parsed.base || "Hinekora edit").replace(
-      /[<>:"/\\|?*]/g,
-      " ",
-    ),
-  )
-    .map((character) => (character.charCodeAt(0) < 32 ? " " : character))
-    .join("")
-    .replace(/\s+/g, " ")
-    .trim();
-  const safeName = name.length > 0 ? name : "Hinekora edit";
+  const safeName = normalizeMediaFileStem(fileName, {
+    fallback: "Hinekora edit",
+  })!;
 
-  return `${safeName.slice(0, 120)}.mp4`;
+  return `${safeName}.mp4`;
+}
+
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export {

@@ -4,6 +4,7 @@ import {
   FiMaximize2 as Fullscreen,
   FiPause as Pause,
   FiPlay as Play,
+  FiRefreshCw as Retry,
   FiVolume2 as Volume,
   FiVolumeX as VolumeMuted,
 } from "react-icons/fi";
@@ -24,7 +25,31 @@ function ClipPreviewOverlayVideo() {
       )}
       data-clip-preview-video-shell=""
     >
-      {workflow.videoSrc ? (
+      {workflow.mediaError ? (
+        <div className={styles.empty}>
+          <strong>Preview unavailable</strong>
+          <span>{workflow.mediaError}</span>
+          <div className={styles.previewErrorActions}>
+            <button
+              className="btn btn-primary btn-sm"
+              type="button"
+              onClick={workflow.handleRetryMedia}
+            >
+              <Retry size={15} />
+              Retry
+            </button>
+            <button
+              className="btn btn-ghost btn-sm"
+              disabled={!workflow.clipFileName}
+              type="button"
+              onClick={workflow.handleRevealClip}
+            >
+              <FolderOpen size={15} />
+              Show in Explorer
+            </button>
+          </div>
+        </div>
+      ) : workflow.videoSrc ? (
         <>
           <video
             autoPlay

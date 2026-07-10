@@ -1002,10 +1002,15 @@ describe("MainWindowService", () => {
         mainWindow: FakeWindow,
         clipId: string,
       ): Promise<void>;
+      navigateMainWindowToClip(
+        mainWindow: FakeWindow,
+        clipId: string,
+      ): Promise<void>;
     };
     fakeWindow.destroyed = true;
 
     await internals.navigateMainWindowToEditorClip(fakeWindow, "clip-1");
+    await internals.navigateMainWindowToClip(fakeWindow, "clip-1");
 
     expect(fakeWindow.webContents.executeJavaScript).not.toHaveBeenCalled();
   });

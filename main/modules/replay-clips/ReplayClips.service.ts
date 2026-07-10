@@ -1,23 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, statSync } from "node:fs";
-import { copyFile, rename, rm, stat, unlink } from "node:fs/promises";
-import { basename, dirname, parse, resolve } from "node:path";
+import { rm, stat, unlink } from "node:fs/promises";
+import { basename } from "node:path";
 
 import type { WebContents } from "electron";
-import { app, BrowserWindow, net, protocol, shell } from "electron";
+import { app, BrowserWindow, shell } from "electron";
 
 import { BookmarksService } from "~/main/modules/bookmarks";
 import { DatabaseService } from "~/main/modules/database";
-import {
-  createEditorExportSegments,
-  type EditorResolvedExportClip,
-} from "~/main/modules/editor/Editor.export";
-import { renderEditorExportWithFfmpeg } from "~/main/modules/editor/Editor.ffmpeg";
-import {
-  cleanupEditorClipboardOutputDirectory,
-  createEditorClipboardOutputPath,
-  createEditorExportTempOutputPath,
-} from "~/main/modules/editor/Editor.files";
 import { WindowName } from "~/main/modules/main-window/MainWindow.types";
 import { ManagedRecorderService } from "~/main/modules/managed-recorder";
 import type { ManagedReplayKind } from "~/main/modules/managed-recorder/ManagedRecorder.dto";
@@ -34,26 +23,19 @@ import {
 } from "~/main/utils/app-log";
 import * as FileClipboard from "~/main/utils/file-clipboard";
 import {
-  assertNumber,
-  assertObject,
-  assertOptionalBoolean,
   assertString,
   handleValidationError,
-  IpcValidationError,
   safeErrorMessage,
 } from "~/main/utils/ipc-validation";
 import { registerGuardedIpcHandler } from "~/main/utils/ipc-window-roles";
 import { readMp4DurationSeconds } from "~/main/utils/media-metadata";
-import { copyRenderedFileToClipboard } from "~/main/utils/rendered-file-clipboard";
 
 import {
   type GameId,
-  GameIdSchema,
   quickClipTrimMaximumSeconds,
   quickClipTrimMinimumSeconds,
   type ReplayClip,
   type ReplayClipKind,
-  ReplayClipKindSchema,
 } from "~/types";
 import { ReplayClipsChannel } from "./ReplayClips.channels";
 import type {
@@ -64,8 +46,6 @@ import type {
   ReplayClipFileActionResult,
   ReplayClipLibraryPage,
   ReplayClipLibraryQuery,
-  ReplayClipLibrarySortDirection,
-  ReplayClipLibrarySortKey,
   ReplayClipListFilter,
   ReplayClipOperationProgress,
   ReplayClipSourceDetail,
@@ -77,32 +57,32 @@ import type {
 } from "./ReplayClips.dto";
 import { ReplayClipDuplicateTracker } from "./ReplayClips.duplicates";
 import {
+  areReplayClipPathsEqual as arePathsEqual,
+  commitReplayClipFileUpdate,
+  resolveReplayClipRenameTarget,
+} from "./ReplayClips.file-operations";
+import {
   resolveReplayClipFilePath,
   sanitizeReplayClipStoragePathList,
 } from "./ReplayClips.files";
+import { createReplayClipMediaUrl } from "./ReplayClips.media";
+import { setupReplayClipMediaProtocol } from "./ReplayClips.protocol";
 import {
-  createReplayClipMediaFileResponse,
-  createReplayClipMediaUrl,
-  resolveHinekoraMediaRequestTarget,
-} from "./ReplayClips.media";
+  copyTrimmedReplayClipToClipboard,
+  renderReplayClipQuickTrim,
+} from "./ReplayClips.render";
 import { ReplayClipsRepository } from "./ReplayClips.repository";
+import {
+  validateReplayClipCopyInput,
+  validateReplayClipIdList,
+  validateReplayClipLibraryQuery,
+  validateReplayClipListFilter,
+  validateReplayClipUpdateInput,
+} from "./ReplayClips.validation";
 
 const REPLAY_CLIPS_LOG_SCOPE = "replay-clips";
-const REPLAY_CLIP_MEDIA_SCHEME = "hinekora-media";
-const replayMediaDiagnosticsEnabled =
-  process.env.HINEKORA_CLIP_PREVIEW_DIAGNOSTICS === "1";
 const defaultLibraryPageSize = 20;
 const maxEditorReplayPageValidationCandidates = 500;
-const maxLibraryPageSize = 100;
-const maxReplayClipRenameLength = 120;
-const librarySortKeys: ReplayClipLibrarySortKey[] = [
-  "createdAt",
-  "name",
-  "sourceLeague",
-  "targetDurationSeconds",
-  "sizeBytes",
-];
-const librarySortDirections: ReplayClipLibrarySortDirection[] = ["asc", "desc"];
 
 interface AvailableReplayClip {
   clip: ReplayClip;
@@ -119,6 +99,8 @@ class ReplayClipsService {
   private readonly clipFileOperationQueues = new Map<string, Promise<void>>();
   private readonly duplicateTracker = new ReplayClipDuplicateTracker();
   private readonly repository: ReplayClipsRepository;
+  private activeReplayTriggerRequest: Promise<ReplayClip | null> | null = null;
+  private storedFileMutationQueue: Promise<void> = Promise.resolve();
 
   static getInstance(): ReplayClipsService {
     if (!ReplayClipsService.instance) {
@@ -135,11 +117,19 @@ class ReplayClipsService {
   constructor() {
     this.repository = new ReplayClipsRepository(DatabaseService.getInstance());
     this.setupHandlers();
-    this.setupMediaProtocol();
+    setupReplayClipMediaProtocol({
+      resolveReplayClipPath: (id) => this.getStoredClipMediaPath(id),
+      resolveRunRecordingPath: (id) =>
+        RecordingStorageService.getInstance().getRecordingMediaPath(id),
+    });
   }
 
-  list(filter: ReplayClipListFilter = {}): ReplayClip[] {
-    return this.repository.list(filter).map((clip) => this.withClipSize(clip));
+  async list(filter: ReplayClipListFilter = {}): Promise<ReplayClip[]> {
+    return Promise.all(
+      this.repository
+        .list(filter)
+        .map((clip) => this.withClipSizeAsync(clip, true)),
+    );
   }
 
   getClip(id: string): ReplayClipSourceDetail | null {
@@ -152,7 +142,7 @@ class ReplayClipsService {
       });
       return null;
     }
-    const sizedClip = this.withClipSize(clip);
+    const sizedClip = clip;
     const storedClipPath = this.getStoredClipPathForClip(sizedClip);
     const durationSeconds =
       sizedClip.durationSeconds ?? this.readReplayClipDuration(storedClipPath);
@@ -168,7 +158,9 @@ class ReplayClipsService {
     return {
       clip: sizedClip,
       durationSeconds,
-      mediaUrl: storedClipPath ? createReplayClipMediaUrl(id) : null,
+      mediaUrl: storedClipPath
+        ? createReplayClipMediaUrl(id, sizedClip.updatedAt)
+        : null,
     };
   }
 
@@ -271,11 +263,17 @@ class ReplayClipsService {
     };
   }
 
-  listLibrary(query: ReplayClipLibraryQuery = {}): ReplayClipLibraryPage {
+  async listLibrary(
+    query: ReplayClipLibraryQuery = {},
+  ): Promise<ReplayClipLibraryPage> {
     const normalizedQuery = this.normalizeLibraryQuery(query);
     const filter = this.libraryQueryToListFilter(normalizedQuery);
     if (normalizedQuery.sortBy === "sizeBytes") {
-      this.refreshMissingClipSizes(filter);
+      await Promise.all(
+        this.repository
+          .listAll(filter)
+          .map((clip) => this.withClipSizeAsync(clip, true)),
+      );
     }
     const page = this.repository.listLibraryPage({
       filter,
@@ -285,10 +283,12 @@ class ReplayClipsService {
       sortDirection: normalizedQuery.sortDirection,
     });
 
+    const items = await Promise.all(
+      page.items.map((clip) => this.withClipSizeAsync(clip, true)),
+    );
+
     return {
-      items: page.items.map((clip) =>
-        this.createReplayClipView(this.withClipSize(clip, true)),
-      ),
+      items: items.map((clip) => this.createReplayClipView(clip)),
       availableLeagues: this.listLibraryLeagues(normalizedQuery),
       pageIndex: normalizedQuery.pageIndex,
       pageSize: normalizedQuery.pageSize,
@@ -306,22 +306,14 @@ class ReplayClipsService {
     clips: ReplayClip[],
     storageRoot = this.resolveStorageRoot(),
   ): void {
-    this.repository.replaceAll(
-      this.sanitizeClips(clips, storageRoot).map((clip) =>
-        this.withClipSize(clip),
-      ),
-    );
+    this.repository.replaceAll(this.sanitizeClips(clips, storageRoot));
   }
 
   upsertMany(
     clips: ReplayClip[],
     storageRoot = this.resolveStorageRoot(),
   ): void {
-    this.repository.upsertMany(
-      this.sanitizeClips(clips, storageRoot).map((clip) =>
-        this.withClipSize(clip),
-      ),
-    );
+    this.repository.upsertMany(this.sanitizeClips(clips, storageRoot));
   }
 
   async saveManualReplay(): Promise<ReplayClip | null> {
@@ -340,6 +332,28 @@ class ReplayClipsService {
   }
 
   async handleReplayTrigger(
+    event: ReplayTriggerEvent,
+  ): Promise<ReplayClip | null> {
+    if (this.activeReplayTriggerRequest) {
+      logInfo(REPLAY_CLIPS_LOG_SCOPE, "Replay trigger coalesced", {
+        game: event.game,
+        kind: event.kind,
+        lineHash: event.lineHash,
+      });
+      return this.activeReplayTriggerRequest;
+    }
+
+    const request = this.handleReplayTriggerExclusive(event).finally(() => {
+      if (this.activeReplayTriggerRequest === request) {
+        this.activeReplayTriggerRequest = null;
+      }
+    });
+    this.activeReplayTriggerRequest = request;
+
+    return request;
+  }
+
+  private async handleReplayTriggerExclusive(
     event: ReplayTriggerEvent,
   ): Promise<ReplayClip | null> {
     logInfo(REPLAY_CLIPS_LOG_SCOPE, "Replay trigger received", {
@@ -409,6 +423,7 @@ class ReplayClipsService {
       clip = this.updateClip(clip, {
         originalObsPath: storedReplayPath,
         processedClipPath: storedReplayPath,
+        sizeBytes: (await stat(storedReplayPath)).size,
       });
       logInfo(REPLAY_CLIPS_LOG_SCOPE, "Replay source saved", {
         clipId: clip.id,
@@ -500,72 +515,6 @@ class ReplayClipsService {
     }
   }
 
-  private setupMediaProtocol(): void {
-    try {
-      if (protocol.isProtocolHandled(REPLAY_CLIP_MEDIA_SCHEME)) {
-        return;
-      }
-
-      protocol.handle(REPLAY_CLIP_MEDIA_SCHEME, (request) =>
-        this.handleMediaRequest(request),
-      );
-    } catch (error) {
-      logWarn(REPLAY_CLIPS_LOG_SCOPE, "Replay media protocol setup failed", {
-        error: safeErrorMessage(error),
-      });
-    }
-  }
-
-  private async handleMediaRequest(request: GlobalRequest): Promise<Response> {
-    const startedAt = Date.now();
-    const target = resolveHinekoraMediaRequestTarget(request.url);
-    if (!target) {
-      return new Response(null, { status: 404 });
-    }
-
-    const mediaPath =
-      target.kind === "replay-clip"
-        ? this.getStoredClipMediaPath(target.id)
-        : RecordingStorageService.getInstance().getRecordingMediaPath(
-            target.id,
-          );
-    if (!mediaPath) {
-      logWarn(REPLAY_CLIPS_LOG_SCOPE, "Replay preview media missing", {
-        mediaId: target.id,
-        mediaKind: target.kind,
-      });
-
-      return new Response(null, { status: 404 });
-    }
-
-    try {
-      const response = await createReplayClipMediaFileResponse(
-        mediaPath,
-        request,
-        (url, init) => net.fetch(url, init),
-      );
-      if (replayMediaDiagnosticsEnabled) {
-        logInfo(REPLAY_CLIPS_LOG_SCOPE, "Replay preview media response ready", {
-          elapsedMs: Date.now() - startedAt,
-          mediaId: target.id,
-          mediaKind: target.kind,
-          range: request.headers.get("range"),
-          status: response.status,
-        });
-      }
-
-      return response;
-    } catch (error) {
-      logWarn(REPLAY_CLIPS_LOG_SCOPE, "Replay preview media failed", {
-        mediaId: target.id,
-        mediaKind: target.kind,
-        error: safeErrorMessage(error),
-      });
-
-      return new Response(null, { status: 500 });
-    }
-  }
-
   revealClip(id: string): ReplayClipFileActionResult {
     try {
       const clipPath = this.getStoredClipPath(id);
@@ -648,7 +597,7 @@ class ReplayClipsService {
           ...(onProgress ? { onProgress } : {}),
           sourcePath: clipPath,
           trim: fullRangeTrim,
-          ...(muteAudio ? { muteAudio } : {}),
+          muteAudio: true,
         });
       }
 
@@ -663,7 +612,9 @@ class ReplayClipsService {
     options: ReplayClipOperationProgressOptions = {},
   ): Promise<ReplayClipUpdateResult> {
     return this.queueClipFileOperation(input.id, () =>
-      this.updateClipFileQueued(input, options),
+      this.queueStoredFileMutation(() =>
+        this.updateClipFileQueued(input, options),
+      ),
     );
   }
 
@@ -698,7 +649,7 @@ class ReplayClipsService {
         { inSeconds: 0, outSeconds: durationSeconds },
         durationSeconds,
       );
-      const targetPath = this.resolveReplayClipRenameTarget(
+      const targetPath = await resolveReplayClipRenameTarget(
         sourcePath,
         input.name ?? null,
       );
@@ -714,26 +665,6 @@ class ReplayClipsService {
         outSeconds: fullRangeTrim.outSeconds,
       };
 
-      if (shouldRenderTrimmedUpdate && renderTrim) {
-        const onProgress = createReplayClipOperationProgressHandler(
-          input.operationRequestId,
-          options,
-        );
-
-        await this.renderReplayClipQuickTrim({
-          ...(onProgress ? { onProgress } : {}),
-          outputPath: finalPath,
-          sourcePath,
-          trim: renderTrim,
-          ...(muteAudio ? { muteAudio } : {}),
-        });
-        if (didRename) {
-          await rm(sourcePath, { force: true });
-        }
-      } else if (didRename && targetPath) {
-        await rename(sourcePath, targetPath);
-      }
-
       if (!shouldRenderTrimmedUpdate && !didTrim && !didRename) {
         return {
           ok: true,
@@ -742,22 +673,55 @@ class ReplayClipsService {
         };
       }
 
-      const fileStats = await stat(finalPath);
-      let updatedClip = this.createUpdatedClipForStoredPath({
-        clip,
-        durationSeconds:
-          this.readReplayClipDuration(finalPath) ??
-          (didTrim && trim
-            ? roundReplayClipSeconds(trim.outSeconds - trim.inSeconds)
-            : clip.durationSeconds),
-        path: finalPath,
-        sizeBytes: fileStats.size,
+      const onProgress = createReplayClipOperationProgressHandler(
+        input.operationRequestId,
+        options,
+      );
+      const mutation = await commitReplayClipFileUpdate({
+        finalPath,
+        onCleanupError: (error, path) => {
+          logWarn(REPLAY_CLIPS_LOG_SCOPE, "Replay update cleanup failed", {
+            error: safeErrorMessage(error),
+            ...createSafePathLogFields(path, "cleanup"),
+          });
+        },
+        persist: async (committedPath) => {
+          const fileStats = await stat(committedPath);
+          let nextClip = this.createUpdatedClipForStoredPath({
+            clip,
+            durationSeconds:
+              this.readReplayClipDuration(committedPath) ??
+              (didTrim && trim
+                ? roundReplayClipSeconds(trim.outSeconds - trim.inSeconds)
+                : clip.durationSeconds),
+            path: committedPath,
+            sizeBytes: fileStats.size,
+          });
+          nextClip = await this.withClipSizeAsync(nextClip);
+          if (nextClip.sizeBytes <= 0) {
+            nextClip = { ...nextClip, sizeBytes: fileStats.size };
+          }
+          this.persistAndPublish(nextClip);
+          return nextClip;
+        },
+        ...(shouldRenderTrimmedUpdate && renderTrim
+          ? {
+              render: (outputPath: string) =>
+                this.renderReplayClipQuickTrim({
+                  ...(onProgress ? { onProgress } : {}),
+                  outputPath,
+                  sourcePath,
+                  trim: renderTrim,
+                  ...(muteAudio ? { muteAudio } : {}),
+                }),
+            }
+          : {}),
+        sourcePath,
       });
-      updatedClip = {
-        ...updatedClip,
-        sizeBytes: this.calculateClipSizeBytes(updatedClip) || fileStats.size,
-      };
-      this.persistAndPublish(updatedClip);
+      const updatedClip = mutation.committedValue;
+      if (mutation.obsoleteSourcePath) {
+        await this.deleteStoredPathIfUnreferenced(mutation.obsoleteSourcePath);
+      }
       logInfo(REPLAY_CLIPS_LOG_SCOPE, "Replay clip updated from overlay", {
         clipId: updatedClip.id,
         didRename,
@@ -783,7 +747,9 @@ class ReplayClipsService {
   }
 
   async deleteClip(id: string): Promise<ReplayClipFileActionResult> {
-    return this.queueClipFileOperation(id, () => this.deleteClipQueued(id));
+    return this.queueClipFileOperation(id, () =>
+      this.queueStoredFileMutation(() => this.deleteClipQueued(id)),
+    );
   }
 
   private async deleteClipQueued(
@@ -920,7 +886,7 @@ class ReplayClipsService {
   }
 
   private persistAndPublish(clip: ReplayClip): void {
-    const publishedClip = this.withClipSize(clip);
+    const publishedClip = clip;
     this.repository.upsert(publishedClip);
     const publishedView = this.createReplayClipView(publishedClip);
     for (const window of BrowserWindow.getAllWindows()) {
@@ -954,8 +920,8 @@ class ReplayClipsService {
       [WindowName.Main, WindowName.RecorderOverlay],
       (_event, filter: unknown) => {
         try {
-          return this.list(this.validateListFilter(filter)).map((clip) =>
-            this.createReplayClipView(clip),
+          return this.list(this.validateListFilter(filter)).then((clips) =>
+            clips.map((clip) => this.createReplayClipView(clip)),
           );
         } catch (error) {
           return handleValidationError(error);
@@ -1145,7 +1111,7 @@ class ReplayClipsService {
       clip,
       durationSeconds:
         clip.durationSeconds ?? this.readReplayClipDuration(storedClipPath),
-      mediaUrl: createReplayClipMediaUrl(clip.id),
+      mediaUrl: createReplayClipMediaUrl(clip.id, clip.updatedAt),
     };
   }
 
@@ -1157,18 +1123,23 @@ class ReplayClipsService {
 
     return {
       ...detail,
-      clip: this.createReplayClipView(detail.clip),
+      clip: this.createReplayClipView(detail.clip, Boolean(detail.mediaUrl)),
     };
   }
 
-  private createReplayClipView(clip: ReplayClip): ReplayClipView {
+  private createReplayClipView(
+    clip: ReplayClip,
+    hasMediaFile = Boolean(
+      (clip.processedClipPath ?? clip.originalObsPath) && clip.sizeBytes > 0,
+    ),
+  ): ReplayClipView {
     const { originalObsPath, processedClipPath, ...view } = clip;
     const mediaPath = processedClipPath ?? originalObsPath;
 
     return {
       ...view,
       fileName: mediaPath ? basename(mediaPath) : null,
-      hasMediaFile: Boolean(mediaPath && clip.sizeBytes > 0),
+      hasMediaFile: Boolean(mediaPath && hasMediaFile),
     };
   }
 
@@ -1183,50 +1154,7 @@ class ReplayClipsService {
     sourcePath: string;
     trim: ReplayClipTrimInput;
   }): Promise<void> {
-    const trimDurationSeconds = roundReplayClipSeconds(
-      input.trim.outSeconds - input.trim.inSeconds,
-    );
-    const exportClip: EditorResolvedExportClip = {
-      durationSeconds: trimDurationSeconds,
-      inSeconds: input.trim.inSeconds,
-      outSeconds: input.trim.outSeconds,
-      source: { path: input.sourcePath },
-      startSeconds: 0,
-    };
-    const segments = createEditorExportSegments(
-      [exportClip],
-      trimDurationSeconds,
-    );
-    const tempOutputPath = createEditorExportTempOutputPath(input.outputPath);
-
-    try {
-      await renderEditorExportWithFfmpeg({
-        ...(input.onProgress ? { onProgress: input.onProgress } : {}),
-        ...(input.muteAudio ? { muteAudio: true } : {}),
-        outputPath: tempOutputPath,
-        resolution: "1080p",
-        segments,
-      });
-
-      if (arePathsEqual(input.sourcePath, input.outputPath)) {
-        await copyFile(tempOutputPath, input.outputPath);
-        await rm(tempOutputPath, { force: true }).catch((error: unknown) => {
-          logWarn(REPLAY_CLIPS_LOG_SCOPE, "Replay trim temp cleanup failed", {
-            error: safeErrorMessage(error),
-            ...createSafePathLogFields(tempOutputPath, "temp"),
-          });
-        });
-        return;
-      }
-
-      /* v8 ignore next */
-      await rename(tempOutputPath, input.outputPath);
-    } catch (error) {
-      /* v8 ignore next */
-      await rm(tempOutputPath, { force: true });
-      /* v8 ignore next */
-      throw error;
-    }
+    await renderReplayClipQuickTrim(input);
   }
 
   private async copyTrimmedClipToClipboard(input: {
@@ -1235,38 +1163,10 @@ class ReplayClipsService {
     sourcePath: string;
     trim: ReplayClipTrimInput;
   }): Promise<ReplayClipFileActionResult> {
-    const tempPath = app.getPath("temp");
-
-    return copyRenderedFileToClipboard({
-      cleanup: (outputPath) =>
-        cleanupEditorClipboardOutputDirectory({
-          protectedPath: outputPath,
-          tempPath,
-        }),
-      createOutputPath: () =>
-        createEditorClipboardOutputPath({
-          fileName: basename(input.sourcePath),
-          tempPath,
-        }),
-      onCleanupError: /* v8 ignore next */ (error, outputPath) => {
-        /* v8 ignore next */
-        logWarn(
-          REPLAY_CLIPS_LOG_SCOPE,
-          "Replay clip clipboard cleanup failed",
-          {
-            error: safeErrorMessage(error),
-            ...createSafePathLogFields(outputPath, "clipboard"),
-          },
-        );
-      },
+    return copyTrimmedReplayClipToClipboard({
+      ...input,
       render: (outputPath) =>
-        this.renderReplayClipQuickTrim({
-          ...(input.onProgress ? { onProgress: input.onProgress } : {}),
-          ...(input.muteAudio ? { muteAudio: true } : {}),
-          outputPath,
-          sourcePath: input.sourcePath,
-          trim: input.trim,
-        }),
+        this.renderReplayClipQuickTrim({ ...input, outputPath }),
     });
   }
 
@@ -1295,37 +1195,18 @@ class ReplayClipsService {
     }
   }
 
-  private resolveReplayClipRenameTarget(
-    sourcePath: string,
-    name: string | null,
-  ): string | null {
-    const normalizedName = normalizeReplayClipQuickName(name);
-    if (!normalizedName) {
-      return null;
-    }
+  private async queueStoredFileMutation<T>(
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const run = this.storedFileMutationQueue
+      .catch(() => undefined)
+      .then(operation);
+    this.storedFileMutationQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
 
-    const parsedSource = parse(sourcePath);
-    const extension = parsedSource.ext || ".mp4";
-    const targetDirectory = dirname(sourcePath);
-    const currentPath = resolve(sourcePath);
-    let candidate = resolve(targetDirectory, `${normalizedName}${extension}`);
-    if (arePathsEqual(currentPath, candidate)) {
-      return null;
-    }
-
-    let suffix = 2;
-    while (existsSync(candidate)) {
-      candidate = resolve(
-        targetDirectory,
-        `${normalizedName} (${suffix})${extension}`,
-      );
-      if (arePathsEqual(currentPath, candidate)) {
-        return null;
-      }
-      suffix += 1;
-    }
-
-    return candidate;
+    return run;
   }
 
   private resolveReplayClipQuickTrim(
@@ -1397,8 +1278,42 @@ class ReplayClipsService {
         continue;
       }
 
+      if (this.isStoredPathReferenced(storedPath)) {
+        logInfo(REPLAY_CLIPS_LOG_SCOPE, "Replay clip file retained", {
+          clipId: clip.id,
+          reason: "shared-path",
+          ...createSafePathLogFields(storedPath, "recording"),
+        });
+        continue;
+      }
+
       await unlink(storedPath);
     }
+  }
+
+  private async deleteStoredPathIfUnreferenced(path: string): Promise<void> {
+    if (this.isStoredPathReferenced(path)) {
+      return;
+    }
+
+    try {
+      await rm(path, { force: true });
+    } catch (error) {
+      logWarn(REPLAY_CLIPS_LOG_SCOPE, "Obsolete replay file cleanup failed", {
+        error: safeErrorMessage(error),
+        ...createSafePathLogFields(path, "recording"),
+      });
+    }
+  }
+
+  private isStoredPathReferenced(path: string): boolean {
+    return this.repository
+      .listStoragePaths()
+      .some((clip) =>
+        [clip.processedClipPath, clip.originalObsPath].some(
+          (candidate) => candidate !== null && arePathsEqual(candidate, path),
+        ),
+      );
   }
 
   private hashLine(line: string): string {
@@ -1413,301 +1328,23 @@ class ReplayClipsService {
   }
 
   private validateListFilter(value: unknown): ReplayClipListFilter {
-    if (value === undefined) {
-      return {};
-    }
-
-    assertObject(value, "clip list filter", ReplayClipsChannel.List);
-    const filter: ReplayClipListFilter = {};
-    if (value.game !== undefined) {
-      assertString(value.game, "game", ReplayClipsChannel.List, {
-        min: 1,
-        max: 16,
-      });
-      const game = GameIdSchema.safeParse(value.game);
-      if (!game.success) {
-        throw new IpcValidationError(
-          ReplayClipsChannel.List,
-          "game is invalid",
-        );
-      }
-      filter.game = game.data;
-    }
-    if (value.kind !== undefined) {
-      assertString(value.kind, "clip kind", ReplayClipsChannel.List, {
-        min: 1,
-        max: 16,
-      });
-      const kind = ReplayClipKindSchema.safeParse(value.kind);
-      if (!kind.success) {
-        throw new IpcValidationError(
-          ReplayClipsChannel.List,
-          "clip kind is invalid",
-        );
-      }
-      filter.kind = kind.data;
-    }
-    if (value.league !== undefined) {
-      assertString(value.league, "league", ReplayClipsChannel.List, {
-        min: 1,
-        max: 80,
-      });
-      filter.league = value.league;
-    }
-
-    return filter;
+    return validateReplayClipListFilter(value);
   }
 
   private validateLibraryQuery(value: unknown): ReplayClipLibraryQuery {
-    if (value === undefined) {
-      return {};
-    }
-
-    assertObject(value, "clip library query", ReplayClipsChannel.ListLibrary);
-    const filter = this.validateListFilterForChannel(
-      value,
-      ReplayClipsChannel.ListLibrary,
-    );
-    const query: ReplayClipLibraryQuery = { ...filter };
-
-    if (value.pageIndex !== undefined) {
-      assertNumber(
-        value.pageIndex,
-        "page index",
-        ReplayClipsChannel.ListLibrary,
-        {
-          integer: true,
-          min: 0,
-          max: 10_000,
-        },
-      );
-      query.pageIndex = value.pageIndex;
-    }
-    if (value.pageSize !== undefined) {
-      assertNumber(
-        value.pageSize,
-        "page size",
-        ReplayClipsChannel.ListLibrary,
-        {
-          integer: true,
-          min: 1,
-          max: maxLibraryPageSize,
-        },
-      );
-      query.pageSize = value.pageSize;
-    }
-    if (value.sortBy !== undefined) {
-      assertString(value.sortBy, "sort field", ReplayClipsChannel.ListLibrary, {
-        min: 1,
-        max: 32,
-      });
-      if (!librarySortKeys.includes(value.sortBy as ReplayClipLibrarySortKey)) {
-        throw new IpcValidationError(
-          ReplayClipsChannel.ListLibrary,
-          "sort field is invalid",
-        );
-      }
-      query.sortBy = value.sortBy as ReplayClipLibrarySortKey;
-    }
-    if (value.sortDirection !== undefined) {
-      assertString(
-        value.sortDirection,
-        "sort direction",
-        ReplayClipsChannel.ListLibrary,
-        { min: 1, max: 8 },
-      );
-      if (
-        !librarySortDirections.includes(
-          value.sortDirection as ReplayClipLibrarySortDirection,
-        )
-      ) {
-        throw new IpcValidationError(
-          ReplayClipsChannel.ListLibrary,
-          "sort direction is invalid",
-        );
-      }
-      query.sortDirection =
-        value.sortDirection as ReplayClipLibrarySortDirection;
-    }
-
-    return query;
+    return validateReplayClipLibraryQuery(value);
   }
 
   private validateUpdateInput(value: unknown): ReplayClipUpdateInput {
-    assertObject(value, "clip update", ReplayClipsChannel.Update);
-    assertString(value.id, "id", ReplayClipsChannel.Update, {
-      min: 1,
-      max: 128,
-    });
-
-    const input: ReplayClipUpdateInput = { id: value.id };
-    if (value.name !== undefined && value.name !== null) {
-      assertString(value.name, "clip name", ReplayClipsChannel.Update, {
-        max: maxReplayClipRenameLength,
-      });
-      input.name = value.name;
-    }
-
-    if (
-      value.operationRequestId !== undefined &&
-      value.operationRequestId !== null
-    ) {
-      assertString(
-        value.operationRequestId,
-        "operation request id",
-        ReplayClipsChannel.Update,
-        { min: 1, max: 128 },
-      );
-      input.operationRequestId = value.operationRequestId;
-    }
-
-    if (value.trim !== undefined && value.trim !== null) {
-      input.trim = this.validateTrimInput(
-        value.trim,
-        ReplayClipsChannel.Update,
-      );
-    }
-    if (value.muteAudio !== undefined) {
-      assertOptionalBoolean(
-        value.muteAudio,
-        "mute clip audio",
-        ReplayClipsChannel.Update,
-      );
-      input.muteAudio = value.muteAudio;
-    }
-
-    return input;
+    return validateReplayClipUpdateInput(value);
   }
 
   private validateCopyInput(value: unknown): ReplayClipCopyInput {
-    if (typeof value === "string") {
-      assertString(value, "id", ReplayClipsChannel.Copy, {
-        min: 1,
-        max: 128,
-      });
-
-      return { id: value };
-    }
-
-    assertObject(value, "clip copy", ReplayClipsChannel.Copy);
-    assertString(value.id, "id", ReplayClipsChannel.Copy, {
-      min: 1,
-      max: 128,
-    });
-
-    const input: ReplayClipCopyInput = { id: value.id };
-    if (
-      value.operationRequestId !== undefined &&
-      value.operationRequestId !== null
-    ) {
-      assertString(
-        value.operationRequestId,
-        "operation request id",
-        ReplayClipsChannel.Copy,
-        { min: 1, max: 128 },
-      );
-      input.operationRequestId = value.operationRequestId;
-    }
-
-    if (value.trim !== undefined && value.trim !== null) {
-      input.trim = this.validateTrimInput(value.trim, ReplayClipsChannel.Copy);
-    }
-    if (value.muteAudio !== undefined) {
-      assertOptionalBoolean(
-        value.muteAudio,
-        "mute clip audio",
-        ReplayClipsChannel.Copy,
-      );
-      input.muteAudio = value.muteAudio;
-    }
-
-    return input;
-  }
-
-  private validateTrimInput(
-    value: unknown,
-    channel: ReplayClipsChannel,
-  ): ReplayClipTrimInput {
-    assertObject(value, "trim", channel);
-    assertNumber(value.inSeconds, "trim start", channel, {
-      min: 0,
-      max: quickClipTrimMaximumSeconds,
-    });
-    assertNumber(value.outSeconds, "trim end", channel, {
-      min: quickClipTrimMinimumSeconds,
-      max: quickClipTrimMaximumSeconds,
-    });
-    const trim = value as { inSeconds: number; outSeconds: number };
-    if (trim.outSeconds - trim.inSeconds < quickClipTrimMinimumSeconds) {
-      throw new IpcValidationError(channel, "trim range is too short");
-    }
-
-    return {
-      inSeconds: trim.inSeconds,
-      outSeconds: trim.outSeconds,
-    };
-  }
-
-  private validateListFilterForChannel(
-    value: Record<string, unknown>,
-    channel: ReplayClipsChannel,
-  ): ReplayClipListFilter {
-    const filter: ReplayClipListFilter = {};
-    if (value.game !== undefined) {
-      assertString(value.game, "game", channel, {
-        min: 1,
-        max: 16,
-      });
-      const game = GameIdSchema.safeParse(value.game);
-      if (!game.success) {
-        throw new IpcValidationError(channel, "game is invalid");
-      }
-      filter.game = game.data;
-    }
-    if (value.kind !== undefined) {
-      assertString(value.kind, "clip kind", channel, {
-        min: 1,
-        max: 16,
-      });
-      const kind = ReplayClipKindSchema.safeParse(value.kind);
-      if (!kind.success) {
-        throw new IpcValidationError(channel, "clip kind is invalid");
-      }
-      filter.kind = kind.data;
-    }
-    if (value.league !== undefined) {
-      assertString(value.league, "league", channel, {
-        min: 1,
-        max: 80,
-      });
-      filter.league = value.league;
-    }
-
-    return filter;
+    return validateReplayClipCopyInput(value);
   }
 
   private validateIdList(value: unknown): string[] {
-    if (!Array.isArray(value)) {
-      throw new IpcValidationError(
-        ReplayClipsChannel.DeleteMany,
-        "ids must be an array",
-      );
-    }
-    if (value.length > 100) {
-      throw new IpcValidationError(
-        ReplayClipsChannel.DeleteMany,
-        "ids is too large",
-      );
-    }
-
-    return value.map((id) => {
-      assertString(id, "id", ReplayClipsChannel.DeleteMany, {
-        min: 1,
-        max: 128,
-      });
-
-      return id;
-    });
+    return validateReplayClipIdList(value);
   }
 
   private normalizeLibraryQuery(
@@ -1751,62 +1388,39 @@ class ReplayClipsService {
     return this.repository.listLeagues({ game: query.game, kind: query.kind });
   }
 
-  private withClipSize(clip: ReplayClip, persist = false): ReplayClip {
-    if (!this.getStoredClipPathForClip(clip)) {
-      if (persist && clip.sizeBytes !== 0) {
-        this.repository.updateSize(clip.id, 0);
-      }
-
-      return {
-        ...clip,
-        sizeBytes: 0,
-      };
-    }
-
-    if (clip.sizeBytes > 0) {
-      return clip;
-    }
-
-    const sizeBytes = this.calculateClipSizeBytes(clip);
-    if (persist && sizeBytes !== clip.sizeBytes) {
-      this.repository.updateSize(clip.id, sizeBytes);
-    }
-
-    return {
-      ...clip,
-      sizeBytes,
-    };
-  }
-
-  private refreshMissingClipSizes(filter: ReplayClipListFilter): void {
-    for (const clip of this.repository.listMissingSizeClips(filter)) {
-      this.withClipSize(clip, true);
-    }
-  }
-
-  private calculateClipSizeBytes(clip: ReplayClip): number {
+  private async withClipSizeAsync(
+    clip: ReplayClip,
+    persist = false,
+  ): Promise<ReplayClip> {
     const paths = new Set(
       [clip.processedClipPath, clip.originalObsPath].filter(
         (path): path is string => typeof path === "string" && path.length > 0,
       ),
     );
-    let sizeBytes = 0;
+    const sizes = await Promise.all(
+      Array.from(paths, async (path) => {
+        const storedPath = this.resolveClipFilePath(path, {
+          requireExistingFile: false,
+        });
+        if (!storedPath) {
+          return 0;
+        }
 
-    for (const path of paths) {
-      const storedPath = this.resolveClipFilePath(path, {
-        requireExistingFile: true,
-        requireNonEmptyFile: true,
-      });
-      if (!storedPath) {
-        continue;
-      }
+        try {
+          const fileStats = await stat(storedPath);
+          return fileStats.isFile() ? fileStats.size : 0;
+        } catch {
+          return 0;
+        }
+      }),
+    );
 
-      try {
-        sizeBytes += statSync(storedPath).size;
-      } catch {}
+    const sizeBytes = sizes.reduce((total, size) => total + size, 0);
+    if (persist && sizeBytes !== clip.sizeBytes) {
+      this.repository.updateSize(clip.id, sizeBytes);
     }
 
-    return sizeBytes;
+    return sizeBytes === clip.sizeBytes ? clip : { ...clip, sizeBytes };
   }
 
   private resolveClipFilePath(
@@ -1826,25 +1440,6 @@ class ReplayClipsService {
       app.getPath("videos"),
     );
   }
-}
-
-function normalizeReplayClipQuickName(name: string | null): string | null {
-  if (!name) {
-    return null;
-  }
-
-  const parsed = parse(basename(name));
-  // c8 ignore next
-  const parsedName = parsed.name || parsed.base || "";
-  const normalized = Array.from(parsedName.replace(/[<>:"/\\|?*]/g, " "))
-    .map((character) => (character.charCodeAt(0) < 32 ? " " : character))
-    .join("")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  return normalized.length > 0
-    ? normalized.slice(0, maxReplayClipRenameLength)
-    : null;
 }
 
 function isReplayClipFullRangeTrim(
@@ -1892,10 +1487,6 @@ function clampReplayClipSeconds(
 
 function roundReplayClipSeconds(seconds: number): number {
   return Math.round(Math.max(seconds, 0) * 1_000) / 1_000;
-}
-
-function arePathsEqual(left: string, right: string): boolean {
-  return resolve(left).toLowerCase() === resolve(right).toLowerCase();
 }
 
 export { ReplayClipsService };

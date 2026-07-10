@@ -19,12 +19,15 @@ function useClipPreviewOverlayMediaWorkflow() {
     isMuted,
     isPlaying,
     isSaving,
+    incrementMediaVersion,
+    mediaError,
     mediaVersion,
     operationProgress,
     setCopied,
     setHasSavedClip,
     setDurationOverrideSeconds,
     setMediaReady,
+    setMediaError,
     setSaveMessage,
     setMuted,
     setPlaying,
@@ -38,12 +41,15 @@ function useClipPreviewOverlayMediaWorkflow() {
     isMuted: clipPreviewOverlay.isMuted,
     isPlaying: clipPreviewOverlay.isPlaying,
     isSaving: clipPreviewOverlay.isSaving,
+    incrementMediaVersion: clipPreviewOverlay.incrementMediaVersion,
+    mediaError: clipPreviewOverlay.mediaError,
     mediaVersion: clipPreviewOverlay.mediaVersion,
     operationProgress: clipPreviewOverlay.operationProgress,
     setCopied: clipPreviewOverlay.setCopied,
     setHasSavedClip: clipPreviewOverlay.setHasSavedClip,
     setDurationOverrideSeconds: clipPreviewOverlay.setDurationOverrideSeconds,
     setMediaReady: clipPreviewOverlay.setMediaReady,
+    setMediaError: clipPreviewOverlay.setMediaError,
     setMuted: clipPreviewOverlay.setMuted,
     setSaveMessage: clipPreviewOverlay.setSaveMessage,
     setPlaying: clipPreviewOverlay.setPlaying,
@@ -74,7 +80,7 @@ function useClipPreviewOverlayMediaWorkflow() {
       (clip.status === "death_detected" ||
         clip.status === "saving_replay" ||
         clip.status === "processing")) ||
-      (hasPlayableClipFile && (!videoSrc || !isMediaReady)),
+      (hasPlayableClipFile && !mediaError && (!videoSrc || !isMediaReady)),
   );
   const {
     getPlaybackSeconds,
@@ -118,6 +124,7 @@ function useClipPreviewOverlayMediaWorkflow() {
     isPlaying,
     setDurationOverrideSeconds,
     setMediaReady,
+    setMediaError,
     setMuted: syncMuteState,
     setPlaying,
     setTrim,
@@ -148,6 +155,7 @@ function useClipPreviewOverlayMediaWorkflow() {
     if (!videoSrc) {
       hasUserAdjustedTrimRef.current = false;
       setMediaReady(false);
+      setMediaError(null);
       syncPlaybackPresentation(0);
       setPlaying(false);
       return;
@@ -155,9 +163,16 @@ function useClipPreviewOverlayMediaWorkflow() {
 
     hasUserAdjustedTrimRef.current = false;
     setMediaReady(false);
+    setMediaError(null);
     syncPlaybackPresentation(0);
     setPlaying(false);
-  }, [setMediaReady, setPlaying, syncPlaybackPresentation, videoSrc]);
+  }, [
+    setMediaError,
+    setMediaReady,
+    setPlaying,
+    syncPlaybackPresentation,
+    videoSrc,
+  ]);
 
   const handleRevealClip = useCallback(() => {
     if (clip) {
@@ -168,6 +183,11 @@ function useClipPreviewOverlayMediaWorkflow() {
       });
     }
   }, [clip]);
+
+  const handleRetryMedia = useCallback(() => {
+    setMediaError(null);
+    incrementMediaVersion();
+  }, [incrementMediaVersion, setMediaError]);
 
   const handleTrimChange = useCallback(
     (nextTrim: ClipPreviewTrimRange, options?: { previewSeconds: number }) => {
@@ -213,6 +233,7 @@ function useClipPreviewOverlayMediaWorkflow() {
     handlePause,
     handlePlay,
     handleRevealClip,
+    handleRetryMedia,
     handleSeeked,
     handleSeeking,
     handleTimeUpdate,
@@ -222,6 +243,7 @@ function useClipPreviewOverlayMediaWorkflow() {
     handleVideoError,
     isMuted,
     isPlaying,
+    mediaError,
     isPreparingClip,
     isProcessing,
     operationProgress,

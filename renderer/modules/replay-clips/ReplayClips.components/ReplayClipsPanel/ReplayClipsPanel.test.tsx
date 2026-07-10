@@ -91,9 +91,11 @@ describe("ReplayClipsPanel", () => {
     configureReplayClipsStore([
       createReplayClipView({
         id: "playable",
+        durationSeconds: 5,
         fileName: "playable.mp4",
         hasMediaFile: true,
         sizeBytes: 1024,
+        targetDurationSeconds: 50,
       }),
       createReplayClipView({
         id: "missing",
@@ -109,6 +111,8 @@ describe("ReplayClipsPanel", () => {
     const missingRow = findRowByText("missing.mp4");
 
     expect(playableRow.getAttribute("role")).toBe("button");
+    expect(playableRow.textContent).toContain("0:05");
+    expect(playableRow.textContent).not.toContain("0:50");
     expect(missingRow.getAttribute("role")).toBe(null);
     expect(missingRow.className).toContain("text-base-content/45");
 
