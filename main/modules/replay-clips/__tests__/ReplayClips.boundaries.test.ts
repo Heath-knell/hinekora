@@ -159,9 +159,9 @@ describe("ReplayClipsService boundaries", () => {
       internals.resolveReplayTriggerBatchQueued("missing-view", []),
     ).resolves.toBeNull();
 
-    const sourcePath = join(root, "renamed.mp4");
-    const sourceConflict = join(root, "renamed (2).mp4");
-    const secondConflict = join(root, "renamed (3).mp4");
+    const sourcePath = join(root, "Renamed.mp4");
+    const sourceConflict = join(root, "Renamed (2).mp4");
+    const secondConflict = join(root, "Renamed (3).mp4");
     writeFileSync(sourcePath, "source");
     writeFileSync(sourceConflict, "conflict");
     writeFileSync(secondConflict, "conflict");
@@ -324,7 +324,7 @@ describe("ReplayClipsService boundaries", () => {
 
   it("resolves rename targets and validates update operation ids", async () => {
     const sourcePath = join(root, "clip-source.mp4");
-    const existingBase = join(root, "renamed.mp4");
+    const existingBase = join(root, "Renamed.mp4");
     writeFileSync(sourcePath, "video");
     writeFileSync(existingBase, "other");
     const renameTarget = await resolveReplayClipRenameTarget(

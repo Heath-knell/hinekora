@@ -107,6 +107,10 @@ function RecordingBookmarkTimeline({
   const timelineMarkers = calculateRecordingTimelineMarkers(duration);
   const minorMarkers = calculateRecordingTimelineMinorMarkers(duration);
   const isDisabled = duration <= 0 || (isPlaybackDisabled ?? !mediaUrl);
+  const activeVisualPlaybackSubscriber =
+    enableVisualPlaybackSubscription === false
+      ? undefined
+      : subscribeVisualPlaybackTime;
   const visibleMarkerBookmarks = markerBookmarks ?? bookmarks;
   const applyHoverSeconds = (seconds: number | null) => {
     const marker = hoverMarkerRef.current;
@@ -162,7 +166,13 @@ function RecordingBookmarkTimeline({
         isDisabled={isDisabled}
         isPlaying={isPlaying}
         playbackSeconds={playbackSeconds}
+        {...(activeVisualPlaybackSubscriber
+          ? { subscribeVisualPlaybackTime: activeVisualPlaybackSubscriber }
+          : {})}
         toolbarStart={toolbarStart}
+        {...(visualPlaybackOffsetSeconds !== undefined
+          ? { visualPlaybackOffsetSeconds }
+          : {})}
         volume={volume}
         onJumpToStart={onJumpToStart}
         onSeekBackward={onSeekBackward}
@@ -214,11 +224,9 @@ function RecordingBookmarkTimeline({
           <RecordingTimelinePlayhead
             durationSeconds={duration}
             playbackSeconds={playbackSeconds}
-            {...(subscribeVisualPlaybackTime
-              ? { subscribeVisualPlaybackTime }
-              : {})}
-            {...(enableVisualPlaybackSubscription !== undefined
-              ? { enableVisualPlaybackSubscription }
+            railWidthPixels={timelineRailWidthPixels}
+            {...(activeVisualPlaybackSubscriber
+              ? { subscribeVisualPlaybackTime: activeVisualPlaybackSubscriber }
               : {})}
             {...(visualPlaybackOffsetSeconds !== undefined
               ? { visualPlaybackOffsetSeconds }

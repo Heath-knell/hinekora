@@ -4,7 +4,10 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { commitReplayClipFileUpdate } from "../ReplayClips.file-operations";
+import {
+  areReplayClipPathsEqual,
+  commitReplayClipFileUpdate,
+} from "../ReplayClips.file-operations";
 
 let root: string;
 
@@ -17,6 +20,21 @@ afterEach(async () => {
 });
 
 describe("commitReplayClipFileUpdate", () => {
+  it("compares replay clip paths case-insensitively", () => {
+    expect(
+      areReplayClipPathsEqual(
+        join(root, "Replay Clip.mp4"),
+        join(root, "replay clip.MP4"),
+      ),
+    ).toBe(true);
+    expect(
+      areReplayClipPathsEqual(
+        join(root, "Replay Clip.mp4"),
+        join(root, "Other Clip.mp4"),
+      ),
+    ).toBe(false);
+  });
+
   it("restores a renamed source when persistence fails", async () => {
     const sourcePath = join(root, "source.mp4");
     const finalPath = join(root, "renamed.mp4");

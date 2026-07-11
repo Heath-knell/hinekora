@@ -4,72 +4,85 @@ import type { VisualPlaybackSubscriber } from "~/renderer/modules/media-playback
 
 import {
   calculateRecordingTimelinePercent,
-  formatRecordingTimelineRailLeft,
+  recordingTimelineRailPaddingPixels,
 } from "../RecordingBookmarkTimeline/RecordingBookmarkTimeline.utils";
 
 interface RecordingTimelinePlayheadProps {
   durationSeconds: number;
-  enableVisualPlaybackSubscription?: boolean;
   playbackSeconds: number;
+  railWidthPixels: number;
   subscribeVisualPlaybackTime?: VisualPlaybackSubscriber;
   visualPlaybackOffsetSeconds?: number;
 }
 
 function RecordingTimelinePlayhead({
   durationSeconds,
-  enableVisualPlaybackSubscription = true,
   playbackSeconds,
+  railWidthPixels,
   subscribeVisualPlaybackTime,
   visualPlaybackOffsetSeconds = 0,
 }: RecordingTimelinePlayheadProps) {
+  const displayedSecondsRef = useRef(playbackSeconds);
+  const playbackSecondsPropRef = useRef(playbackSeconds);
+  const subscriberPropRef = useRef(subscribeVisualPlaybackTime);
   const playheadRef = useRef<HTMLDivElement>(null);
-  const formatPlayheadLeft = useCallback(
+  const formatPlayheadTransform = useCallback(
     (seconds: number) => {
       const playheadPercent = calculateRecordingTimelinePercent(
         seconds,
         durationSeconds,
       );
 
-      return formatRecordingTimelineRailLeft(playheadPercent);
+      return `translate3d(${(railWidthPixels * playheadPercent) / 100}px, 0, 0) translateX(-50%)`;
     },
-    [durationSeconds],
+    [durationSeconds, railWidthPixels],
+  );
+
+  const applyTimelineSeconds = useCallback(
+    (seconds: number) => {
+      displayedSecondsRef.current = seconds;
+      if (playheadRef.current) {
+        playheadRef.current.style.transform = formatPlayheadTransform(seconds);
+      }
+    },
+    [formatPlayheadTransform],
   );
 
   useEffect(() => {
-    if (playheadRef.current) {
-      playheadRef.current.style.left = formatPlayheadLeft(playbackSeconds);
-    }
-  }, [formatPlayheadLeft, playbackSeconds]);
+    const subscriberChanged =
+      subscriberPropRef.current !== subscribeVisualPlaybackTime;
+    const nextSeconds =
+      playbackSecondsPropRef.current === playbackSeconds && !subscriberChanged
+        ? displayedSecondsRef.current
+        : playbackSeconds;
+    playbackSecondsPropRef.current = playbackSeconds;
+    subscriberPropRef.current = subscribeVisualPlaybackTime;
+    applyTimelineSeconds(nextSeconds);
+  }, [applyTimelineSeconds, playbackSeconds, subscribeVisualPlaybackTime]);
 
   const applyVisualPlaybackSeconds = useCallback(
     (seconds: number) => {
-      if (playheadRef.current) {
-        playheadRef.current.style.left = formatPlayheadLeft(
-          seconds + visualPlaybackOffsetSeconds,
-        );
-      }
+      applyTimelineSeconds(seconds + visualPlaybackOffsetSeconds);
     },
-    [formatPlayheadLeft, visualPlaybackOffsetSeconds],
+    [applyTimelineSeconds, visualPlaybackOffsetSeconds],
   );
 
   useEffect(() => {
-    if (!enableVisualPlaybackSubscription || !subscribeVisualPlaybackTime) {
+    if (!subscribeVisualPlaybackTime) {
       return;
     }
 
     return subscribeVisualPlaybackTime(applyVisualPlaybackSeconds);
-  }, [
-    applyVisualPlaybackSeconds,
-    enableVisualPlaybackSubscription,
-    subscribeVisualPlaybackTime,
-  ]);
+  }, [applyVisualPlaybackSeconds, subscribeVisualPlaybackTime]);
 
   return (
     <div
-      className="pointer-events-none absolute top-0 bottom-0 z-40 w-8 -translate-x-1/2"
+      className="pointer-events-none absolute top-0 bottom-0 z-40 w-8 will-change-transform"
+      data-recording-timeline-playhead="true"
       ref={playheadRef}
       style={{
-        left: formatPlayheadLeft(playbackSeconds),
+        left: `${recordingTimelineRailPaddingPixels}px`,
+        transform: formatPlayheadTransform(playbackSeconds),
       }}
     >
       <span className="absolute top-0 bottom-0 left-1/2 w-0.5 -translate-x-1/2 rounded-full bg-base-content shadow" />

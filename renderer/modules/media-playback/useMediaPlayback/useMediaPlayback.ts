@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-const playbackStoreSyncIntervalMs = 50;
+import {
+  type PendingMediaPlaybackSeek,
+  useMediaPlaybackVideoFrames,
+} from "../useMediaPlaybackVideoFrames/useMediaPlaybackVideoFrames";
 
 interface UseMediaPlaybackInput {
   fallbackDurationSeconds: number | null;
@@ -22,9 +25,8 @@ function useMediaPlayback({
   onVisualTimeChange,
 }: UseMediaPlaybackInput) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const playbackAnimationFrameRef = useRef<number | null>(null);
+  const pendingSeekRef = useRef<PendingMediaPlaybackSeek | null>(null);
   const playbackSecondsRef = useRef(0);
-  const lastPlaybackStoreSyncMsRef = useRef(0);
   const [actualDurationSeconds, setActualDurationSeconds] = useState<
     number | null
   >(null);
@@ -57,15 +59,11 @@ function useMediaPlayback({
 
     setActualDurationSeconds(mediaUrl ? null : 0);
     setIsPlaying(false);
+    pendingSeekRef.current = null;
     playbackSecondsRef.current = 0;
     onVisualTimeChange?.(0);
     setPlaybackSeconds(0);
   }, [mediaUrl, onVisualTimeChange]);
-
-  useEffect(() => {
-    playbackSecondsRef.current = playbackSeconds;
-    onVisualTimeChange?.(playbackSeconds);
-  }, [onVisualTimeChange, playbackSeconds]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -86,25 +84,29 @@ function useMediaPlayback({
 
       playbackSecondsRef.current = clampedSeconds;
       onVisualTimeChange?.(clampedSeconds);
-
-      const now = performance.now();
-      if (
-        !options.force &&
-        now - lastPlaybackStoreSyncMsRef.current < playbackStoreSyncIntervalMs
-      ) {
-        return;
+      if (options.force) {
+        setPlaybackSeconds(clampedSeconds);
       }
-
-      lastPlaybackStoreSyncMsRef.current = now;
-      setPlaybackSeconds(clampedSeconds);
     },
     [durationSeconds, onVisualTimeChange],
   );
 
   const syncPlaybackPosition = useCallback(
     (options: { force?: boolean } = {}) => {
-      const currentTime = videoRef.current?.currentTime;
+      const video = videoRef.current;
+      if (!video) {
+        return;
+      }
+
+      const pendingSeek = pendingSeekRef.current;
+      if (pendingSeek !== null && video.seeking) {
+        publishPlaybackSeconds(pendingSeek.seconds, options);
+        return;
+      }
+
+      const currentTime = video.currentTime;
       if (typeof currentTime === "number" && Number.isFinite(currentTime)) {
+        pendingSeekRef.current = null;
         publishPlaybackSeconds(currentTime, options);
       }
     },
@@ -116,6 +118,10 @@ function useMediaPlayback({
       const nextSeconds = clampMediaPlaybackSeconds(seconds, durationSeconds);
       const video = videoRef.current;
       if (video) {
+        pendingSeekRef.current = {
+          seconds: nextSeconds,
+          settledFrameMisses: 0,
+        };
         video.currentTime = nextSeconds;
       }
 
@@ -134,6 +140,8 @@ function useMediaPlayback({
   const jumpToStart = useCallback(() => {
     seekTo(0);
   }, [seekTo]);
+
+  const getPlaybackSeconds = useCallback(() => playbackSecondsRef.current, []);
 
   const play = useCallback(() => {
     const video = videoRef.current;
@@ -171,27 +179,14 @@ function useMediaPlayback({
     );
   }, []);
 
-  useEffect(() => {
-    if (!isPlaying || !mediaUrl) {
-      return;
-    }
-
-    const syncPlaybackFrame = () => {
-      syncPlaybackPosition();
-      playbackAnimationFrameRef.current =
-        window.requestAnimationFrame(syncPlaybackFrame);
-    };
-
-    playbackAnimationFrameRef.current =
-      window.requestAnimationFrame(syncPlaybackFrame);
-
-    return () => {
-      if (playbackAnimationFrameRef.current !== null) {
-        window.cancelAnimationFrame(playbackAnimationFrameRef.current);
-      }
-      playbackAnimationFrameRef.current = null;
-    };
-  }, [isPlaying, mediaUrl, syncPlaybackPosition]);
+  useMediaPlaybackVideoFrames({
+    isPlaying,
+    mediaUrl,
+    pendingSeekRef,
+    publishPlaybackSeconds,
+    syncPlaybackPosition,
+    videoRef,
+  });
 
   const handleTimeUpdate = useCallback(() => {
     if (!isPlaying) {
@@ -215,6 +210,7 @@ function useMediaPlayback({
 
   return {
     durationSeconds,
+    getPlaybackSeconds,
     handleEnded,
     handleLoadedMetadata,
     handlePause,

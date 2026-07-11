@@ -61,6 +61,7 @@ describe("RecordingBookmarkTimeline", () => {
       root.unmount();
     });
     container.remove();
+    vi.restoreAllMocks();
   });
 
   it("seeks from pointer position and selects clip marker targets", () => {
@@ -175,5 +176,146 @@ describe("RecordingBookmarkTimeline", () => {
         '[data-recording-bookmark-marker-id="bookmark-1"]',
       ),
     ).not.toBe(null);
+  });
+
+  it("updates the timer and playhead from one presented video frame", () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      bottom: 120,
+      height: 120,
+      left: 0,
+      right: 248,
+      toJSON: () => ({}),
+      top: 0,
+      width: 248,
+      x: 0,
+      y: 0,
+    });
+    const visualPlaybackListeners = new Set<(seconds: number) => void>();
+
+    act(() => {
+      root.render(
+        <RecordingBookmarkTimeline
+          markers={{ bookmarks: [] }}
+          playback={{
+            durationSeconds: 100,
+            isPlaying: true,
+            mediaUrl: "hinekora-media://recording/recording-1",
+            playbackSeconds: 25,
+            subscribeVisualPlaybackTime: (listener) => {
+              visualPlaybackListeners.add(listener);
+              return () => {
+                visualPlaybackListeners.delete(listener);
+              };
+            },
+            volume: 1,
+            onJumpToStart: vi.fn(),
+            onSeek: vi.fn(),
+            onSeekBackward: vi.fn(),
+            onSeekForward: vi.fn(),
+            onTogglePlayback: vi.fn(),
+            onVolumeChange: vi.fn(),
+          }}
+        />,
+      );
+    });
+
+    expect(visualPlaybackListeners.size).toBe(2);
+    expect(container.textContent).toContain("0:25.00 / 1:40.00");
+
+    act(() => {
+      for (const listener of visualPlaybackListeners) {
+        listener(50);
+      }
+    });
+
+    expect(container.textContent).toContain("0:50.00 / 1:40.00");
+    expect(
+      container.querySelector<HTMLElement>(
+        '[data-recording-timeline-playhead="true"]',
+      )?.style.transform,
+    ).toContain("translate3d(100px");
+  });
+
+  it("restores state time when visual playback subscription is disabled", () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      bottom: 120,
+      height: 120,
+      left: 0,
+      right: 248,
+      toJSON: () => ({}),
+      top: 0,
+      width: 248,
+      x: 0,
+      y: 0,
+    });
+    const visualPlaybackListeners = new Set<(seconds: number) => void>();
+    const subscribeVisualPlaybackTime = (
+      listener: (seconds: number) => void,
+    ) => {
+      visualPlaybackListeners.add(listener);
+      return () => {
+        visualPlaybackListeners.delete(listener);
+      };
+    };
+    const playbackActions = {
+      onJumpToStart: vi.fn(),
+      onSeek: vi.fn(),
+      onSeekBackward: vi.fn(),
+      onSeekForward: vi.fn(),
+      onTogglePlayback: vi.fn(),
+      onVolumeChange: vi.fn(),
+    };
+
+    act(() => {
+      root.render(
+        <RecordingBookmarkTimeline
+          markers={{ bookmarks: [] }}
+          playback={{
+            durationSeconds: 100,
+            isPlaying: true,
+            mediaUrl: "hinekora-media://recording/recording-1",
+            playbackSeconds: 25,
+            subscribeVisualPlaybackTime,
+            volume: 1,
+            ...playbackActions,
+          }}
+        />,
+      );
+    });
+
+    expect(visualPlaybackListeners.size).toBe(2);
+    act(() => {
+      for (const listener of visualPlaybackListeners) {
+        listener(50);
+      }
+    });
+    expect(container.textContent).toContain("0:50.00 / 1:40.00");
+
+    act(() => {
+      root.render(
+        <RecordingBookmarkTimeline
+          markers={{ bookmarks: [] }}
+          playback={{
+            durationSeconds: 100,
+            enableVisualPlaybackSubscription: false,
+            isPlaybackDisabled: true,
+            isPlaying: false,
+            mediaUrl: null,
+            playbackSeconds: 25,
+            subscribeVisualPlaybackTime,
+            volume: 1,
+            ...playbackActions,
+          }}
+        />,
+      );
+    });
+
+    expect(visualPlaybackListeners.size).toBe(0);
+    expect(container.textContent).toContain("0:25.00 / 1:40.00");
+    expect(
+      container.querySelector<HTMLElement>(
+        '[data-recording-timeline-playhead="true"]',
+      )?.style.transform,
+    ).toContain("translate3d(50px");
   });
 });

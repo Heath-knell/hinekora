@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+import type { VisualPlaybackSubscriber } from "~/renderer/modules/media-playback/useVisualPlaybackPublisher/useVisualPlaybackPublisher";
+
 import { RecordingPlaybackControls } from "../RecordingPlaybackControls/RecordingPlaybackControls";
 import { RecordingVolumeControls } from "../RecordingVolumeControls/RecordingVolumeControls";
 
@@ -8,7 +10,9 @@ interface RecordingBookmarkTimelineToolbarProps {
   isDisabled: boolean;
   isPlaying: boolean;
   playbackSeconds: number;
+  subscribeVisualPlaybackTime?: VisualPlaybackSubscriber;
   toolbarStart?: ReactNode;
+  visualPlaybackOffsetSeconds?: number;
   volume: number;
   onJumpToStart: () => void;
   onSeekBackward: () => void;
@@ -22,7 +26,9 @@ function RecordingBookmarkTimelineToolbar({
   isDisabled,
   isPlaying,
   playbackSeconds,
+  subscribeVisualPlaybackTime,
   toolbarStart,
+  visualPlaybackOffsetSeconds,
   volume,
   onJumpToStart,
   onSeekBackward,
@@ -41,6 +47,12 @@ function RecordingBookmarkTimelineToolbar({
           isDisabled={isDisabled}
           isPlaying={isPlaying}
           playbackSeconds={playbackSeconds}
+          {...(subscribeVisualPlaybackTime
+            ? { subscribeVisualPlaybackTime }
+            : {})}
+          {...(visualPlaybackOffsetSeconds !== undefined
+            ? { visualPlaybackOffsetSeconds }
+            : {})}
           onJumpToStart={onJumpToStart}
           onSeekBackward={onSeekBackward}
           onSeekForward={onSeekForward}

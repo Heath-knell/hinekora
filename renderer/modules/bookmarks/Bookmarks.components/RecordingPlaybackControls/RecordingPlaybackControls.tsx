@@ -6,13 +6,17 @@ import {
   FiSkipBack,
 } from "react-icons/fi";
 
-import { formatRecordingTimelineTimestamp } from "../RecordingBookmarkTimeline/RecordingBookmarkTimeline.utils";
+import type { VisualPlaybackSubscriber } from "~/renderer/modules/media-playback/useVisualPlaybackPublisher/useVisualPlaybackPublisher";
+
+import { RecordingPlaybackTime } from "../RecordingPlaybackTime/RecordingPlaybackTime";
 
 interface RecordingPlaybackControlsProps {
   durationSeconds: number;
   isDisabled: boolean;
   isPlaying: boolean;
   playbackSeconds: number;
+  subscribeVisualPlaybackTime?: VisualPlaybackSubscriber;
+  visualPlaybackOffsetSeconds?: number;
   onJumpToStart: () => void;
   onSeekBackward: () => void;
   onSeekForward: () => void;
@@ -24,6 +28,8 @@ function RecordingPlaybackControls({
   isDisabled,
   isPlaying,
   playbackSeconds,
+  subscribeVisualPlaybackTime,
+  visualPlaybackOffsetSeconds,
   onJumpToStart,
   onSeekBackward,
   onSeekForward,
@@ -69,15 +75,16 @@ function RecordingPlaybackControls({
       >
         {isPlaying ? <FiPause size={16} /> : <FiPlay size={16} />}
       </button>
-      <div className="min-w-32 text-sm tabular-nums">
-        <span className="font-bold text-base-content">
-          {formatRecordingTimelineTimestamp(playbackSeconds)}
-        </span>
-        <span className="text-base-content/45">
-          {" "}
-          / {formatRecordingTimelineTimestamp(durationSeconds)}
-        </span>
-      </div>
+      <RecordingPlaybackTime
+        durationSeconds={durationSeconds}
+        playbackSeconds={playbackSeconds}
+        {...(subscribeVisualPlaybackTime
+          ? { subscribeVisualPlaybackTime }
+          : {})}
+        {...(visualPlaybackOffsetSeconds !== undefined
+          ? { visualPlaybackOffsetSeconds }
+          : {})}
+      />
     </div>
   );
 }

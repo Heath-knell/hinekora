@@ -1,3 +1,5 @@
+import { resolve } from "node:path";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const fsMocks = vi.hoisted(() => ({
@@ -19,6 +21,9 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 
 import { commitReplayClipFileUpdate } from "../ReplayClips.file-operations";
 
+const clipsRoot = resolve("clips");
+const sourcePath = resolve(clipsRoot, "source.mp4");
+
 beforeEach(() => {
   fsMocks.copyFile.mockReset().mockResolvedValue(undefined);
   fsMocks.rename.mockReset().mockResolvedValue(undefined);
@@ -29,9 +34,9 @@ describe("commitReplayClipFileUpdate failures", () => {
   it("persists an unchanged path without touching the filesystem", async () => {
     await expect(
       commitReplayClipFileUpdate({
-        finalPath: "C:\\clips\\source.mp4",
+        finalPath: sourcePath,
         persist: () => "committed",
-        sourcePath: "C:\\clips\\source.mp4",
+        sourcePath,
       }),
     ).resolves.toEqual({
       committedValue: "committed",
@@ -48,13 +53,13 @@ describe("commitReplayClipFileUpdate failures", () => {
 
     await expect(
       commitReplayClipFileUpdate({
-        finalPath: "C:\\clips\\rendered.mp4",
+        finalPath: resolve(clipsRoot, "rendered.mp4"),
         onCleanupError,
         persist: () => "unused",
         render: async () => {
           throw renderError;
         },
-        sourcePath: "C:\\clips\\source.mp4",
+        sourcePath,
       }),
     ).rejects.toBe(renderError);
     expect(onCleanupError).toHaveBeenCalledWith(
@@ -68,10 +73,10 @@ describe("commitReplayClipFileUpdate failures", () => {
 
     await expect(
       commitReplayClipFileUpdate({
-        finalPath: "C:\\clips\\source.mp4",
+        finalPath: sourcePath,
         persist: () => "committed",
         render: async () => undefined,
-        sourcePath: "C:\\clips\\source.mp4",
+        sourcePath,
       }),
     ).resolves.toEqual({
       committedValue: "committed",
@@ -87,12 +92,12 @@ describe("commitReplayClipFileUpdate failures", () => {
 
     await expect(
       commitReplayClipFileUpdate({
-        finalPath: "C:\\clips\\source.mp4",
+        finalPath: sourcePath,
         persist: () => {
           throw persistenceError;
         },
         render: async () => undefined,
-        sourcePath: "C:\\clips\\source.mp4",
+        sourcePath,
       }),
     ).rejects.toBe(persistenceError);
     expect(fsMocks.copyFile).toHaveBeenCalledTimes(3);
@@ -107,11 +112,11 @@ describe("commitReplayClipFileUpdate failures", () => {
       .mockRejectedValueOnce(rollbackError);
 
     const result = commitReplayClipFileUpdate({
-      finalPath: "C:\\clips\\renamed.mp4",
+      finalPath: resolve(clipsRoot, "renamed.mp4"),
       persist: () => {
         throw persistenceError;
       },
-      sourcePath: "C:\\clips\\source.mp4",
+      sourcePath,
     });
 
     await expect(result).rejects.toMatchObject({
