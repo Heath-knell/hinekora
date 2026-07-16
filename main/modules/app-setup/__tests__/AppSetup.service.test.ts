@@ -43,8 +43,6 @@ describe("AppSetupService", () => {
       selectedGames: ["poe1"],
       poe1ClientPath: null,
       poe2ClientPath: null,
-      telemetryCrashReporting: false,
-      telemetryUsageAnalytics: false,
     });
     expect(service.isSetupComplete()).toBe(false);
   });
@@ -64,7 +62,7 @@ describe("AppSetupService", () => {
     expect(replacement).not.toBe(first);
   });
 
-  it("advances through setup and defaults telemetry when entering consent", () => {
+  it("advances through setup without changing crash reporting", () => {
     expect(service.advanceStep()).toEqual({ success: true });
     expect(service.getSetupState().currentStep).toBe(SETUP_STEPS.SELECT_GAME);
 
@@ -78,14 +76,16 @@ describe("AppSetupService", () => {
       error: "Please select Path of Exile 1 Client.txt path",
     });
 
-    settingsStore.update({ poe1ClientTxtPath: clientTxtPath });
+    settingsStore.update({
+      poe1ClientTxtPath: clientTxtPath,
+      telemetryCrashReporting: false,
+    });
 
     expect(service.advanceStep()).toEqual({ success: true });
     expect(service.getSetupState()).toMatchObject({
-      currentStep: SETUP_STEPS.TELEMETRY_CONSENT,
-      telemetryCrashReporting: true,
-      telemetryUsageAnalytics: true,
+      currentStep: SETUP_STEPS.PRIVACY_INFO,
     });
+    expect(settingsStore.get().telemetryCrashReporting).toBe(false);
   });
 
   it("validates selected Client.txt paths for each selected game", () => {
@@ -184,7 +184,7 @@ describe("AppSetupService", () => {
     settingsStore.update({
       installedGames: ["poe2"],
       poe2ClientTxtPath: clientTxtPath,
-      setupStep: SETUP_STEPS.TELEMETRY_CONSENT,
+      setupStep: SETUP_STEPS.PRIVACY_INFO,
     });
 
     expect(service.completeSetup()).toEqual({ success: true });
@@ -195,7 +195,7 @@ describe("AppSetupService", () => {
     expect(settingsStore.get()).toMatchObject({
       activeGame: "poe2",
       setupCompleted: true,
-      setupStep: SETUP_STEPS.TELEMETRY_CONSENT,
+      setupStep: SETUP_STEPS.PRIVACY_INFO,
     });
   });
 
@@ -207,7 +207,7 @@ describe("AppSetupService", () => {
         installedGames: ["poe2", "poe1", "poe2"],
         poe1ClientTxtPath: clientTxtPath,
         poe2ClientTxtPath: clientTxtPath,
-        setupStep: SETUP_STEPS.TELEMETRY_CONSENT,
+        setupStep: SETUP_STEPS.PRIVACY_INFO,
       })),
       update: updateSettings,
     } as unknown as SettingsStoreService);
@@ -221,7 +221,7 @@ describe("AppSetupService", () => {
       activeGame: "poe1",
       installedGames: ["poe1", "poe2"],
       setupCompleted: true,
-      setupStep: SETUP_STEPS.TELEMETRY_CONSENT,
+      setupStep: SETUP_STEPS.PRIVACY_INFO,
     });
 
     const skipUpdateSettings = vi.fn();
@@ -239,10 +239,8 @@ describe("AppSetupService", () => {
     expect(skipUpdateSettings).toHaveBeenCalledWith({
       activeGame: "poe1",
       installedGames: [],
-      telemetryCrashReporting: true,
-      telemetryUsageAnalytics: true,
       setupCompleted: true,
-      setupStep: SETUP_STEPS.TELEMETRY_CONSENT,
+      setupStep: SETUP_STEPS.PRIVACY_INFO,
     });
   });
 
@@ -256,7 +254,7 @@ describe("AppSetupService", () => {
   it("allows going backward or one step ahead but not skipping ahead", () => {
     settingsStore.update({ setupStep: SETUP_STEPS.SELECT_GAME });
 
-    expect(service.goToStep(SETUP_STEPS.TELEMETRY_CONSENT)).toEqual({
+    expect(service.goToStep(SETUP_STEPS.PRIVACY_INFO)).toEqual({
       success: false,
       error: "Cannot skip ahead in setup",
     });
@@ -272,9 +270,8 @@ describe("AppSetupService", () => {
   it("resets and skips setup", () => {
     settingsStore.update({
       setupCompleted: true,
-      setupStep: SETUP_STEPS.TELEMETRY_CONSENT,
+      setupStep: SETUP_STEPS.PRIVACY_INFO,
       telemetryCrashReporting: false,
-      telemetryUsageAnalytics: false,
     });
 
     service.resetSetup();
@@ -285,11 +282,10 @@ describe("AppSetupService", () => {
 
     service.skipSetup();
     expect(service.getSetupState()).toMatchObject({
-      currentStep: SETUP_STEPS.TELEMETRY_CONSENT,
+      currentStep: SETUP_STEPS.PRIVACY_INFO,
       isComplete: true,
-      telemetryCrashReporting: true,
-      telemetryUsageAnalytics: true,
     });
+    expect(settingsStore.get().telemetryCrashReporting).toBe(false);
   });
 
   it("registers guarded IPC handlers with setup step validation", async () => {

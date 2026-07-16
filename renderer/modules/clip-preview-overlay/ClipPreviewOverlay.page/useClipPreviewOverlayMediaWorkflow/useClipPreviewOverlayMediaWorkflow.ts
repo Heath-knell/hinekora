@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
 
-import { trackEvent } from "~/renderer/modules/umami";
 import { useClipPreviewOverlayShallow } from "~/renderer/store";
 
 import { useClipPreviewOverlayDiagnostics } from "../useClipPreviewOverlayDiagnostics/useClipPreviewOverlayDiagnostics";
@@ -164,11 +163,7 @@ function useClipPreviewOverlayMediaWorkflow() {
 
   const handleRevealClip = useCallback(() => {
     if (clip) {
-      void window.electron.replayClips.reveal(clip.id).then((result) => {
-        if (result.ok) {
-          trackEvent("clip-revealed");
-        }
-      });
+      void window.electron.replayClips.reveal(clip.id);
     }
   }, [clip]);
 

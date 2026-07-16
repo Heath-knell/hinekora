@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 
+import {
+  getCurrentLeague,
+  PoeLeagueProviderRecordSchema,
+} from "./game-leagues";
 import { clampRewindSaveSeconds } from "./recording";
 import {
   AppSettingsSchema,
+  AppSettingsUpdateSchema,
   AuraPlacementScaleSettings,
   AuraPointPlacementSettings,
   appSettingsKeys,
@@ -64,13 +69,17 @@ describe("shared schemas", () => {
       groupPlayDeathAlertDismissed: false,
       recorderSettingsInfoAlertDismissed: false,
       activeGame: "poe1",
-      activeLeague: "Standard",
-      poe1SelectedLeague: "Standard",
-      poe2SelectedLeague: "Standard",
-      editorAutoPruneProjects: false,
+      activeLeague: getCurrentLeague("poe1"),
+      poe1SelectedLeague: getCurrentLeague("poe1"),
+      poe2SelectedLeague: getCurrentLeague("poe2"),
+      poe1MediaLibraryLeague: null,
+      poe2MediaLibraryLeague: null,
+      clipsLibraryView: "death",
+      editorMediaFilter: "death-clip",
+      editorAutoPruneProjects: true,
+      editorLogEnabled: false,
       deathClipSeconds: 10,
-      telemetryCrashReporting: false,
-      telemetryUsageAnalytics: false,
+      telemetryCrashReporting: true,
       lastSeenAppVersion: null,
       onboardingDismissedBeacons: [],
     });
@@ -86,6 +95,21 @@ describe("shared schemas", () => {
     expect(appSettingsKeys).toContain("recorderOverlayShowOnStartup");
     expect(appSettingsKeys).toContain("auraOverlayShowEditingFrame");
     expect(appSettingsKeys).not.toContain("recordingHideOverlaysFromCapture");
+  });
+
+  it("validates strict settings deltas without materializing defaults", () => {
+    expect(AppSettingsUpdateSchema.parse({ appStartMinimized: true })).toEqual({
+      appStartMinimized: true,
+    });
+    expect(
+      AppSettingsUpdateSchema.parse({ keybindManualBookmark: "ctrl + m" }),
+    ).toEqual({ keybindManualBookmark: "Ctrl+M" });
+    expect(() =>
+      AppSettingsUpdateSchema.parse({ unsupportedSetting: true }),
+    ).toThrow();
+    expect(() =>
+      AppSettingsUpdateSchema.parse({ appStartMinimized: undefined }),
+    ).toThrow();
   });
 
   it("accepts only supported replay clip preview resolutions", () => {
@@ -158,6 +182,30 @@ describe("shared schemas", () => {
 
   it("rejects empty active leagues", () => {
     expect(() => AppSettingsSchema.parse({ activeLeague: "" })).toThrow();
+  });
+
+  it("validates PoE league provider timestamps as ISO datetimes with offsets", () => {
+    expect(
+      PoeLeagueProviderRecordSchema.parse({
+        endAt: null,
+        id: "Next League",
+        isCurrent: true,
+        name: "Next League",
+        startAt: "2026-09-01T00:00:00+02:00",
+        updatedAt: "2026-08-01T00:00:00.000Z",
+      }),
+    ).toMatchObject({ id: "Next League" });
+
+    expect(() =>
+      PoeLeagueProviderRecordSchema.parse({
+        endAt: null,
+        id: "Next League",
+        isCurrent: true,
+        name: "Next League",
+        startAt: "2026-09-01",
+        updatedAt: null,
+      }),
+    ).toThrow();
   });
 
   it("limits rewind save duration to 60 seconds", () => {

@@ -24,11 +24,11 @@ const storeMocks = vi.hoisted(() => ({
   removeTimelineClip: vi.fn(),
   removeTimelineGap: vi.fn(),
   setHoveredTimelineGap: vi.fn(),
+  setMediaFilter: vi.fn(),
   setPlaybackSeconds: vi.fn(),
   splitTimelineClipAt: vi.fn(),
   toggleProjectAudioMuted: vi.fn(),
   undoProjectChange: vi.fn(),
-  useEditorShallow: vi.fn(),
   useSavedEditsShallow: vi.fn(),
   useSettingsSelector: vi.fn(),
 }));
@@ -132,6 +132,8 @@ const timelineMocks = vi.hoisted(() => ({
 
 vi.mock("~/renderer/store", async () => {
   const React = await vi.importActual<typeof import("react")>("react");
+  const { createPoeLeagueFixtureCatalog: createPoeLeagueTestCatalog } =
+    await import("~/types/test-fixtures/poe-leagues");
 
   return {
     useBookmarksShallow: (selector: (bookmarks: unknown) => unknown) => {
@@ -143,8 +145,30 @@ vi.mock("~/renderer/store", async () => {
 
       return selector(bookmarks);
     },
-    useEditorShallow: storeMocks.useEditorShallow,
+    useEditorShallow: (selector: (editor: unknown) => unknown) => {
+      const editor = React.useSyncExternalStore(
+        subscribeEditorState,
+        getEditorStateSnapshot,
+        getEditorStateSnapshot,
+      );
+
+      return selector(editor);
+    },
+    usePoeLeaguesShallow: (selector: (value: unknown) => unknown) =>
+      selector({
+        byGame: createPoeLeagueTestCatalog(),
+        errors: {},
+        isFetchingByGame: { poe1: false, poe2: false },
+      }),
     useSavedEditsShallow: storeMocks.useSavedEditsShallow,
+    useSettingsShallow: (selector: (settings: unknown) => unknown) =>
+      storeMocks.useSettingsSelector((settings: unknown) =>
+        selector({
+          ...(settings as object),
+          preferenceErrors: {},
+          updatePreference: vi.fn(),
+        }),
+      ),
     useSettingsSelector: storeMocks.useSettingsSelector,
   };
 });
@@ -165,26 +189,15 @@ vi.mock("../../Editor.components/EditorAssetRail/EditorAssetRail", () => ({
   },
 }));
 vi.mock("../../Editor.components/EditorActionsMenu/EditorActionsMenu", () => ({
-  EditorActionsMenu: ({
-    onToggleBookmarks,
-    onToggleHistory,
-    onToggleShortcuts,
-  }: {
-    isBookmarksVisible: boolean;
-    isHistoryVisible: boolean;
-    isShortcutsVisible: boolean;
-    onToggleBookmarks: () => void;
-    onToggleHistory: () => void;
-    onToggleShortcuts: () => void;
-  }) => (
+  EditorActionsMenu: () => (
     <>
-      <button type="button" onClick={onToggleBookmarks}>
+      <button type="button" onClick={() => toggleEditorSidePanel("bookmarks")}>
         Toggle bookmarks
       </button>
-      <button type="button" onClick={onToggleHistory}>
+      <button type="button" onClick={() => toggleEditorSidePanel("history")}>
         Toggle history
       </button>
-      <button type="button" onClick={onToggleShortcuts}>
+      <button type="button" onClick={() => toggleEditorSidePanel("shortcuts")}>
         Toggle shortcuts
       </button>
     </>
@@ -208,9 +221,9 @@ vi.mock("../../Editor.components/EditorExportView/EditorExportView", () => ({
   EditorExportView: () => <div data-testid="export-view" />,
 }));
 vi.mock("../../Editor.components/EditorHistoryRail/EditorHistoryRail", () => ({
-  EditorHistoryRail: ({ onClose }: { onClose: () => void }) => (
+  EditorHistoryRail: () => (
     <div data-testid="history-rail">
-      <button type="button" onClick={onClose}>
+      <button type="button" onClick={closeEditorSidePanel}>
         Close history
       </button>
     </div>
@@ -219,9 +232,9 @@ vi.mock("../../Editor.components/EditorHistoryRail/EditorHistoryRail", () => ({
 vi.mock(
   "../../Editor.components/EditorShortcutsRail/EditorShortcutsRail",
   () => ({
-    EditorShortcutsRail: ({ onClose }: { onClose: () => void }) => (
+    EditorShortcutsRail: () => (
       <div data-testid="shortcuts-rail">
-        <button type="button" onClick={onClose}>
+        <button type="button" onClick={closeEditorSidePanel}>
           Close shortcuts
         </button>
       </div>
@@ -473,6 +486,7 @@ const secondRecordingProject: EditorProject = {
 let container: HTMLDivElement;
 let root: Root;
 let editorState: Record<string, unknown>;
+const editorStateListeners = new Set<() => void>();
 const settingsSlice = {
   value: {
     activeGame: "poe2",
@@ -484,6 +498,7 @@ const settingsSlice = {
 function configureEditorState(overrides: Record<string, unknown> = {}) {
   editorState = {
     clipboardState: { error: null, requestId: null, status: "idle" },
+    closeSidePanel: closeEditorSidePanel,
     copyProjectToClipboard: storeMocks.copyProjectToClipboard,
     createProject: storeMocks.createProject,
     error: null,
@@ -495,6 +510,7 @@ function configureEditorState(overrides: Record<string, unknown> = {}) {
     hoveredTimelineGap: null,
     hydrate: storeMocks.hydrate,
     isLoading: false,
+    mediaFilter: "death-clip",
     openProject: storeMocks.openProject,
     playbackSeconds: 4,
     previewHasAudio: true,
@@ -505,10 +521,13 @@ function configureEditorState(overrides: Record<string, unknown> = {}) {
     removeTimelineGap: storeMocks.removeTimelineGap,
     selectedClipId: "timeline-1",
     setHoveredTimelineGap: storeMocks.setHoveredTimelineGap,
+    setMediaFilter: storeMocks.setMediaFilter,
     setPlaybackSeconds: storeMocks.setPlaybackSeconds,
     splitTimelineClipAt: storeMocks.splitTimelineClipAt,
     toggleProjectAudioMuted: storeMocks.toggleProjectAudioMuted,
+    toggleSidePanel: toggleEditorSidePanel,
     undoProjectChange: storeMocks.undoProjectChange,
+    visibleSidePanel: null,
     workspace: {
       assets: project.assets,
       hasMoreProjects: false,
@@ -517,9 +536,37 @@ function configureEditorState(overrides: Record<string, unknown> = {}) {
     },
     ...overrides,
   };
-  storeMocks.useEditorShallow.mockImplementation((selector) =>
-    selector(editorState),
-  );
+}
+
+function closeEditorSidePanel(): void {
+  updateEditorState({ visibleSidePanel: null });
+}
+
+function getEditorStateSnapshot(): Record<string, unknown> {
+  return editorState;
+}
+
+function subscribeEditorState(listener: () => void): () => void {
+  editorStateListeners.add(listener);
+
+  return () => {
+    editorStateListeners.delete(listener);
+  };
+}
+
+function toggleEditorSidePanel(
+  panel: "bookmarks" | "history" | "shortcuts",
+): void {
+  updateEditorState({
+    visibleSidePanel: editorState.visibleSidePanel === panel ? null : panel,
+  });
+}
+
+function updateEditorState(update: Record<string, unknown>): void {
+  editorState = { ...editorState, ...update };
+  for (const listener of editorStateListeners) {
+    listener();
+  }
 }
 
 async function renderEditorPage() {
@@ -543,6 +590,9 @@ describe("EditorPage shortcuts", () => {
     root = createRoot(container);
     storeMocks.hydrate.mockResolvedValue(true);
     storeMocks.openProject.mockResolvedValue(true);
+    storeMocks.setMediaFilter.mockImplementation((filter) => {
+      updateEditorState({ mediaFilter: filter });
+    });
     configureEditorState();
     assetRailMocks.props = [];
     bookmarkStoreMocks.reset();
@@ -1295,7 +1345,46 @@ describe("EditorPage shortcuts", () => {
     ).toBe("true");
     expect(assetRailMocks.props.at(-1)?.scope).toEqual({
       game: "poe2",
-      league: "Standard",
+      league: "Runes of Aldur",
+    });
+  });
+
+  it("applies the preferred media filter before enabling asset rail hydration", async () => {
+    storeMocks.useSettingsSelector.mockImplementation((selector) =>
+      selector({
+        value: {
+          ...settingsSlice.value,
+          editorMediaFilter: "manual-replay",
+        },
+      }),
+    );
+    configureEditorState({
+      mediaFilter: "death-clip",
+      project: {
+        ...project,
+        id: "project-2",
+      },
+    });
+
+    await act(async () => {
+      root.render(<EditorPage projectId="project-2" />);
+    });
+
+    expect(
+      assetRailMocks.props.some((props) => props.isHydrationEnabled === false),
+    ).toBe(true);
+    expect(storeMocks.setMediaFilter).toHaveBeenCalledWith("manual-replay");
+
+    await act(async () => {
+      root.render(<EditorPage projectId="project-2" />);
+    });
+
+    expect(assetRailMocks.props.at(-1)).toMatchObject({
+      isHydrationEnabled: true,
+      scope: {
+        game: "poe2",
+        league: "Runes of Aldur",
+      },
     });
   });
 
@@ -1338,7 +1427,7 @@ describe("EditorPage shortcuts", () => {
       isHydrationEnabled: true,
       scope: {
         game: "poe2",
-        league: "Standard",
+        league: "Runes of Aldur",
       },
     });
   });

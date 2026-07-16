@@ -1,7 +1,6 @@
 import { useCallback } from "react";
 
 import type { ReplayClipView } from "~/main/modules/replay-clips";
-import { trackEvent } from "~/renderer/modules/umami";
 import { useClipPreviewOverlayShallow } from "~/renderer/store";
 
 import {
@@ -81,7 +80,6 @@ function useClipPreviewOverlaySaveOperation(input: {
         const nextDurationSeconds = roundClipPreviewSeconds(
           result.detail.durationSeconds ?? input.durationSeconds,
         );
-        trackEvent("clip-updated");
         setOperationProgress(1);
         setHasSavedClip(true);
         setDetail(result.detail);

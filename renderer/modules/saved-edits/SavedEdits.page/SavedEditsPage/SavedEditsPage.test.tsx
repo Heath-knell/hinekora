@@ -9,10 +9,29 @@ const storeMocks = vi.hoisted(() => ({
   useSettingsSelector: vi.fn(),
 }));
 
-vi.mock("~/renderer/store", () => ({
-  useSavedEditsShallow: storeMocks.useSavedEditsShallow,
-  useSettingsSelector: storeMocks.useSettingsSelector,
-}));
+vi.mock("~/renderer/store", async () => {
+  const { createPoeLeagueFixtureCatalog: createPoeLeagueTestCatalog } =
+    await import("~/types/test-fixtures/poe-leagues");
+
+  return {
+    usePoeLeaguesShallow: (selector: (value: unknown) => unknown) =>
+      selector({
+        byGame: createPoeLeagueTestCatalog(),
+        errors: {},
+        isFetchingByGame: { poe1: false, poe2: false },
+      }),
+    useSavedEditsShallow: storeMocks.useSavedEditsShallow,
+    useSettingsShallow: (selector: (settings: unknown) => unknown) =>
+      storeMocks.useSettingsSelector((settings: unknown) =>
+        selector({
+          ...(settings as object),
+          preferenceErrors: {},
+          updatePreference: vi.fn(),
+        }),
+      ),
+    useSettingsSelector: storeMocks.useSettingsSelector,
+  };
+});
 vi.mock("~/renderer/components/PageContainer/PageContainer", () => ({
   PageContainer: ({ children }: { children: ReactNode }) => (
     <div>{children}</div>
@@ -142,5 +161,24 @@ describe("SavedEditsPage", () => {
     );
 
     expect(deleteButton?.disabled).toBe(false);
+  });
+
+  it("hides the global delete action when there are no saved edits", async () => {
+    storeMocks.useSavedEditsShallow.mockImplementation((selector) =>
+      selector({
+        deleteAllEdits: storeMocks.deleteAllEdits,
+        libraryPage: {
+          availableLeagues: [],
+          globalTotalCount: 0,
+          totalCount: 0,
+        },
+      }),
+    );
+
+    await act(async () => {
+      root.render(<SavedEditsPage />);
+    });
+
+    expect(container.textContent).not.toContain("Delete all edits");
   });
 });

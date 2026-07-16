@@ -1,6 +1,33 @@
-import type { DatabaseSync } from "node:sqlite";
+import { DatabaseSync } from "node:sqlite";
 
 import type { Migration } from "../migrations";
+
+class MigrationTestDatabase {
+  private database: DatabaseSync | null = null;
+
+  close(): void {
+    this.database?.close();
+    this.database = null;
+  }
+
+  createEmptyDatabase(): DatabaseSync {
+    this.close();
+    this.database = new DatabaseSync(":memory:");
+    return this.database;
+  }
+
+  createSettingsDatabase(): DatabaseSync {
+    const database = this.createEmptyDatabase();
+    database.exec(`
+      CREATE TABLE settings (
+        key TEXT PRIMARY KEY,
+        value_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+    return database;
+  }
+}
 
 function tableExists(db: DatabaseSync, name: string): boolean {
   const row = db
@@ -139,6 +166,7 @@ export {
   indexColumns,
   indexExists,
   insertSetting,
+  MigrationTestDatabase,
   profileGameColumnIsNullable,
   readCaptureProfiles,
   readSettings,

@@ -15,12 +15,13 @@ describe("MediaLibrary utils", () => {
         "poe2",
         ["Legacy League", "Standard"],
         "Legacy League",
+        ["Runes of Aldur", "Standard"],
       ),
     ).toEqual([
       { value: ALL_LEAGUES_VALUE, label: "All leagues" },
-      { value: "Legacy League", label: "Legacy League" },
       { value: "Runes of Aldur", label: "Runes of Aldur" },
       { value: "Standard", label: "Standard" },
+      { value: "Legacy League", label: "Legacy League" },
     ]);
   });
 

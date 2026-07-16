@@ -2,9 +2,7 @@ import { logWarn } from "~/main/utils/app-log";
 
 type SentryModule = typeof import("@sentry/electron/main");
 type CaptureExceptionArgs = Parameters<SentryModule["captureException"]>;
-type CaptureMessageArgs = Parameters<SentryModule["captureMessage"]>;
 type InitArgs = Parameters<SentryModule["init"]>;
-type CloseArgs = Parameters<SentryModule["close"]>;
 
 let sentryModulePromise: Promise<SentryModule> | null = null;
 
@@ -31,24 +29,9 @@ function captureSentryException(...args: CaptureExceptionArgs): void {
   reportWithSentry((Sentry) => Sentry.captureException(...args));
 }
 
-function captureSentryMessage(...args: CaptureMessageArgs): void {
-  reportWithSentry((Sentry) => Sentry.captureMessage(...args));
-}
-
 async function initSentry(...args: InitArgs): Promise<void> {
   const Sentry = await loadSentryModule();
   Sentry.init(...args);
 }
 
-async function closeSentry(...args: CloseArgs): Promise<boolean> {
-  const Sentry = await loadSentryModule();
-  return Sentry.close(...args);
-}
-
-export {
-  captureSentryException,
-  captureSentryMessage,
-  closeSentry,
-  formatSentryErrorMessage,
-  initSentry,
-};
+export { captureSentryException, formatSentryErrorMessage, initSentry };

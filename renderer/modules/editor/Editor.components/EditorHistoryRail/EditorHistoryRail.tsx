@@ -9,21 +9,23 @@ import {
 } from "../../Editor.slice/Editor.slice.constants";
 import { formatEditorTime } from "../../Editor.utils/Editor.utils";
 
-interface EditorHistoryRailProps {
-  onClose: () => void;
-}
-
-function EditorHistoryRail({ onClose }: EditorHistoryRailProps) {
+function EditorHistoryRail() {
   const [visibleHistoryCount, setVisibleHistoryCount] = useState(
     editorVisibleHistoryPageSize,
   );
-  const { historyPast, historyPastLabels, historyPastSubtitles, project } =
-    useEditorShallow((editor) => ({
-      historyPast: editor.historyPast,
-      historyPastLabels: editor.historyPastLabels,
-      historyPastSubtitles: editor.historyPastSubtitles,
-      project: editor.project,
-    }));
+  const {
+    closeSidePanel,
+    historyPast,
+    historyPastLabels,
+    historyPastSubtitles,
+    project,
+  } = useEditorShallow((editor) => ({
+    closeSidePanel: editor.closeSidePanel,
+    historyPast: editor.historyPast,
+    historyPastLabels: editor.historyPastLabels,
+    historyPastSubtitles: editor.historyPastSubtitles,
+    project: editor.project,
+  }));
   const historyEntries = historyPastLabels
     .map((actionLabel, index) => {
       const historyProject = historyPast[index];
@@ -72,7 +74,7 @@ function EditorHistoryRail({ onClose }: EditorHistoryRailProps) {
             aria-label="Close history panel"
             className="btn btn-ghost btn-xs"
             type="button"
-            onClick={onClose}
+            onClick={closeSidePanel}
           >
             <FiX size={15} />
           </button>

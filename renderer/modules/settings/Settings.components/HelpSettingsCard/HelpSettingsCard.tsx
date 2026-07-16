@@ -8,7 +8,6 @@ import {
   allOnboardingBeaconIds,
   type OnboardingBeaconId,
 } from "~/renderer/modules/onboarding/onboarding-config/onboarding-labels";
-import { trackEvent } from "~/renderer/modules/umami";
 import { useOnboardingActions, useOnboardingState } from "~/renderer/store";
 
 import { HINEKORA_DISCORD_URL, HINEKORA_GITHUB_URL } from "~/types";
@@ -43,37 +42,19 @@ function HelpSettingsCard() {
 
   const handleDismissBeacon = useCallback(
     async (key: OnboardingBeaconId) => {
-      const didDismiss = await runOnboardingMutation(() => dismiss(key));
-
-      trackEvent("onboarding-beacon-visibility-toggled", {
-        beaconId: key,
-        visible: false,
-        didDismiss,
-        didReset: false,
-      });
+      await runOnboardingMutation(() => dismiss(key));
     },
     [dismiss, runOnboardingMutation],
   );
 
   const handleResetBeacon = useCallback(
     async (key: OnboardingBeaconId) => {
-      const didReset = await runOnboardingMutation(() => resetOne(key));
-
-      trackEvent("onboarding-beacon-visibility-toggled", {
-        beaconId: key,
-        visible: true,
-        didDismiss: false,
-        didReset,
-      });
+      await runOnboardingMutation(() => resetOne(key));
     },
     [resetOne, runOnboardingMutation],
   );
 
   const handleDismissAllBeacons = useCallback(async () => {
-    trackEvent("onboarding-dismiss-all-clicked", {
-      source: "settings",
-    });
-
     setIsDismissingAll(true);
 
     try {
@@ -83,9 +64,6 @@ function HelpSettingsCard() {
         return;
       }
 
-      trackEvent("onboarding-all-dismissed", {
-        source: "settings",
-      });
       setShowDismissedBadge(true);
 
       if (dismissBadgeTimeoutRef.current !== null) {

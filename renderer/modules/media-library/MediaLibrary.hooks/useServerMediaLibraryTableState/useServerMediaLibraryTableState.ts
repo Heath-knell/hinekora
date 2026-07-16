@@ -12,6 +12,7 @@ interface ServerMediaLibraryTableQueryInput {
 
 interface UseServerMediaLibraryTableStateInput<TQuery> {
   createQuery: (input: ServerMediaLibraryTableQueryInput) => TQuery;
+  enabled?: boolean;
   initialSorting: SortingState;
   pageSize?: number;
   refresh: (query: TQuery) => Promise<void>;
@@ -20,6 +21,7 @@ interface UseServerMediaLibraryTableStateInput<TQuery> {
 
 function useServerMediaLibraryTableState<TQuery>({
   createQuery,
+  enabled = true,
   initialSorting,
   pageSize = 20,
   refresh,
@@ -54,8 +56,12 @@ function useServerMediaLibraryTableState<TQuery>({
   }, [resetKey]);
 
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
     void refresh(query);
-  }, [query, refresh]);
+  }, [enabled, query, refresh]);
 
   const resetPage = useCallback(() => {
     setPagination((current) =>
@@ -85,7 +91,7 @@ function useServerMediaLibraryTableState<TQuery>({
   return {
     handlePaginationChange,
     handleSortingChange,
-    pagination,
+    pagination: queryPagination,
     query,
     resetPage,
     sorting,

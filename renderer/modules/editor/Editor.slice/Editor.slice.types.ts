@@ -4,7 +4,6 @@ import type {
   EditorExportInput,
   EditorExportResolution,
   EditorExportResult,
-  EditorMediaAssetCategory,
   EditorMediaAssetPage,
   EditorMediaAssetPageQuery,
   EditorMediaReference,
@@ -12,7 +11,7 @@ import type {
   EditorWorkspace,
 } from "~/main/modules/editor";
 
-import type { QuickClipTrimRange } from "~/types";
+import type { EditorMediaFilter, QuickClipTrimRange } from "~/types";
 import type {
   EditorTimelineGap,
   TimelineTrimEdge,
@@ -20,8 +19,8 @@ import type {
 
 type EditorExportStatus = "idle" | "exporting" | "ready" | "failed";
 type EditorClipboardStatus = "copied" | "copying" | "failed" | "idle";
-type EditorMediaFilter = EditorMediaAssetCategory | "saved-edits";
 type EditorMediaRailTab = "all" | "in-timeline" | "recently-clipped";
+type EditorSidePanelKind = "bookmarks" | "history" | "shortcuts";
 
 interface EditorClipboardState {
   error: string | null;
@@ -93,6 +92,7 @@ interface EditorSlice {
     selectedAssetKey: string | null;
     selectedClipId: string | null;
     savedEditPageIndex: number;
+    visibleSidePanel: EditorSidePanelKind | null;
     workspace: EditorWorkspace | null;
     zoom: number;
     addAssetToTimelineAt: (assetKey: string, timelineSeconds: number) => void;
@@ -101,6 +101,7 @@ interface EditorSlice {
     commitHistoryTransaction: () => void;
     copyExport: (exportId: string) => Promise<EditorExportFileActionResult>;
     copyProjectToClipboard: () => Promise<EditorExportFileActionResult>;
+    closeSidePanel: () => void;
     createProject: (input?: EditorCreateProjectInput) => Promise<void>;
     deleteAllProjects: () => Promise<void>;
     deleteProject: (projectId: string) => Promise<void>;
@@ -154,6 +155,7 @@ interface EditorSlice {
     ) => Promise<EditorProject>;
     splitTimelineClipAt: (timelineSeconds: number) => void;
     toggleProjectAudioMuted: () => void;
+    toggleSidePanel: (panel: EditorSidePanelKind) => void;
     trimTimelineClipEdge: (
       clipId: string,
       edge: TimelineTrimEdge,
@@ -170,6 +172,7 @@ export type {
   EditorExportStatus,
   EditorMediaFilter,
   EditorMediaRailTab,
+  EditorSidePanelKind,
   EditorSingleClipTrimDraft,
   EditorSlice,
   SaveProjectOptions,

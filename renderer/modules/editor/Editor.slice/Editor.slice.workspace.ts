@@ -4,7 +4,6 @@ import type {
   EditorProject,
   EditorTimelineClip,
 } from "~/main/modules/editor";
-import { trackEvent } from "~/renderer/modules/umami";
 
 import {
   calculateTimelineDuration,
@@ -168,7 +167,6 @@ function createEditorWorkspaceActions({
           state.editor.mediaRailTab = "all";
           state.editor.savedEditPageIndex = 0;
         });
-        trackEvent("editor-project-created");
       } catch (error) {
         if (!isCurrentRouteRequest(requestId)) {
           return;
@@ -212,7 +210,6 @@ function createEditorWorkspaceActions({
             project,
           };
         });
-        trackEvent("editor-project-deleted");
       } catch (error) {
         if (!isCurrentRouteRequest(requestId)) {
           return;
@@ -256,7 +253,6 @@ function createEditorWorkspaceActions({
             project,
           };
         });
-        trackEvent("editor-projects-deleted-all");
       } catch (error) {
         if (!isCurrentRouteRequest(requestId)) {
           return;
@@ -387,7 +383,6 @@ function createEditorWorkspaceActions({
             project,
           };
         });
-        trackEvent("editor-hydrated");
         return true;
       } catch (error) {
         if (!isCurrentRouteRequest(requestId)) {
@@ -527,7 +522,6 @@ function createEditorWorkspaceActions({
           state.editor.projectLimit = projectLimit;
           state.editor.workspace = workspace;
         });
-        trackEvent("editor-projects-loaded-more");
       } catch (error) {
         if (
           !isCurrentProjectListRequest(requestId) ||
@@ -572,7 +566,6 @@ function createEditorWorkspaceActions({
             project,
           };
         });
-        trackEvent("editor-project-opened");
         return true;
       } catch (error) {
         if (!isCurrentRouteRequest(requestId)) {
@@ -628,7 +621,6 @@ function createEditorWorkspaceActions({
           state.editor.projectLimit = currentEditor.projectLimit;
           state.editor.workspace = workspace;
         });
-        trackEvent("editor-media-refreshed");
       } catch (error) {
         if (
           !isCurrentMediaRefreshRequest(requestId) ||
@@ -662,7 +654,6 @@ function createEditorWorkspaceActions({
         state.editor.isTimelineFitToEdit = true;
         state.editor.zoom = editorMinZoom;
       });
-      trackEvent("editor-timeline-fit-to-edit");
     },
     selectAsset: (assetKey) => {
       set((state) => {
@@ -752,7 +743,6 @@ function createEditorWorkspaceActions({
             state.editor.error = editorProjectRenameFailureMessage;
           });
         });
-      trackEvent("editor-project-renamed");
     },
     saveProject: async (project, options = {}) => {
       const { applyResponse = true } = options;
@@ -832,7 +822,6 @@ function createEditorWorkspaceActions({
           zoom,
         });
       });
-      trackEvent("editor-timeline-zoom-changed");
     },
   };
 }

@@ -34,6 +34,7 @@ import type {
   ReplayClipTrimInput,
   ReplayClipUpdateInput,
 } from "../../main/modules/replay-clips";
+import { normalizeLeagueSettingsUpdate } from "../../main/modules/settings-store/SettingsStore.normalization";
 import type {
   DiskSpaceCheck,
   StorageInfo,
@@ -41,6 +42,7 @@ import type {
 import type { DownloadProgress, UpdateInfo } from "../../main/modules/updater";
 import {
   type AppSettings,
+  type AppSettingsUpdate,
   type CapturePreviewSource,
   type CaptureProfile,
   type CaptureProfileUpdateInput,
@@ -51,11 +53,17 @@ import {
   type Profile,
   type ProfileUpdateInput,
 } from "../../types";
+import { createPoeLeagueFixtureCatalog as createE2EPoeLeagueCatalog } from "../../types/test-fixtures/poe-leagues";
+import { resolveE2EAppUrl } from "./app-url";
 import {
   type E2EBridgeDomainFactory,
   type E2EBridgeDomainMethods,
   e2eBridgeDomainFactorySource,
 } from "./bridge-fixture";
+import {
+  captureUnexpectedConsoleErrors,
+  getUnexpectedConsoleErrors,
+} from "./console-errors";
 import { createDefaultKeybindRegistrationStatus } from "./keybinds-fixture";
 import {
   type E2EPoeProcessSnapshotFactory,
@@ -75,6 +83,7 @@ interface DashboardE2ECalls {
   captureSourceRequests: boolean[];
   captureSourceResponses: string[][];
   clientLogActiveGames: Array<{ game: "poe1" | "poe2" }>;
+  clipboardWrites: string[];
   duplicatePoeStateEmissions: number;
   getUserMediaConstraints: unknown[];
   mainWindowActions: string[];
@@ -165,11 +174,22 @@ interface DashboardE2EOptions {
   initialHash?: string;
 }
 
+function getCurrentE2ELeagueName(
+  leagues: ReturnType<typeof createE2EPoeLeagueCatalog>[GameId],
+): string {
+  return leagues.find((league) => league.isCurrent)?.name ?? "Standard";
+}
+
 function createDashboardE2EFixture(
   options: DashboardE2EOptions = {},
 ): DashboardE2EFixture {
   const activeGame = options.activeGame ?? "poe2";
-  const activeLeague = activeGame === "poe1" ? "Standard" : "Runes of Aldur";
+  const leagueCatalog = createE2EPoeLeagueCatalog();
+  const selectedLeagues = {
+    poe1: getCurrentE2ELeagueName(leagueCatalog.poe1),
+    poe2: getCurrentE2ELeagueName(leagueCatalog.poe2),
+  };
+  const activeLeague = selectedLeagues[activeGame];
   const selectedCaptureProfileId =
     activeGame === "poe1" ? "default-capture-poe1" : "capture-profile-1";
   const selectedProfileId =
@@ -180,8 +200,9 @@ function createDashboardE2EFixture(
     activeLeague,
     installedGames: ["poe1", "poe2"],
     lastSeenAppVersion: "0.1.2",
-    poe1SelectedLeague: "Standard",
-    poe2SelectedLeague: "Runes of Aldur",
+    telemetryCrashReporting: false,
+    poe1SelectedLeague: selectedLeagues.poe1,
+    poe2SelectedLeague: selectedLeagues.poe2,
     recordingClipQuality: "high",
     recordingEncoder: "hardware_h264",
     recordingFps: 60,
@@ -346,8 +367,6 @@ function createDashboardE2EFixture(
       poe1ClientPath: null,
       poe2ClientPath: null,
       selectedGames: ["poe1", "poe2"],
-      telemetryCrashReporting: false,
-      telemetryUsageAnalytics: false,
     },
     sources,
     storageInfo,
@@ -359,17 +378,31 @@ async function setupDashboardE2E(
   options: DashboardE2EOptions = {},
 ) {
   await page.setViewportSize({ height: 760, width: 1280 });
+  captureUnexpectedConsoleErrors(page);
   const initialHash = options.initialHash ?? "/#/";
-  const appBaseUrl = process.env.E2E_APP_BASE_URL ?? "http://localhost:5173";
+  await page.exposeFunction(
+    "__HINEKORA_NORMALIZE_LEAGUE_SETTINGS_UPDATE__",
+    (current: AppSettings, input: AppSettingsUpdate) =>
+      normalizeLeagueSettingsUpdate(current, input),
+  );
   await page.addInitScript(
     (input: {
       bridgeFactorySource: string;
       fixture: DashboardE2EFixture;
+      leagueCatalog: ReturnType<typeof createE2EPoeLeagueCatalog>;
       poeProcessSnapshotFactoryScript: string;
     }) => {
       const { fixture } = input;
       const unsubscribe = () => undefined;
       const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+      const normalizeLeagueSettingsUpdate = (
+        window as unknown as {
+          __HINEKORA_NORMALIZE_LEAGUE_SETTINGS_UPDATE__: (
+            current: AppSettings,
+            input: AppSettingsUpdate,
+          ) => Promise<AppSettingsUpdate>;
+        }
+      ).__HINEKORA_NORMALIZE_LEAGUE_SETTINGS_UPDATE__;
       const applyCaptureProfileUpdate = (
         profile: CaptureProfile,
         update: CaptureProfileUpdateInput,
@@ -497,6 +530,7 @@ async function setupDashboardE2E(
         captureSourceRequests: [],
         captureSourceResponses: [],
         clientLogActiveGames: [],
+        clipboardWrites: [],
         duplicatePoeStateEmissions: 0,
         getUserMediaConstraints: [],
         clipPreviewOverlayWindowActions: [],
@@ -523,6 +557,14 @@ async function setupDashboardE2E(
         stopRunRecordingCount: 0,
         unexpectedBridgeCalls: [],
       };
+      Object.defineProperty(window.navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: async (text: string) => {
+            calls.clipboardWrites.push(text);
+          },
+        },
+      });
       const waitForReplayClipOperation = async () => {
         if (fixture.replayClipOperationDelayMs <= 0) {
           return;
@@ -1310,7 +1352,6 @@ async function setupDashboardE2E(
               return {
                 clipPreviewInfoAlertDismissed: true,
                 telemetryCrashReporting: settings.telemetryCrashReporting,
-                telemetryUsageAnalytics: settings.telemetryUsageAnalytics,
               };
             },
             get: async () => clone(settings),
@@ -1321,7 +1362,12 @@ async function setupDashboardE2E(
             },
             update: async (input) => {
               calls.settingsUpdates.push(clone(input));
-              settings = { ...settings, ...input };
+              const normalizedInput = await normalizeLeagueSettingsUpdate(
+                clone(settings),
+                clone(input),
+              );
+
+              settings = { ...settings, ...normalizedInput };
               syncPoeProcessSnapshot();
               listeners.settingsChanged?.(clone(settings));
 
@@ -1353,6 +1399,23 @@ async function setupDashboardE2E(
 
               return unsubscribe;
             },
+          },
+        ),
+        poeLeagues: createBridgeDomain<DashboardE2EElectron["poeLeagues"]>(
+          "poeLeagues",
+          {
+            list: async (game) => clone(input.leagueCatalog[game]),
+            onChanged: () => unsubscribe,
+            status: async () => ({
+              error: null,
+              isFetching: false,
+              lastSyncedAt: fixture.now,
+              provider: "e2e-fixture",
+            }),
+            userId: async () => ({
+              previousUserIds: [],
+              userId: "3f886c8b-18cf-4a48-8cdd-6a51cd44c6d5",
+            }),
           },
         ),
       };
@@ -1412,11 +1475,12 @@ async function setupDashboardE2E(
     {
       bridgeFactorySource: e2eBridgeDomainFactorySource,
       fixture: createDashboardE2EFixture(options),
+      leagueCatalog: createE2EPoeLeagueCatalog(),
       poeProcessSnapshotFactoryScript: e2ePoeProcessSnapshotFactoryScript,
     },
   );
 
-  await page.goto(new URL(initialHash, appBaseUrl).toString());
+  await page.goto(resolveE2EAppUrl(initialHash));
   if (!options.skipDashboardShellChecks) {
     await expect(
       page.getByRole("heading", { name: "Dashboard" }),
@@ -1575,6 +1639,7 @@ async function expectNoUnexpectedDashboardBridgeCalls(page: Page) {
   });
 
   expect(unexpectedBridgeCalls).toEqual([]);
+  expect(getUnexpectedConsoleErrors(page)).toEqual([]);
 }
 
 export {

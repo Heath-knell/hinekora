@@ -1,12 +1,11 @@
-import { useMemo } from "react";
 import { FiTrash2 as Trash2 } from "react-icons/fi";
 
 import { PageContainer } from "~/renderer/components/PageContainer/PageContainer";
 import { PageContent } from "~/renderer/components/PageContent/PageContent";
 import { PageHeader } from "~/renderer/components/PageHeader/PageHeader";
+import { MediaLibraryLeagueControl } from "~/renderer/modules/media-library/MediaLibrary.components/MediaLibraryLeagueControl/MediaLibraryLeagueControl";
 import { MediaLibraryPageActions } from "~/renderer/modules/media-library/MediaLibrary.components/MediaLibraryPageActions/MediaLibraryPageActions";
 import { useMediaLibraryScope } from "~/renderer/modules/media-library/MediaLibrary.hooks/useMediaLibraryScope/useMediaLibraryScope";
-import { buildMediaLibraryLeagueOptions } from "~/renderer/modules/media-library/MediaLibrary.utils/MediaLibrary.utils";
 import { RecordingsPanel } from "~/renderer/modules/recording-storage/RecordingStorage.components/RecordingsPanel/RecordingsPanel";
 import { useRecordingStorageShallow } from "~/renderer/store";
 
@@ -19,16 +18,7 @@ function RecordingsPage() {
         recordingStorage.selectedRecordingIds,
       ).filter(Boolean).length,
     }));
-  const { scope, setLeague } = useMediaLibraryScope();
-  const scopedLeagueOptions = useMemo(
-    () =>
-      buildMediaLibraryLeagueOptions(
-        scope.game,
-        recordingLeagues,
-        scope.league,
-      ),
-    [recordingLeagues, scope.game, scope.league],
-  );
+  const { isReady: isMediaScopeReady, scope } = useMediaLibraryScope();
 
   const handleDeleteSelected = () => {
     void deleteSelectedRecordings();
@@ -41,8 +31,6 @@ function RecordingsPage() {
         subtitle="Full-run recordings filtered by this page."
         actions={
           <MediaLibraryPageActions
-            league={scope.league}
-            leagueOptions={scopedLeagueOptions}
             bulkAction={
               selectedRecordingCount > 0 ? (
                 <button
@@ -55,12 +43,14 @@ function RecordingsPage() {
                 </button>
               ) : null
             }
-            onLeagueChange={setLeague}
+            leagueControl={
+              <MediaLibraryLeagueControl savedLeagues={recordingLeagues} />
+            }
           />
         }
       />
       <PageContent className="grid h-full min-h-0 grid-cols-12 items-stretch gap-4 [grid-auto-flow:dense]">
-        <RecordingsPanel scope={scope} />
+        <RecordingsPanel isScopeReady={isMediaScopeReady} scope={scope} />
       </PageContent>
     </PageContainer>
   );

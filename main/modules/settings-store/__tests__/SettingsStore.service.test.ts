@@ -7,8 +7,13 @@ import {
   registerIpcWindowRole,
 } from "~/main/utils/ipc-window-roles";
 
-import { type AppSettings, createDefaultSettings } from "~/types";
+import {
+  type AppSettings,
+  createDefaultSettings,
+  getCurrentLeague,
+} from "~/types";
 import { DatabaseService } from "../../database";
+import { PoeLeaguesRepository } from "../../poe-leagues/PoeLeagues.repository";
 import { SettingsStoreChannel } from "../SettingsStore.channels";
 import { SettingsStoreRepository } from "../SettingsStore.repository";
 import { SettingsStoreService } from "../SettingsStore.service";
@@ -50,7 +55,7 @@ describe("SettingsStoreService", () => {
     try {
       expect(service.get()).toMatchObject({
         activeGame: "poe1",
-        activeLeague: "Standard",
+        activeLeague: getCurrentLeague("poe1"),
       });
       expect(
         service.update({
@@ -79,6 +84,95 @@ describe("SettingsStoreService", () => {
     }
   });
 
+  it("persists only the validated settings delta", () => {
+    const database = DatabaseService.getInstance(":memory:");
+    const setMany = vi.spyOn(SettingsStoreRepository.prototype, "setMany");
+    const service = new SettingsStoreService();
+
+    try {
+      service.update({ setupCompleted: true });
+      setMany.mockClear();
+
+      service.update({ appStartMinimized: true });
+      expect(setMany).toHaveBeenLastCalledWith({ appStartMinimized: true });
+
+      service.update({ activeGame: "poe2" });
+      expect(setMany).toHaveBeenLastCalledWith({
+        activeGame: "poe2",
+        activeLeague: getCurrentLeague("poe2"),
+      });
+      expect(service.get()).toMatchObject({
+        activeGame: "poe2",
+        activeLeague: getCurrentLeague("poe2"),
+        editorAutoPruneProjects: true,
+      });
+      expect(() =>
+        service.update({ unsupportedSetting: true } as never),
+      ).toThrow();
+    } finally {
+      database.close();
+    }
+  });
+
+  it("refreshes unresolved league defaults after the catalog changes", () => {
+    const database = DatabaseService.getInstance(":memory:");
+    const service = new SettingsStoreService();
+    const listener = vi.fn();
+    service.onDidChange(listener);
+    expect(service.get().poe1SelectedLeague).toBe(getCurrentLeague("poe1"));
+
+    new PoeLeaguesRepository(database).replaceActive(
+      "poe1",
+      [
+        {
+          endAt: null,
+          id: "Next League",
+          isCurrent: true,
+          name: "Next League",
+          startAt: null,
+          updatedAt: null,
+        },
+        {
+          endAt: null,
+          id: "Standard",
+          isCurrent: false,
+          name: "Standard",
+          startAt: null,
+          updatedAt: null,
+        },
+      ],
+      "test-provider",
+      "2026-08-01T00:00:00.000Z",
+    );
+
+    expect(service.refreshCatalogDefaults()).toMatchObject({
+      activeLeague: "Next League",
+      poe1SelectedLeague: "Next League",
+    });
+    expect(listener).toHaveBeenCalledWith(
+      expect.objectContaining({ poe1SelectedLeague: "Next League" }),
+    );
+
+    database.close();
+  });
+
+  it("does not publish catalog default refreshes when league defaults are unchanged", () => {
+    const database = DatabaseService.getInstance(":memory:");
+    const service = new SettingsStoreService();
+    const listener = vi.fn();
+    service.onDidChange(listener);
+    service.get();
+
+    expect(service.refreshCatalogDefaults()).toMatchObject({
+      activeLeague: getCurrentLeague("poe1"),
+      poe1SelectedLeague: getCurrentLeague("poe1"),
+      poe2SelectedLeague: getCurrentLeague("poe2"),
+    });
+    expect(listener).not.toHaveBeenCalled();
+
+    database.close();
+  });
+
   it("caches settings reads and refreshes the cache after updates", () => {
     const database = DatabaseService.getInstance(":memory:");
     const get = vi.spyOn(SettingsStoreRepository.prototype, "get");
@@ -92,6 +186,27 @@ describe("SettingsStoreService", () => {
       service.update({ activeGame: "poe2" });
       expect(service.get().activeGame).toBe("poe2");
       expect(get).toHaveBeenCalledTimes(2);
+    } finally {
+      database.close();
+    }
+  });
+
+  it("keeps the compatibility league synchronized with each game selection", () => {
+    const database = DatabaseService.getInstance(":memory:");
+    const service = new SettingsStoreService();
+
+    try {
+      service.update({ poe2SelectedLeague: "Dawn of the Hunt" });
+      expect(service.update({ activeGame: "poe2" })).toMatchObject({
+        activeGame: "poe2",
+        activeLeague: "Dawn of the Hunt",
+        poe2SelectedLeague: "Dawn of the Hunt",
+      });
+
+      expect(service.update({ activeLeague: "Hardcore" })).toMatchObject({
+        activeLeague: "Hardcore",
+        poe2SelectedLeague: "Hardcore",
+      });
     } finally {
       database.close();
     }
@@ -127,6 +242,7 @@ describe("SettingsStoreService", () => {
           ...createDefaultSettings(),
           activeGame: "poe1",
           activeLeague: "Hardcore",
+          poe1SelectedLeague: "Hardcore",
         }),
       ).toMatchObject({
         activeGame: "poe1",
@@ -207,7 +323,6 @@ describe("SettingsStoreService", () => {
             updatedSettings.selectedCaptureProfileIdsByGame,
           selectedProfileId: updatedSettings.selectedProfileId,
           telemetryCrashReporting: updatedSettings.telemetryCrashReporting,
-          telemetryUsageAnalytics: updatedSettings.telemetryUsageAnalytics,
         },
       );
       expect(recorderOverlay.webContents.send).toHaveBeenCalledWith(
@@ -224,7 +339,6 @@ describe("SettingsStoreService", () => {
             updatedSettings.selectedCaptureProfileIdsByGame,
           selectedProfileId: updatedSettings.selectedProfileId,
           telemetryCrashReporting: updatedSettings.telemetryCrashReporting,
-          telemetryUsageAnalytics: updatedSettings.telemetryUsageAnalytics,
         },
       );
       expect(auraOverlay.webContents.send).not.toHaveBeenCalledWith(
@@ -241,7 +355,6 @@ describe("SettingsStoreService", () => {
           clipPreviewInfoAlertDismissed:
             updatedSettings.clipPreviewInfoAlertDismissed,
           telemetryCrashReporting: updatedSettings.telemetryCrashReporting,
-          telemetryUsageAnalytics: updatedSettings.telemetryUsageAnalytics,
         },
       );
       expect(clipPreviewOverlay.webContents.send).not.toHaveBeenCalledWith(
@@ -365,7 +478,6 @@ describe("SettingsStoreService", () => {
         clipPreviewInfoAlertDismissed:
           fullSettings.clipPreviewInfoAlertDismissed,
         telemetryCrashReporting: fullSettings.telemetryCrashReporting,
-        telemetryUsageAnalytics: fullSettings.telemetryUsageAnalytics,
       });
       expect(
         await handlers.get(SettingsStoreChannel.Update)?.(mainEvent, {
@@ -381,7 +493,6 @@ describe("SettingsStoreService", () => {
       ).toEqual({
         clipPreviewInfoAlertDismissed: true,
         telemetryCrashReporting: fullSettings.telemetryCrashReporting,
-        telemetryUsageAnalytics: fullSettings.telemetryUsageAnalytics,
       });
       expect(
         await handlers.get(SettingsStoreChannel.Update)?.(clipPreviewEvent, {
@@ -402,6 +513,11 @@ describe("SettingsStoreService", () => {
         ok: false,
         error: "settings must be an object",
       });
+      expect(
+        await handlers.get(SettingsStoreChannel.Update)?.(mainEvent, {
+          unsupportedSetting: true,
+        }),
+      ).toMatchObject({ ok: false });
     } finally {
       database.close();
     }

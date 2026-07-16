@@ -12,7 +12,6 @@ import {
   maxPointSelectionPoints,
   readCropSelectorShape,
 } from "~/renderer/modules/crop-selector-overlay/CropSelectorOverlay.utils/CropSelectorOverlay.utils";
-import { trackEvent } from "~/renderer/modules/umami";
 
 import {
   createCropSelectorSelectionState,
@@ -38,7 +37,6 @@ function useCropSelectorSelection() {
   } = state;
 
   const handleCancel = useCallback(() => {
-    trackEvent("crop-selection-cancelled");
     void window.electron.overlayWindows.cancelCropRegionSelection();
   }, []);
 
@@ -51,7 +49,6 @@ function useCropSelectorSelection() {
       return;
     }
 
-    trackEvent("point-selection-completed", { points: points.length });
     void window.electron.overlayWindows.completeCropRegionSelection(
       createPointCropSelection(points),
     );
@@ -68,9 +65,6 @@ function useCropSelectorSelection() {
         selection: createPointCropSelection(nextPoints),
         type: "set-point-selection",
       });
-      if (nextPoints.length === 1) {
-        trackEvent("point-selection-started");
-      }
       if (nextPoints.length === maxPointSelectionPoints) {
         completePointSelection(nextPoints);
       }
@@ -82,14 +76,12 @@ function useCropSelectorSelection() {
     (point: CropSelectorPoint) => {
       if (!arcStart) {
         dispatch({ point, type: "start-arc-selection" });
-        trackEvent("arc-selection-started");
         return;
       }
 
       if (!arcEnd) {
         if (!isUsableArcEndpointSelection(arcStart, point)) {
           resetArcSelection();
-          trackEvent("crop-selection-discarded");
           return;
         }
 
@@ -107,11 +99,9 @@ function useCropSelectorSelection() {
       const nextSelection = createArcCropSelection(arcStart, arcEnd, point);
       if (!isUsableCropSelection(nextSelection)) {
         resetArcSelection();
-        trackEvent("crop-selection-discarded");
         return;
       }
 
-      trackEvent("arc-selection-completed");
       void window.electron.overlayWindows.completeCropRegionSelection(
         nextSelection,
       );
@@ -201,11 +191,9 @@ function useCropSelectorSelection() {
 
     if (!isUsableCropSelection(nextSelection)) {
       dispatch({ type: "clear-selection" });
-      trackEvent("crop-selection-discarded");
       return;
     }
 
-    trackEvent("crop-selection-completed");
     void window.electron.overlayWindows.completeCropRegionSelection(
       nextSelection,
     );
@@ -224,7 +212,6 @@ function useCropSelectorSelection() {
     activePointerIdRef.current = null;
     startPointRef.current = null;
     dispatch({ type: "reset-selection" });
-    trackEvent("crop-selection-reset");
   }, []);
 
   useEffect(() => {

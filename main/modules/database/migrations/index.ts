@@ -11,6 +11,7 @@ import { migration_20260702_000000_aura_profiles_global_scope } from "./20260702
 import { migration_20260702_010000_bookmarks } from "./20260702_010000_bookmarks";
 import { migration_20260707_000000_keybind_settings } from "./20260707_000000_keybind_settings";
 import { migration_20260710_000000_replay_clip_effective_duration_index } from "./20260710_000000_replay_clip_effective_duration_index";
+import { migration_20260711_000000_poe_leagues } from "./20260711_000000_poe_leagues";
 import type { Migration } from "./Migration.interface";
 
 const migrations: Migration[] = [
@@ -27,6 +28,7 @@ const migrations: Migration[] = [
   migration_20260702_010000_bookmarks,
   migration_20260707_000000_keybind_settings,
   migration_20260710_000000_replay_clip_effective_duration_index,
+  migration_20260711_000000_poe_leagues,
 ];
 
 export type { Migration } from "./Migration.interface";

@@ -1,5 +1,3 @@
-import { trackEvent } from "~/renderer/modules/umami";
-
 import { editorHistoryLimit } from "./Editor.slice.constants";
 import type { EditorSliceActionContext } from "./Editor.slice.context";
 import type { EditorSlice } from "./Editor.slice.types";
@@ -68,9 +66,6 @@ function createEditorHistoryActions({
         state.editor.historyTransactionSubtitle = null;
         state.editor.historyTransactionProject = null;
       });
-      trackEvent("editor-history-transaction-committed", {
-        label: transactionLabel,
-      });
       persistProject(project, "[editor] Project transaction save failed");
     },
     redoProjectChange: () => {
@@ -105,9 +100,6 @@ function createEditorHistoryActions({
         state.editor.historyTransactionProject = null;
       });
       setProject(nextProject, { recordHistory: false });
-      trackEvent("editor-redone", {
-        label: nextLabel,
-      });
       persistProject(nextProject, "[editor] Project redo save failed");
     },
     undoProjectChange: () => {
@@ -145,9 +137,6 @@ function createEditorHistoryActions({
         state.editor.historyTransactionProject = null;
       });
       setProject(previousProject, { recordHistory: false });
-      trackEvent("editor-undone", {
-        label: previousLabel,
-      });
       persistProject(previousProject, "[editor] Project undo save failed");
     },
   };

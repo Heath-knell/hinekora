@@ -62,10 +62,11 @@ function findRowByText(text: string): HTMLTableRowElement {
   return row;
 }
 
-async function renderPanel() {
+async function renderPanel({ isQueryEnabled = true } = {}) {
   await act(async () => {
     root.render(
       <ReplayClipsPanel
+        isQueryEnabled={isQueryEnabled}
         query={{ kind: "death" }}
         queryKey="death"
         showLeagueColumn={false}
@@ -130,5 +131,13 @@ describe("ReplayClipsPanel", () => {
       params: { clipId: "playable" },
       to: "/clip/$clipId",
     });
+  });
+
+  it("does not hydrate clips before the media scope is ready", async () => {
+    configureReplayClipsStore([]);
+
+    await renderPanel({ isQueryEnabled: false });
+
+    expect(storeMocks.hydrateLibrary).not.toHaveBeenCalled();
   });
 });

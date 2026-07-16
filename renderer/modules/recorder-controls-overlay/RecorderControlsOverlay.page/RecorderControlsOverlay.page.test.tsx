@@ -36,20 +36,12 @@ const electronMocks = vi.hoisted(() => ({
   showAura: vi.fn(),
 }));
 
-const analyticsMocks = vi.hoisted(() => ({
-  trackEvent: vi.fn(),
-}));
-
 vi.mock("~/renderer/store", () => ({
   useManagedRecorderShallow: storeMocks.useManagedRecorderShallow,
   useProfilesShallow: storeMocks.useProfilesShallow,
   useReplayClipsShallow: storeMocks.useReplayClipsShallow,
   useSettingsSelector: storeMocks.useSettingsSelector,
   useSettingsShallow: storeMocks.useSettingsShallow,
-}));
-
-vi.mock("~/renderer/modules/umami", () => ({
-  trackEvent: analyticsMocks.trackEvent,
 }));
 
 function createStatus(
@@ -227,8 +219,11 @@ describe("RecorderControlsOverlayPage", () => {
     };
     settingsState = {
       hydrate: vi.fn().mockResolvedValue(undefined),
+      pendingPreferences: {},
+      preferenceErrors: {},
       startListening: vi.fn(() => vi.fn()),
       update: vi.fn().mockResolvedValue(undefined),
+      updatePreference: vi.fn().mockResolvedValue(true),
       value: {
         ...createDefaultSettings(),
         deathClipSeconds: 60,
@@ -388,13 +383,6 @@ describe("RecorderControlsOverlayPage", () => {
 
     expect(electronMocks.setAuraLocked).toHaveBeenCalledWith(false);
     expect(electronMocks.showAura).toHaveBeenCalledWith("profile-1");
-    expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
-      "aura-edit-started",
-      {
-        shape: "rect",
-        source: "recorder-overlay",
-      },
-    );
   });
 
   it("keeps aura actions enabled for the active game profile after a game switch", async () => {
@@ -432,10 +420,6 @@ describe("RecorderControlsOverlayPage", () => {
       addAuraShape: "rect",
       startAddingAura: true,
     });
-    expect(analyticsMocks.trackEvent).toHaveBeenCalledWith("aura-add-started", {
-      shape: "rect",
-      source: "recorder-overlay",
-    });
   });
 
   it("starts arched add-aura mode from the arc aura button", async () => {
@@ -448,10 +432,6 @@ describe("RecorderControlsOverlayPage", () => {
     expect(electronMocks.showAura).toHaveBeenCalledWith("profile-1", {
       addAuraShape: "arc",
       startAddingAura: true,
-    });
-    expect(analyticsMocks.trackEvent).toHaveBeenCalledWith("aura-add-started", {
-      shape: "arc",
-      source: "recorder-overlay",
     });
   });
 
@@ -569,9 +549,5 @@ describe("RecorderControlsOverlayPage", () => {
     getButton(container, "Close overlay").click();
 
     expect(electronMocks.hideRecorder).toHaveBeenCalledTimes(1);
-    expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
-      "recorder-overlay-closed",
-      { source: "overlay" },
-    );
   });
 });

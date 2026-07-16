@@ -48,6 +48,25 @@ interface SettingTable {
   updated_at: TimestampColumn;
 }
 
+interface PoeLeagueTable {
+  game: GameId;
+  id: string;
+  name: string;
+  start_at: NullableTextColumn;
+  end_at: NullableTextColumn;
+  is_active: number;
+  is_current: number;
+  source_updated_at: NullableTextColumn;
+  synced_at: TimestampColumn;
+  created_at: TimestampColumn;
+}
+
+interface PoeLeagueSyncStateTable {
+  game: GameId;
+  provider: string;
+  last_synced_at: TimestampColumn;
+}
+
 interface RecordingStoragePathMigrationTable {
   from_path: string;
   to_path: string;
@@ -173,6 +192,8 @@ export interface DatabaseSchema {
   editor_project_source_leagues: EditorProjectSourceLeagueTable;
   editor_projects: EditorProjectTable;
   migrations: MigrationTable;
+  poe_league_sync_state: PoeLeagueSyncStateTable;
+  poe_leagues: PoeLeagueTable;
   profiles: ProfileTable;
   recording_storage_path_migrations: RecordingStoragePathMigrationTable;
   settings: SettingTable;

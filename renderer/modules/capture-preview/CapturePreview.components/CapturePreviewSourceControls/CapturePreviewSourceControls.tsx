@@ -80,7 +80,7 @@ function CapturePreviewSourceControls({
         <div className="join w-full">
           <select
             aria-label="Capture source"
-            className="join-item select select-bordered select-sm min-w-0 flex-1 focus:outline-none focus-visible:outline-none"
+            className="join-item select select-bordered select-sm min-w-0 flex-1 border-base-content/15 focus:outline-none focus-visible:outline-none disabled:border-base-content/15 disabled:bg-base-200 disabled:text-base-content/50 disabled:opacity-100"
             disabled={isLoading || isSettingsDisabled}
             value={selectedSourceId ?? ""}
             onChange={handleSourceChange}

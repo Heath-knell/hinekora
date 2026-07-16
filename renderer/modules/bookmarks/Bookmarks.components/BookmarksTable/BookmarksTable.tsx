@@ -36,10 +36,11 @@ import {
 import { useBookmarksTableColumns } from "./useBookmarksTableColumns/useBookmarksTableColumns";
 
 interface BookmarksTableProps {
+  isScopeReady?: boolean;
   scope: MediaLibraryScope;
 }
 
-function BookmarksTable({ scope }: BookmarksTableProps) {
+function BookmarksTable({ isScopeReady = true, scope }: BookmarksTableProps) {
   const navigate = useNavigate();
   const { availableCategories, error, isLoading, items, page, refresh } =
     useBookmarksShallow((bookmarks) => ({
@@ -91,6 +92,7 @@ function BookmarksTable({ scope }: BookmarksTableProps) {
   const { handlePaginationChange, handleSortingChange, pagination, sorting } =
     useServerMediaLibraryTableState({
       createQuery: createBookmarkQuery,
+      enabled: isScopeReady,
       initialSorting: [{ id: "occurredAt", desc: true }],
       refresh,
       resetKey: `${scope.game}:${scope.league}:${category}`,

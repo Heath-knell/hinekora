@@ -2,18 +2,19 @@ import { useNavigate } from "@tanstack/react-router";
 import {
   type ColumnDef,
   getCoreRowModel,
-  type OnChangeFn,
-  type PaginationState,
-  type SortingState,
   useReactTable,
 } from "@tanstack/react-table";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 
 import type {
   SavedEditItem,
   SavedEditsLibraryQuery,
 } from "~/main/modules/saved-edits";
 import { MediaLibraryTable } from "~/renderer/modules/media-library/MediaLibrary.components/MediaLibraryTable/MediaLibraryTable";
+import {
+  type ServerMediaLibraryTableQueryInput,
+  useServerMediaLibraryTableState,
+} from "~/renderer/modules/media-library/MediaLibrary.hooks/useServerMediaLibraryTableState/useServerMediaLibraryTableState";
 import {
   ALL_LEAGUES_VALUE,
   formatBytes,
@@ -32,10 +33,11 @@ import {
 } from "./SavedEditsPanel.utils";
 
 interface SavedEditsPanelProps {
+  isScopeReady?: boolean;
   scope: MediaLibraryScope;
 }
 
-function SavedEditsPanel({ scope }: SavedEditsPanelProps) {
+function SavedEditsPanel({ isScopeReady = true, scope }: SavedEditsPanelProps) {
   const navigate = useNavigate();
   const { error, hydrateLibrary, items, libraryPage, libraryQuery } =
     useSavedEditsShallow((savedEdits) => ({
@@ -45,54 +47,38 @@ function SavedEditsPanel({ scope }: SavedEditsPanelProps) {
       libraryPage: savedEdits.libraryPage,
       libraryQuery: savedEdits.libraryQuery,
     }));
-  const [pagination, setPagination] = useState<PaginationState>({
-    pageIndex: 0,
-    pageSize: 20,
-  });
   const scopeKey = `${scope.game}:${scope.league}`;
-  const [paginationScopeKey, setPaginationScopeKey] = useState(scopeKey);
-  const [sorting, setSorting] = useState<SortingState>([
-    { id: "updatedAt", desc: true },
-  ]);
-  const scopedPageIndex =
-    paginationScopeKey === scopeKey ? pagination.pageIndex : 0;
-  const scopedPagination = useMemo<PaginationState>(
-    () => ({ ...pagination, pageIndex: scopedPageIndex }),
-    [pagination, scopedPageIndex],
+  const createQuery = useCallback(
+    ({
+      pagination,
+      sorting,
+    }: ServerMediaLibraryTableQueryInput): SavedEditsLibraryQuery => {
+      const activeSort = sorting[0];
+
+      return {
+        game: scope.game,
+        ...(scope.league === ALL_LEAGUES_VALUE ? {} : { league: scope.league }),
+        pageIndex: pagination.pageIndex,
+        pageSize: pagination.pageSize,
+        sortBy: resolveSortBy(activeSort?.id),
+        sortDirection: activeSort?.desc === false ? "asc" : "desc",
+      };
+    },
+    [scope.game, scope.league],
   );
-  const query = useMemo<SavedEditsLibraryQuery>(() => {
-    const activeSort = sorting[0];
-
-    return {
-      game: scope.game,
-      ...(scope.league === ALL_LEAGUES_VALUE ? {} : { league: scope.league }),
-      pageIndex: scopedPagination.pageIndex,
-      pageSize: scopedPagination.pageSize,
-      sortBy: resolveSortBy(activeSort?.id),
-      sortDirection: activeSort?.desc === false ? "asc" : "desc",
-    };
-  }, [
-    scopedPagination.pageIndex,
-    scopedPagination.pageSize,
-    scope.game,
-    scope.league,
+  const {
+    handlePaginationChange,
+    handleSortingChange,
+    pagination,
+    query,
     sorting,
-  ]);
-
-  useEffect(() => {
-    if (paginationScopeKey === scopeKey) {
-      return;
-    }
-
-    setPaginationScopeKey(scopeKey);
-    setPagination((current) =>
-      current.pageIndex === 0 ? current : { ...current, pageIndex: 0 },
-    );
-  }, [paginationScopeKey, scopeKey]);
-
-  useEffect(() => {
-    void hydrateLibrary(query);
-  }, [hydrateLibrary, query]);
+  } = useServerMediaLibraryTableState({
+    createQuery,
+    enabled: isScopeReady,
+    initialSorting: [{ desc: true, id: "updatedAt" }],
+    refresh: hydrateLibrary,
+    resetKey: scopeKey,
+  });
   const hasCurrentLibraryPage =
     libraryQuery !== null &&
     areSavedEditsLibraryQueriesEqual(libraryQuery, query);
@@ -100,30 +86,17 @@ function SavedEditsPanel({ scope }: SavedEditsPanelProps) {
   const currentLibraryPage = hasCurrentLibraryPage ? libraryPage : null;
 
   useEffect(() => {
-    if (!currentLibraryPage || paginationScopeKey !== scopeKey) {
+    if (!currentLibraryPage) {
       return;
     }
 
     const pageCount = Math.max(1, currentLibraryPage.pageCount);
-    setPagination((current) =>
+    handlePaginationChange((current) =>
       current.pageIndex < pageCount
         ? current
         : { ...current, pageIndex: currentLibraryPage.pageIndex },
     );
-  }, [currentLibraryPage, paginationScopeKey, scopeKey]);
-
-  const handlePaginationChange: OnChangeFn<PaginationState> = (updater) => {
-    setPagination((current) =>
-      typeof updater === "function" ? updater(current) : updater,
-    );
-  };
-
-  const handleSortingChange: OnChangeFn<SortingState> = (updater) => {
-    setPagination((current) => ({ ...current, pageIndex: 0 }));
-    setSorting((current) =>
-      typeof updater === "function" ? updater(current) : updater,
-    );
-  };
+  }, [currentLibraryPage, handlePaginationChange]);
 
   const handleRowClick = (edit: SavedEditItem) => {
     void navigate({ to: "/editor", search: { projectId: edit.id } });
@@ -185,7 +158,7 @@ function SavedEditsPanel({ scope }: SavedEditsPanelProps) {
     onSortingChange: handleSortingChange,
     pageCount: currentLibraryPage?.pageCount ?? 1,
     rowCount: currentLibraryPage?.totalCount ?? currentItems.length,
-    state: { pagination: scopedPagination, sorting },
+    state: { pagination, sorting },
   });
 
   return (

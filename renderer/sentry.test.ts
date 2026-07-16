@@ -24,7 +24,9 @@ describe("renderer sentry", () => {
     expect(sentryMocks.init).toHaveBeenCalledWith(
       expect.objectContaining({
         beforeBreadcrumb: expect.any(Function),
+        beforeSend: expect.any(Function),
         dsn: "https://public@example.com/1",
+        sendDefaultPii: false,
       }),
     );
   });
@@ -56,7 +58,7 @@ describe("renderer sentry", () => {
     });
   });
 
-  it("leaves non-console breadcrumbs unchanged", () => {
+  it("scrubs every breadcrumb category and nested data", () => {
     initSentry();
     const [options] = sentryMocks.init.mock.calls[0] ?? [];
     if (!options) {
@@ -65,9 +67,38 @@ describe("renderer sentry", () => {
     const { beforeBreadcrumb } = options;
     const breadcrumb = {
       category: "navigation",
+      data: {
+        nested: {
+          path: "C:\\Users\\Seb\\AppData\\Local\\Hinekora\\index.html",
+        },
+      },
       message: "request username=SebAccount)",
     };
 
-    expect(beforeBreadcrumb(breadcrumb)).toBe(breadcrumb);
+    expect(beforeBreadcrumb(breadcrumb)).toEqual({
+      category: "navigation",
+      data: { nested: { path: "C:\\**\\Hinekora\\index.html" } },
+      message: "request username=[redacted])",
+    });
+  });
+
+  it("recursively scrubs renderer events before sending", () => {
+    initSentry();
+    const [options] = sentryMocks.init.mock.calls[0] ?? [];
+    if (!options) {
+      throw new Error("Sentry init options were not captured");
+    }
+
+    expect(
+      options.beforeSend({
+        contexts: {
+          local: {
+            path: "/Users/seb/Library/Hinekora/settings.json",
+          },
+        },
+      }),
+    ).toEqual({
+      contexts: { local: { path: "/**/Hinekora/settings.json" } },
+    });
   });
 });

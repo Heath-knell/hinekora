@@ -1,4 +1,3 @@
-import { trackEvent } from "~/renderer/modules/umami";
 import type {
   BoundStoreStateCreator,
   ManagedRecorderSlice,
@@ -36,14 +35,12 @@ export const createManagedRecorderSlice: BoundStoreStateCreator<
         state.managedRecorder.captureMode = "rewind";
         state.managedRecorder.status = status;
       });
-      trackEvent("recording-rewind-started");
     },
     stopBuffer: async () => {
       const status = await window.electron.managedRecorder.stopBuffer();
       set((state) => {
         state.managedRecorder.status = status;
       });
-      trackEvent("recording-rewind-stopped");
     },
     startRunRecording: async () => {
       const status = await window.electron.managedRecorder.startRunRecording();
@@ -51,14 +48,12 @@ export const createManagedRecorderSlice: BoundStoreStateCreator<
         state.managedRecorder.captureMode = "session";
         state.managedRecorder.status = status;
       });
-      trackEvent("recording-session-started");
     },
     stopRunRecording: async () => {
       const status = await window.electron.managedRecorder.stopRunRecording();
       set((state) => {
         state.managedRecorder.status = status;
       });
-      trackEvent("recording-session-stopped");
     },
     saveReplay: async () => {
       await window.electron.managedRecorder.saveReplay();
@@ -66,7 +61,6 @@ export const createManagedRecorderSlice: BoundStoreStateCreator<
       set((state) => {
         state.managedRecorder.status = status;
       });
-      trackEvent("recording-manual-replay-requested");
     },
     startListening: () => {
       const stopRecorderStatusListener =

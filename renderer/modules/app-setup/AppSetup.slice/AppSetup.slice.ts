@@ -1,10 +1,8 @@
 import {
-  getGameSelectionType,
   SETUP_STEPS,
   type SetupState,
   type StepValidationResult,
 } from "~/main/modules/app-setup/AppSetup.types";
-import { trackEvent } from "~/renderer/modules/umami";
 import type {
   AppSetupSlice,
   BoundStoreStateCreator,
@@ -29,7 +27,6 @@ export const createAppSetupSlice: BoundStoreStateCreator<AppSetupSlice> = (
     validation: null,
     isLoading: false,
     error: null,
-    setupStartTime: null,
 
     hydrate: async () => {
       set((state) => {
@@ -96,13 +93,6 @@ export const createAppSetupSlice: BoundStoreStateCreator<AppSetupSlice> = (
           installedGames: selectedGames,
           activeGame: selectedGames[0] as GameId,
         });
-
-        trackEvent("setup-game-toggled", {
-          game,
-          action: isSelected ? "removed" : "added",
-          games: selectedGames,
-          selection_type: getGameSelectionType(selectedGames),
-        });
       } catch (error) {
         set((state) => {
           state.appSetup.setupState = previousSetupState;
@@ -115,13 +105,6 @@ export const createAppSetupSlice: BoundStoreStateCreator<AppSetupSlice> = (
     selectClientPath: async (game: GameId, path: string) => {
       await get().clientLog.saveGamePath(game, path);
 
-      const selectedGames = get().appSetup.setupState?.selectedGames ?? [];
-      trackEvent("setup-client-path-selected", {
-        game,
-        has_path: true,
-        selection_type: getGameSelectionType(selectedGames),
-      });
-
       await get().appSetup.hydrate();
       await get().appSetup.validateCurrentStep();
     },
@@ -133,29 +116,6 @@ export const createAppSetupSlice: BoundStoreStateCreator<AppSetupSlice> = (
       });
 
       try {
-        const setupState = get().appSetup.setupState;
-        const currentStep = setupState?.currentStep ?? SETUP_STEPS.NOT_STARTED;
-        const selectedGames = setupState?.selectedGames ?? [];
-        const selectionType = getGameSelectionType(selectedGames);
-
-        if (currentStep === SETUP_STEPS.SELECT_GAME) {
-          trackEvent("setup-step-completed-game", {
-            step_number: 1,
-            step_name: "game",
-            selectedGames,
-            selection_type: selectionType,
-          });
-        }
-
-        if (currentStep === SETUP_STEPS.SELECT_CLIENT_PATH) {
-          trackEvent("setup-step-completed-client-path", {
-            step_number: 2,
-            step_name: "client-path",
-            selectedGames,
-            selection_type: selectionType,
-          });
-        }
-
         const result = await window.electron.appSetup.advanceStep();
         if (!result.success) {
           set((state) => {
@@ -171,22 +131,6 @@ export const createAppSetupSlice: BoundStoreStateCreator<AppSetupSlice> = (
           state.appSetup.validation = null;
           state.appSetup.isLoading = false;
         });
-
-        if (nextSetupState.currentStep === SETUP_STEPS.SELECT_CLIENT_PATH) {
-          trackEvent("setup-step-viewed-client-path", {
-            step_number: 2,
-            step_name: "client-path",
-            selectedGames: nextSetupState.selectedGames,
-            selection_type: getGameSelectionType(nextSetupState.selectedGames),
-          });
-        }
-
-        if (nextSetupState.currentStep === SETUP_STEPS.TELEMETRY_CONSENT) {
-          trackEvent("setup-step-viewed-telemetry", {
-            step_number: 3,
-            step_name: "telemetry",
-          });
-        }
 
         return true;
       } catch (error) {
@@ -246,19 +190,6 @@ export const createAppSetupSlice: BoundStoreStateCreator<AppSetupSlice> = (
       });
 
       try {
-        const setupState = get().appSetup.setupState;
-        const selectedGames = setupState?.selectedGames ?? [];
-        const selectionType = getGameSelectionType(selectedGames);
-
-        trackEvent("setup-step-completed-telemetry", {
-          step_number: 3,
-          step_name: "telemetry",
-          selectedGames,
-          selection_type: selectionType,
-          crashReportingEnabled: setupState?.telemetryCrashReporting,
-          usageAnalyticsEnabled: setupState?.telemetryUsageAnalytics,
-        });
-
         const result = await window.electron.appSetup.completeSetup();
         if (!result.success) {
           set((state) => {
@@ -274,18 +205,6 @@ export const createAppSetupSlice: BoundStoreStateCreator<AppSetupSlice> = (
           state.appSetup.isLoading = false;
         });
 
-        trackEvent("setup-completed", {
-          selectedGames,
-          selection_type: selectionType,
-          totalSteps: 3,
-          timeTaken: get().appSetup.setupStartTime
-            ? Date.now() - Number(get().appSetup.setupStartTime)
-            : undefined,
-          completion_status: "completed",
-          crashReportingEnabled: setupState?.telemetryCrashReporting,
-          usageAnalyticsEnabled: setupState?.telemetryUsageAnalytics,
-        });
-
         return true;
       } catch (error) {
         set((state) => {
@@ -298,14 +217,6 @@ export const createAppSetupSlice: BoundStoreStateCreator<AppSetupSlice> = (
     },
 
     skipSetup: async () => {
-      const currentStep =
-        get().appSetup.setupState?.currentStep ?? SETUP_STEPS.NOT_STARTED;
-
-      trackEvent("setup-skipped", {
-        currentStep,
-        completion_status: "skipped",
-      });
-
       set((state) => {
         state.appSetup.isLoading = true;
         state.appSetup.error = null;
@@ -343,16 +254,6 @@ export const createAppSetupSlice: BoundStoreStateCreator<AppSetupSlice> = (
           state.appSetup.isLoading = false;
         });
       }
-    },
-
-    trackSetupStarted: () => {
-      set((state) => {
-        state.appSetup.setupStartTime = Date.now();
-      });
-
-      trackEvent("setup-started", {
-        timestamp: new Date().toISOString(),
-      });
     },
 
     setSetupState: (setupState: SetupState) => {

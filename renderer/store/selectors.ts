@@ -111,6 +111,10 @@ export const usePoeProcessSelector = <T>(
   selector: (poeProcess: BoundStore["poeProcess"]) => T,
 ) => useBoundStore((state) => selector(state.poeProcess));
 
+export const usePoeLeaguesShallow = <T>(
+  selector: (poeLeagues: BoundStore["poeLeagues"]) => T,
+) => useBoundStore(useShallow((state) => selector(state.poeLeagues)));
+
 export const useReplayClipsSelector = <T>(
   selector: (replayClips: BoundStore["replayClips"]) => T,
 ) => useBoundStore((state) => selector(state.replayClips));

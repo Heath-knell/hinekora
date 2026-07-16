@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import type { BookmarkLibraryItem } from "~/main/modules/bookmarks";
 
 import {
+  getCellClassName,
   resolveBookmarkLibraryTarget,
   resolveBookmarkTableSeparator,
+  resolveSortBy,
 } from "./BookmarksTable.utils";
 
 function createBookmarkLibraryItem(
@@ -40,6 +42,11 @@ function createBookmarkLibraryItem(
 }
 
 describe("BookmarksTable utils", () => {
+  it("supports the league table column classes and sorting", () => {
+    expect(getCellClassName("sourceLeague")).toContain("whitespace-nowrap");
+    expect(resolveSortBy("sourceLeague")).toBe("sourceLeague");
+  });
+
   it("resolves active recording targets before rewind and archived recording targets", () => {
     expect(
       resolveBookmarkLibraryTarget(

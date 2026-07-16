@@ -1,29 +1,27 @@
+import { useEditorShallow } from "~/renderer/store";
+
 import { EditorBookmarksRail } from "../EditorBookmarksRail/EditorBookmarksRail";
 import { EditorHistoryRail } from "../EditorHistoryRail/EditorHistoryRail";
 import { EditorShortcutsRail } from "../EditorShortcutsRail/EditorShortcutsRail";
 
-type EditorSidePanelKind = "bookmarks" | "history" | "shortcuts";
+function EditorSidePanel() {
+  const visibleSidePanel = useEditorShallow(
+    (editor) => editor.visibleSidePanel,
+  );
 
-interface EditorSidePanelProps {
-  visibleSidePanel: EditorSidePanelKind | null;
-  onClose: () => void;
-}
-
-function EditorSidePanel({ visibleSidePanel, onClose }: EditorSidePanelProps) {
   if (visibleSidePanel === "bookmarks") {
-    return <EditorBookmarksRail onClose={onClose} />;
+    return <EditorBookmarksRail />;
   }
 
   if (visibleSidePanel === "history") {
-    return <EditorHistoryRail onClose={onClose} />;
+    return <EditorHistoryRail />;
   }
 
   if (visibleSidePanel === "shortcuts") {
-    return <EditorShortcutsRail onClose={onClose} />;
+    return <EditorShortcutsRail />;
   }
 
   return null;
 }
 
-export type { EditorSidePanelKind };
 export { EditorSidePanel };

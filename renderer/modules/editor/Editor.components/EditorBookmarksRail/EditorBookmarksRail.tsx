@@ -7,15 +7,12 @@ import { useBookmarksShallow, useEditorShallow } from "~/renderer/store";
 
 import { useEditorRecordingBookmarksContext } from "../EditorRecordingBookmarksProvider/EditorRecordingBookmarksProvider";
 
-interface EditorBookmarksRailProps {
-  onClose: () => void;
-}
-
-function EditorBookmarksRail({ onClose }: EditorBookmarksRailProps) {
+function EditorBookmarksRail() {
   const bookmarks = useEditorRecordingBookmarksContext();
-  const setPlaybackSeconds = useEditorShallow(
-    (editor) => editor.setPlaybackSeconds,
-  );
+  const { closeSidePanel, setPlaybackSeconds } = useEditorShallow((editor) => ({
+    closeSidePanel: editor.closeSidePanel,
+    setPlaybackSeconds: editor.setPlaybackSeconds,
+  }));
   const {
     categoryFilter,
     selectCategory,
@@ -96,7 +93,7 @@ function EditorBookmarksRail({ onClose }: EditorBookmarksRailProps) {
       subtitle={bookmarks.recordingSource?.name ?? "Recording markers"}
       totalCount={bookmarks.totalCount}
       onCategoryChange={handleCategoryChange}
-      onClose={onClose}
+      onClose={closeSidePanel}
       onHoverBookmark={handleHoverBookmark}
       onNextPage={handleNextPage}
       onPreviousPage={handlePreviousPage}

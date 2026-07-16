@@ -1,30 +1,17 @@
 import { pickCaptureProfileSettingsUpdate } from "~/renderer/modules/capture-profiles/CaptureProfiles.utils/CaptureProfiles.utils";
 import { isManagedRecorderStatusActive } from "~/renderer/modules/managed-recorder/ManagedRecorder.utils/ManagedRecorder.utils";
-import { trackEvent } from "~/renderer/modules/umami";
 import type {
   BoundStore,
   BoundStoreStateCreator,
   SettingsSlice,
 } from "~/renderer/store/store.types";
 
-import { type AppSettings, captureProfileSettingKeys } from "~/types";
-
-const untrackedSettingsUpdateKeys = new Set<keyof AppSettings>([
-  "poe1CharacterName",
-  "poe2CharacterName",
-  "selectedCaptureProfileId",
-  "selectedCaptureProfileIdsByGame",
-  "selectedProfileId",
-]);
-
-function shouldTrackSettingsUpdate(input: Partial<AppSettings>): boolean {
-  const updateKeys = Object.keys(input) as Array<keyof AppSettings>;
-
-  return (
-    updateKeys.length > 0 &&
-    updateKeys.some((key) => !untrackedSettingsUpdateKeys.has(key))
-  );
-}
+import {
+  type AppSettings,
+  type AppSettingsKey,
+  type AppSettingsUpdate,
+  captureProfileSettingKeys,
+} from "~/types";
 
 export const createSettingsSlice: BoundStoreStateCreator<SettingsSlice> = (
   set,
@@ -32,9 +19,12 @@ export const createSettingsSlice: BoundStoreStateCreator<SettingsSlice> = (
 ) => {
   let settingsRequestVersion = 0;
   let settingsChangeVersion = 0;
+  const preferenceRequestVersions = new Map<AppSettingsKey, number>();
 
   return {
     settings: {
+      pendingPreferences: {},
+      preferenceErrors: {},
       value: null,
       hydrate: async () => {
         const requestVersion = ++settingsRequestVersion;
@@ -71,7 +61,7 @@ export const createSettingsSlice: BoundStoreStateCreator<SettingsSlice> = (
             () => changeVersion === settingsChangeVersion,
           );
         }),
-      update: async (input: Partial<AppSettings>) => {
+      update: async (input: AppSettingsUpdate) => {
         const updateSettings = window.electron.settings.update;
         if (!updateSettings) {
           throw new Error("Settings updates are not available in this window");
@@ -102,9 +92,49 @@ export const createSettingsSlice: BoundStoreStateCreator<SettingsSlice> = (
         if (requestVersion !== settingsRequestVersion) {
           return;
         }
+      },
+      updatePreference: async (key, value) => {
+        const requestVersion = (preferenceRequestVersions.get(key) ?? 0) + 1;
+        preferenceRequestVersions.set(key, requestVersion);
+        const currentSettings = get().settings.value;
+        const hadPreviousValue = currentSettings
+          ? Object.hasOwn(currentSettings, key)
+          : false;
+        const previousValue = currentSettings?.[key];
 
-        if (shouldTrackSettingsUpdate(input)) {
-          trackEvent("settings-updated");
+        set((state) => {
+          state.settings.value ??= {};
+          state.settings.value[key] = value as never;
+          state.settings.pendingPreferences[key] = true;
+          delete state.settings.preferenceErrors[key];
+        });
+
+        try {
+          await get().settings.update({ [key]: value } as AppSettingsUpdate);
+          if (preferenceRequestVersions.get(key) === requestVersion) {
+            set((state) => {
+              delete state.settings.pendingPreferences[key];
+            });
+          }
+          return true;
+        } catch {
+          if (preferenceRequestVersions.get(key) !== requestVersion) {
+            return false;
+          }
+
+          set((state) => {
+            if (state.settings.value) {
+              if (hadPreviousValue) {
+                state.settings.value[key] = previousValue as never;
+              } else {
+                delete state.settings.value[key];
+              }
+            }
+            state.settings.preferenceErrors[key] =
+              "Could not save this preference.";
+            delete state.settings.pendingPreferences[key];
+          });
+          return false;
         }
       },
     },
@@ -189,5 +219,3 @@ function createCaptureSettingsUpdateDelta(
 
   return input;
 }
-
-export { shouldTrackSettingsUpdate };

@@ -1,8 +1,7 @@
 import { type PopoverComponentProps, ReperePopover } from "@repere/react";
 import type { ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
-import { trackEvent } from "~/renderer/modules/umami";
 import { useOnboardingActions } from "~/renderer/store";
 
 import { useOnboardingMutationRefresh } from "../../Onboarding.hooks/useOnboardingMutationRefresh/useOnboardingMutationRefresh";
@@ -22,51 +21,14 @@ function Popover({
   ...props
 }: PopoverProps) {
   const [isDismissingAll, setIsDismissingAll] = useState(false);
-  const hasTrackedOpenRef = useRef(false);
   const { dismissAll } = useOnboardingActions();
   const runOnboardingMutation = useOnboardingMutationRefresh();
 
-  useEffect(() => {
-    if (!props.isOpen || hasTrackedOpenRef.current) {
-      return;
-    }
-
-    hasTrackedOpenRef.current = true;
-    trackEvent("onboarding-beacon-opened", {
-      beaconId: props.beaconId,
-    });
-  }, [props.beaconId, props.isOpen]);
-
-  const handleAcknowledge = () => {
-    trackEvent("onboarding-beacon-acknowledged", {
-      beaconId: props.beaconId,
-    });
-  };
-
-  const handleClose = () => {
-    trackEvent("onboarding-beacon-closed", {
-      beaconId: props.beaconId,
-    });
-    props.onClose();
-  };
-
   const handleDismissAll = async () => {
-    trackEvent("onboarding-dismiss-all-clicked", {
-      source: "popover",
-      beaconId: props.beaconId,
-    });
-
     setIsDismissingAll(true);
 
     try {
-      const didDismiss = await runOnboardingMutation(() => dismissAll());
-
-      if (didDismiss) {
-        trackEvent("onboarding-all-dismissed", {
-          source: "popover",
-          beaconId: props.beaconId,
-        });
-      }
+      await runOnboardingMutation(() => dismissAll());
     } catch (error) {
       console.error("Failed to dismiss all onboarding beacons:", error);
     } finally {
@@ -80,7 +42,6 @@ function Popover({
       className={`w-[400px] rounded-2xl border-2 border-primary p-3 shadow-lg shadow-primary/50 [background:color-mix(in_oklab,var(--color-accent)_30%,black)] ${
         className ?? ""
       }`}
-      onClose={handleClose}
     >
       <ReperePopover.Title>
         <span className="font-bold text-xl text-primary">{title}</span>
@@ -106,7 +67,6 @@ function Popover({
         <ReperePopover.AcknowledgeButton
           className="btn btn-primary h-8 flex-1"
           type="button"
-          onClick={handleAcknowledge}
         >
           Got it
         </ReperePopover.AcknowledgeButton>

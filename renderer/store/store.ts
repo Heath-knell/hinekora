@@ -16,6 +16,7 @@ import { createCropEditorSlice } from "~/renderer/modules/crop-editor/CropEditor
 import { createEditorSlice } from "~/renderer/modules/editor/Editor.slice/Editor.slice";
 import { createManagedRecorderSlice } from "~/renderer/modules/managed-recorder/ManagedRecorder.slice/ManagedRecorder.slice";
 import { createOnboardingSlice } from "~/renderer/modules/onboarding";
+import { createPoeLeaguesSlice } from "~/renderer/modules/poe-leagues/PoeLeagues.slice/PoeLeagues.slice";
 import { createPoeProcessSlice } from "~/renderer/modules/poe-process/PoeProcess.slice/PoeProcess.slice";
 import { createProfilesSlice } from "~/renderer/modules/profiles/Profiles.slice/Profiles.slice";
 import { createRecordingStorageSlice } from "~/renderer/modules/recording-storage/RecordingStorage.slice/RecordingStorage.slice";
@@ -55,6 +56,7 @@ export const useBoundStore = create<BoundStore>()(
       const capturePreviewSlice = createCapturePreviewSlice(...args);
       const clipPreviewOverlaySlice = createClipPreviewOverlaySlice(...args);
       const managedRecorderSlice = createManagedRecorderSlice(...args);
+      const poeLeaguesSlice = createPoeLeaguesSlice(...args);
       const poeProcessSlice = createPoeProcessSlice(...args);
       const settingsSlice = createSettingsSlice(...args);
       const clientLogSlice = createClientLogSlice(...args);
@@ -80,6 +82,7 @@ export const useBoundStore = create<BoundStore>()(
         ...capturePreviewSlice,
         ...clipPreviewOverlaySlice,
         ...managedRecorderSlice,
+        ...poeLeaguesSlice,
         ...poeProcessSlice,
         ...settingsSlice,
         ...clientLogSlice,
@@ -92,7 +95,10 @@ export const useBoundStore = create<BoundStore>()(
         ...changelogSlice,
         ...savedEditsSlice,
         hydrate: async () => {
-          await settingsSlice.settings.hydrate();
+          await Promise.all([
+            settingsSlice.settings.hydrate(),
+            poeLeaguesSlice.poeLeagues.hydrate(),
+          ]);
           await profilesSlice.profiles.hydrate();
           await captureProfilesSlice.captureProfiles.hydrate();
           await Promise.all([
@@ -113,6 +119,7 @@ export const useBoundStore = create<BoundStore>()(
             profilesSlice.profiles.startListening(),
             cropEditorSlice.cropEditor.startListening(),
             managedRecorderSlice.managedRecorder.startListening(),
+            poeLeaguesSlice.poeLeagues.startListening(),
             poeProcessSlice.poeProcess.startListening(),
             settingsSlice.settings.startListening(),
             clientLogSlice.clientLog.startListening(),

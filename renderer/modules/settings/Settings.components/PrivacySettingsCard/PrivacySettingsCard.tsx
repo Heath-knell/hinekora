@@ -3,23 +3,27 @@ import { FiAlertTriangle } from "react-icons/fi";
 
 import { useSettingsShallow } from "~/renderer/store";
 
+import { HINEKORA_PRIVACY_POLICY_URL } from "~/types";
+import { PseudonymousUserIdField } from "../PseudonymousUserIdField/PseudonymousUserIdField";
 import { SettingsToggleRow } from "../SettingsToggleRow/SettingsToggleRow";
 
-const PRIVACY_POLICY_URL =
-  "https://github.com/navali-creations/Hinekora/blob/master/PRIVACY.md";
-
 function PrivacySettingsCard() {
-  const { settingsValue, updateSettings } = useSettingsShallow((settings) => ({
+  const {
+    crashReportingError,
+    isSavingCrashReporting,
+    settingsValue,
+    updatePreference,
+  } = useSettingsShallow((settings) => ({
+    crashReportingError:
+      settings.preferenceErrors.telemetryCrashReporting ?? null,
+    isSavingCrashReporting:
+      settings.pendingPreferences.telemetryCrashReporting === true,
     settingsValue: settings.value,
-    updateSettings: settings.update,
+    updatePreference: settings.updatePreference,
   }));
 
   const handleCrashReportingChange = (event: ChangeEvent<HTMLInputElement>) => {
-    void updateSettings({ telemetryCrashReporting: event.target.checked });
-  };
-
-  const handleUsageAnalyticsChange = (event: ChangeEvent<HTMLInputElement>) => {
-    void updateSettings({ telemetryUsageAnalytics: event.target.checked });
+    void updatePreference("telemetryCrashReporting", event.target.checked);
   };
 
   return (
@@ -32,24 +36,29 @@ function PrivacySettingsCard() {
 
       <div className="divide-y divide-base-content/10">
         <SettingsToggleRow
-          checked={settingsValue?.telemetryCrashReporting ?? false}
-          description="Send anonymous error reports when something goes wrong. Only your OS type, app version, and error details are included - no usernames or file paths."
+          ariaLabel="Crash Reporting"
+          checked={settingsValue?.telemetryCrashReporting ?? true}
+          description="Send error reports when something goes wrong. Reports can include your OS type, app version, and error details; usernames and local paths are redacted where possible."
+          disabled={isSavingCrashReporting}
           label="Crash Reporting"
+          statusClassName={
+            crashReportingError ? "text-error" : "text-base-content/50"
+          }
+          statusLabel={
+            crashReportingError ??
+            (isSavingCrashReporting ? "Saving..." : undefined)
+          }
+          statusRole={crashReportingError ? "alert" : "status"}
           onChange={handleCrashReportingChange}
         />
 
-        <SettingsToggleRow
-          checked={settingsValue?.telemetryUsageAnalytics ?? false}
-          description="Help us understand which features are used most. No personal data is collected."
-          label="Usage Analytics"
-          onChange={handleUsageAnalyticsChange}
-        />
+        <PseudonymousUserIdField />
 
         <div className="flex items-center justify-between gap-4 py-3">
           <span className="text-base-content/70 text-sm">Privacy Policy</span>
           <a
             className="btn btn-primary btn-xs gap-1"
-            href={PRIVACY_POLICY_URL}
+            href={HINEKORA_PRIVACY_POLICY_URL}
             rel="noopener noreferrer"
             target="_blank"
           >

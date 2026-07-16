@@ -155,6 +155,19 @@ test("covers asset rail, project picker, rename, history, retention, and new edi
   await expect(page.getByRole("heading", { name: "History" })).toBeHidden();
 
   await openEditorActionsMenu(page);
+  await expect(
+    page.getByLabel("Auto-prune all but last 5 edits"),
+  ).toBeChecked();
+  await page.getByLabel("Auto-prune all but last 5 edits").uncheck();
+  await expect
+    .poll(async () => {
+      const calls = await getEditorE2ECalls(page);
+
+      return calls.settingsUpdates.at(-1);
+    })
+    .toEqual({ editorAutoPruneProjects: false });
+
+  await openEditorActionsMenu(page);
   await page.getByLabel("Auto-prune all but last 5 edits").check();
   await expect
     .poll(async () => {
@@ -264,6 +277,25 @@ test("covers My Media tabs, pagination, league filters, and moving clips into an
   await expectNoTimelineOverlap(page);
 });
 
+test("restores the last selected My Media filter after leaving the editor", async ({
+  page,
+}) => {
+  await setupEditorE2E(page);
+
+  await page.getByLabel("Media type").selectOption("manual-replay");
+  await page.getByLabel("Editor media league").selectOption("Standard");
+  await expect
+    .poll(async () => (await getEditorE2ECalls(page)).settingsUpdates)
+    .toContainEqual({ editorMediaFilter: "manual-replay" });
+
+  await page.getByRole("link", { name: "Saved Edits", exact: true }).click();
+  await expect(page.getByLabel("Library league")).toHaveValue("Standard");
+  await page.getByRole("link", { name: "Editor", exact: true }).click();
+
+  await expect(page.getByLabel("Media type")).toHaveValue("manual-replay");
+  await expect(page.getByLabel("Editor media league")).toHaveValue("Standard");
+});
+
 test("keeps unavailable clip candidates out while preserving missing recordings", async ({
   page,
 }) => {
@@ -330,7 +362,9 @@ test("keeps unavailable clip candidates out while preserving missing recordings"
 test("covers editor help, shortcuts, saved-edit rail, and debug actions", async ({
   page,
 }) => {
-  await setupEditorE2E(page);
+  await setupEditorE2E(page, {
+    settings: { editorLogEnabled: true },
+  });
 
   await page.getByRole("button", { name: "Editor help" }).click();
   await expect(

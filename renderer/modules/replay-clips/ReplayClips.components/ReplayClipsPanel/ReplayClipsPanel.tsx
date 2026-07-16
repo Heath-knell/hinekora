@@ -33,12 +33,14 @@ import {
 } from "./ReplayClipsPanel.utils";
 
 interface ReplayClipsPanelProps {
+  isQueryEnabled?: boolean;
   query: ReplayClipLibraryQuery;
   queryKey: string;
   showLeagueColumn: boolean;
 }
 
 function ReplayClipsPanel({
+  isQueryEnabled = true,
   query,
   queryKey,
   showLeagueColumn,
@@ -90,8 +92,12 @@ function ReplayClipsPanel({
   }, [clearSelectedClips, queryKey]);
 
   useEffect(() => {
+    if (!isQueryEnabled) {
+      return;
+    }
+
     void hydrateLibrary(libraryQuery);
-  }, [hydrateLibrary, libraryQuery]);
+  }, [hydrateLibrary, isQueryEnabled, libraryQuery]);
 
   const handlePaginationChange: OnChangeFn<PaginationState> = (updater) => {
     clearSelectedClips();

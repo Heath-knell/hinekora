@@ -1,56 +1,45 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useMemo } from "react";
+
+import { getFallbackLeague } from "~/renderer/modules/game/GameScope.constants";
+import { usePoeLeaguesShallow, useSettingsShallow } from "~/renderer/store";
 
 import {
-  getLeagueSettingKey,
-  normalizeLeagueForGame,
-} from "~/renderer/modules/game/GameScope.constants";
-import { useSettingsSelector } from "~/renderer/store";
+  type AppSettings,
+  type GameId,
+  getMediaLibraryLeagueSettingKey,
+} from "~/types";
+import type { MediaLibraryScope } from "../../MediaLibrary.utils/MediaLibrary.utils";
 
-import type { AppSettings, GameId } from "~/types";
-import {
-  ALL_LEAGUES_VALUE,
-  type MediaLibraryScope,
-} from "../../MediaLibrary.utils/MediaLibrary.utils";
+function getMediaLibraryLeague(
+  settings: Partial<AppSettings>,
+  game: GameId,
+  activeLeagues: readonly string[],
+): string {
+  return (
+    settings[getMediaLibraryLeagueSettingKey(game)] ??
+    getFallbackLeague(game, activeLeagues)
+  );
+}
 
 function createMediaLibraryScopeFromSettings(
   settings: Partial<AppSettings> | null,
+  activeLeaguesByGame: Record<GameId, readonly string[]>,
 ): MediaLibraryScope {
   if (!settings) {
     return {
       game: "poe1",
-      league: "Standard",
+      league: getFallbackLeague("poe1", activeLeaguesByGame.poe1),
     };
   }
 
   const activeGame = settings.activeGame ?? "poe1";
   return {
     game: activeGame,
-    league: normalizeLeagueForGame(
+    league: getMediaLibraryLeague(
+      settings,
       activeGame,
-      settings[getLeagueSettingKey(activeGame)],
+      activeLeaguesByGame[activeGame],
     ),
-  };
-}
-
-function syncMediaLibraryScopeWithSettings(
-  settings: Partial<AppSettings> & Pick<AppSettings, "activeGame">,
-  currentScope: MediaLibraryScope,
-): MediaLibraryScope {
-  const activeGame = settings.activeGame;
-  const leagueKey = getLeagueSettingKey(activeGame);
-  const nextLeague =
-    currentScope.league === ALL_LEAGUES_VALUE
-      ? ALL_LEAGUES_VALUE
-      : currentScope.game === activeGame
-        ? currentScope.league
-        : normalizeLeagueForGame(activeGame, settings[leagueKey]);
-
-  return {
-    game: activeGame,
-    league:
-      nextLeague === ALL_LEAGUES_VALUE
-        ? ALL_LEAGUES_VALUE
-        : normalizeLeagueForGame(activeGame, nextLeague),
   };
 }
 
@@ -61,47 +50,55 @@ function hasMediaLibrarySettings(
 }
 
 function useMediaLibraryScope(): {
+  error: string | null;
+  isFetchingLeagues: boolean;
   isReady: boolean;
+  leagues: readonly string[];
   scope: MediaLibraryScope;
   setLeague: (league: string) => void;
 } {
-  const settings = useSettingsSelector((settingsSlice) => settingsSlice.value);
+  const { catalogErrors, isFetchingByGame, leaguesByGame } =
+    usePoeLeaguesShallow((poeLeagues) => ({
+      catalogErrors: poeLeagues.errors,
+      isFetchingByGame: poeLeagues.isFetchingByGame,
+      leaguesByGame: poeLeagues.byGame,
+    }));
+  const activeLeaguesByGame = useMemo(
+    () => ({
+      poe1: leaguesByGame.poe1.map((league) => league.name),
+      poe2: leaguesByGame.poe2.map((league) => league.name),
+    }),
+    [leaguesByGame],
+  );
+  const { preferenceErrors, settings, updatePreference } = useSettingsShallow(
+    (settingsSlice) => ({
+      preferenceErrors: settingsSlice.preferenceErrors,
+      settings: settingsSlice.value,
+      updatePreference: settingsSlice.updatePreference,
+    }),
+  );
   const mediaLibrarySettings = hasMediaLibrarySettings(settings)
     ? settings
     : null;
-  const [scope, setScope] = useState<MediaLibraryScope>(() =>
-    createMediaLibraryScopeFromSettings(mediaLibrarySettings),
+  const scope = createMediaLibraryScopeFromSettings(
+    mediaLibrarySettings,
+    activeLeaguesByGame,
   );
-  const [syncedSettingsGame, setSyncedSettingsGame] = useState<GameId | null>(
-    () => mediaLibrarySettings?.activeGame ?? null,
+  const leagueKey = getMediaLibraryLeagueSettingKey(scope.game);
+
+  const setLeague = useCallback(
+    (league: string) => {
+      void updatePreference(leagueKey, league);
+    },
+    [leagueKey, updatePreference],
   );
-
-  useEffect(() => {
-    if (!mediaLibrarySettings) {
-      return;
-    }
-
-    setScope((current) =>
-      syncMediaLibraryScopeWithSettings(mediaLibrarySettings, current),
-    );
-    setSyncedSettingsGame(mediaLibrarySettings.activeGame);
-  }, [mediaLibrarySettings]);
-
-  const setLeague = useCallback((league: string) => {
-    setScope((current) => ({ ...current, league }));
-  }, []);
-
-  const isSyncedWithSettings =
-    mediaLibrarySettings !== null &&
-    syncedSettingsGame === mediaLibrarySettings.activeGame;
-  const renderedScope =
-    mediaLibrarySettings && !isSyncedWithSettings
-      ? syncMediaLibraryScopeWithSettings(mediaLibrarySettings, scope)
-      : scope;
 
   return {
+    error: preferenceErrors[leagueKey] ?? catalogErrors[scope.game] ?? null,
+    isFetchingLeagues: isFetchingByGame[scope.game],
     isReady: mediaLibrarySettings !== null,
-    scope: renderedScope,
+    leagues: activeLeaguesByGame[scope.game],
+    scope,
     setLeague,
   };
 }

@@ -6,10 +6,6 @@ import { allOnboardingBeaconIds } from "~/renderer/modules/onboarding/onboarding
 
 import { type AppSettings, createDefaultSettings } from "~/types";
 
-const analyticsMocks = vi.hoisted(() => ({
-  trackEvent: vi.fn(),
-}));
-
 const storeMocks = vi.hoisted(() => ({
   dismiss: vi.fn(),
   dismissedBeacons: ["game-selector"] as string[],
@@ -19,10 +15,6 @@ const storeMocks = vi.hoisted(() => ({
   resetOne: vi.fn(),
   settingsValue: null as AppSettings | null,
   updateSettings: vi.fn(),
-}));
-
-vi.mock("~/renderer/modules/umami", () => ({
-  trackEvent: analyticsMocks.trackEvent,
 }));
 
 vi.mock("~/renderer/store", () => ({
@@ -108,22 +100,10 @@ describe("HelpSettingsCard", () => {
 
     expect(storeMocks.dismissAll).toHaveBeenCalledTimes(1);
     expect(storeMocks.refreshBeaconHost).toHaveBeenCalledTimes(1);
-    expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
-      "onboarding-dismiss-all-clicked",
-      {
-        source: "settings",
-      },
-    );
-    expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
-      "onboarding-all-dismissed",
-      {
-        source: "settings",
-      },
-    );
     expect(container.textContent).toContain("All dismissed");
   });
 
-  it("tracks individual beacon visibility toggles from settings", async () => {
+  it("updates individual beacon visibility from settings", async () => {
     await renderHelpSettings();
     const showGameSelector = container.querySelector<HTMLInputElement>(
       'input[aria-label="Show Game selector beacon"]',
@@ -143,24 +123,6 @@ describe("HelpSettingsCard", () => {
 
     expect(storeMocks.resetOne).toHaveBeenCalledWith("game-selector");
     expect(storeMocks.dismiss).toHaveBeenCalledWith("overlay-icon");
-    expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
-      "onboarding-beacon-visibility-toggled",
-      {
-        beaconId: "game-selector",
-        visible: true,
-        didDismiss: false,
-        didReset: true,
-      },
-    );
-    expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
-      "onboarding-beacon-visibility-toggled",
-      {
-        beaconId: "overlay-icon",
-        visible: false,
-        didDismiss: true,
-        didReset: false,
-      },
-    );
   });
 
   it("toggles dismissed dashboard alerts from help settings", async () => {
@@ -182,13 +144,6 @@ describe("HelpSettingsCard", () => {
     expect(storeMocks.updateSettings).toHaveBeenCalledWith({
       groupPlayDeathAlertDismissed: false,
     });
-    expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
-      "dismissible-alert-visibility-toggled",
-      {
-        alertId: "group-play-death",
-        visible: true,
-      },
-    );
   });
 
   it("dismisses the recorder settings info alert from help settings", async () => {
@@ -213,13 +168,6 @@ describe("HelpSettingsCard", () => {
     expect(storeMocks.updateSettings).toHaveBeenCalledWith({
       recorderSettingsInfoAlertDismissed: true,
     });
-    expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
-      "dismissible-alert-visibility-toggled",
-      {
-        alertId: "recorder-settings-info",
-        visible: false,
-      },
-    );
   });
 
   it("restores the capture mode info alert from help settings", async () => {
@@ -243,13 +191,6 @@ describe("HelpSettingsCard", () => {
     expect(storeMocks.updateSettings).toHaveBeenCalledWith({
       captureModeInfoAlertDismissed: false,
     });
-    expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
-      "dismissible-alert-visibility-toggled",
-      {
-        alertId: "capture-mode-info",
-        visible: true,
-      },
-    );
   });
 
   it("dismisses the clip preview info alert from help settings", async () => {
@@ -277,12 +218,5 @@ describe("HelpSettingsCard", () => {
     expect(storeMocks.updateSettings).toHaveBeenCalledWith({
       clipPreviewInfoAlertDismissed: true,
     });
-    expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
-      "dismissible-alert-visibility-toggled",
-      {
-        alertId: "clip-preview-info",
-        visible: false,
-      },
-    );
   });
 });

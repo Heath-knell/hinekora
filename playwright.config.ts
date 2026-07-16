@@ -1,5 +1,11 @@
 import { defineConfig } from "@playwright/test";
 
+import { getE2EAppBaseUrl, getE2EAppPort } from "./e2e/helpers/app-url";
+
+const e2eAppPort = getE2EAppPort();
+const e2eAppBaseUrl = getE2EAppBaseUrl();
+const shouldStartE2EAppServer = !process.env.E2E_APP_BASE_URL;
+
 export default defineConfig({
   testDir: "./e2e",
   testMatch: "**/*.e2e.test.ts",
@@ -14,13 +20,20 @@ export default defineConfig({
     ? [["html", { open: "never" }], ["github"]]
     : [["html", { open: "never" }], ["list"]],
   outputDir: "./e2e/test-results",
-  use: { screenshot: "off", trace: "off", video: "off" },
-  webServer: {
-    command: "pnpm exec vite --config vite.renderer.config.mts --port 5173",
-    port: 5173,
-    timeout: 30_000,
-    reuseExistingServer: true,
-    stdout: "pipe",
-    stderr: "pipe",
+  use: {
+    baseURL: e2eAppBaseUrl,
+    screenshot: "off",
+    trace: "off",
+    video: "off",
   },
+  webServer: shouldStartE2EAppServer
+    ? {
+        command: `pnpm exec vite --config vite.renderer.config.mts --host 127.0.0.1 --port ${e2eAppPort} --strictPort`,
+        url: e2eAppBaseUrl,
+        timeout: 30_000,
+        reuseExistingServer: process.env.E2E_REUSE_EXISTING_SERVER === "true",
+        stdout: "pipe",
+        stderr: "pipe",
+      }
+    : undefined,
 });

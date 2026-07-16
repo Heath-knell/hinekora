@@ -1,5 +1,3 @@
-import { trackEvent } from "~/renderer/modules/umami";
-
 import type { EditorSliceActionContext } from "./Editor.slice.context";
 import type { EditorSlice } from "./Editor.slice.types";
 
@@ -30,9 +28,6 @@ function createEditorProjectActions({
         },
         { historyLabel: isAudioMuted ? "Mute audio" : "Unmute audio" },
       );
-      trackEvent("editor-audio-mute-toggled", {
-        muted: isAudioMuted,
-      });
     },
   };
 }

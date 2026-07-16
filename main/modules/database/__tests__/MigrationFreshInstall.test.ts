@@ -43,6 +43,8 @@ describe("Hinekora fresh-install migrations", () => {
     expect(tableExists(db, "recording_storage_path_migrations")).toBe(true);
     expect(tableExists(db, "editor_projects")).toBe(true);
     expect(tableExists(db, "editor_project_source_leagues")).toBe(true);
+    expect(tableExists(db, "poe_leagues")).toBe(true);
+    expect(tableExists(db, "poe_league_sync_state")).toBe(true);
     expect(columnNames(db, "replay_clips")).toContain("source_league");
     expect(columnNames(db, "replay_clips")).toContain("kind");
     expect(columnNames(db, "replay_clips")).toContain("size_bytes");
@@ -118,6 +120,7 @@ describe("Hinekora fresh-install migrations", () => {
     expect(indexExists(db, "idx_editor_project_source_leagues_league")).toBe(
       true,
     );
+    expect(indexExists(db, "idx_poe_leagues_game_active")).toBe(true);
     expect(indexColumns(db, "idx_editor_project_source_leagues_scope")).toEqual(
       [
         { desc: false, name: "source_game" },

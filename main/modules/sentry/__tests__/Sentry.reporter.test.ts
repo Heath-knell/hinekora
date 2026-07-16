@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 describe("Sentry reporter", () => {
-  it("lazily loads the Sentry SDK for captured exceptions and messages", async () => {
+  it("lazily loads the Sentry SDK for captured exceptions", async () => {
     vi.resetModules();
     const sentry = {
       captureException: vi.fn(),
@@ -14,19 +14,15 @@ describe("Sentry reporter", () => {
     const error = new Error("capture failed");
 
     reporter.captureSentryException(error, { tags: { module: "main" } });
-    reporter.captureSentryMessage("ready", { level: "info" });
 
     await vi.waitFor(() => {
       expect(sentry.captureException).toHaveBeenCalledWith(error, {
         tags: { module: "main" },
       });
-      expect(sentry.captureMessage).toHaveBeenCalledWith("ready", {
-        level: "info",
-      });
     });
   });
 
-  it("initializes and closes the Sentry SDK", async () => {
+  it("initializes the Sentry SDK", async () => {
     vi.resetModules();
     const sentry = {
       captureException: vi.fn(),
@@ -39,10 +35,8 @@ describe("Sentry reporter", () => {
     const options = { dsn: "https://public@example.com/1" };
 
     await reporter.initSentry(options);
-    await expect(reporter.closeSentry(10)).resolves.toBe(true);
 
     expect(sentry.init).toHaveBeenCalledWith(options);
-    expect(sentry.close).toHaveBeenCalledWith(10);
   });
 
   it("logs lazy capture failures without throwing", async () => {
@@ -53,7 +47,7 @@ describe("Sentry reporter", () => {
     const reporter = await import("../Sentry.reporter");
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
 
-    reporter.captureSentryMessage("ready");
+    reporter.captureSentryException(new Error("ready"));
 
     await vi.waitFor(() => {
       expect(warn).toHaveBeenCalledWith(

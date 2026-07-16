@@ -11,17 +11,19 @@ function ManagedRecorderSettingsLockedOverlay() {
   }
 
   return (
-    <div className="absolute inset-0 z-10 flex items-center justify-center rounded-md border border-primary/20 bg-neutral/90 p-4 text-center shadow-inner backdrop-blur-[1px]">
-      <div className="grid max-w-72 justify-items-center gap-2">
-        <span className="grid h-9 w-9 place-items-center rounded-full border border-primary/25 bg-base-200 text-primary">
-          <FiLock aria-hidden="true" className="h-4 w-4" />
+    <div className="absolute inset-0 z-10 flex items-start justify-center rounded-md bg-base-200/55 p-3 pt-5 backdrop-blur-[1px]">
+      <div className="flex w-full max-w-md items-center gap-3 rounded-lg border border-base-content/15 bg-base-100/95 p-3 text-left shadow-sm">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-base-200 text-base-content/65">
+          <FiLock aria-hidden="true" className="h-3.5 w-3.5" />
         </span>
-        <div className="grid gap-1">
-          <strong className="text-primary text-sm">{title}</strong>
-          <span className="text-base-content/75 text-xs">{message}</span>
+        <div className="min-w-0 flex-1">
+          <strong className="block text-base-content text-sm">{title}</strong>
+          <span className="mt-0.5 block text-base-content/60 text-xs">
+            {message}
+          </span>
         </div>
         <button
-          className="btn btn-primary btn-xs mt-1"
+          className="btn btn-ghost btn-xs shrink-0 border border-base-content/15"
           disabled={!canUnlock}
           title={
             canUnlock

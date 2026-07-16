@@ -11,19 +11,7 @@ import {
   createDefaultSettings,
   type ManagedRecorderStatus,
 } from "~/types";
-
-const analyticsMocks = vi.hoisted(() => ({
-  trackEvent: vi.fn(),
-}));
-
-vi.mock("~/renderer/modules/umami", () => ({
-  trackEvent: analyticsMocks.trackEvent,
-}));
-
-import {
-  createSettingsSlice,
-  shouldTrackSettingsUpdate,
-} from "./Settings.slice";
+import { createSettingsSlice } from "./Settings.slice";
 
 const settings: AppSettings = {
   ...createDefaultSettings(),
@@ -128,7 +116,73 @@ describe("Settings slice", () => {
     expect(getSettings).toHaveBeenCalled();
     expect(updateSettings).toHaveBeenCalledWith({ activeLeague: "Hardcore" });
     expect(store.getState().settings.value?.activeLeague).toBe("Hardcore");
-    expect(analyticsMocks.trackEvent).toHaveBeenCalledWith("settings-updated");
+  });
+
+  it("optimistically persists a preference and clears its pending state", async () => {
+    updateSettings.mockImplementationOnce(async (input) => ({
+      ...settings,
+      ...input,
+    }));
+    const store = createTestStore();
+    await store.getState().settings.hydrate();
+
+    const request = store
+      .getState()
+      .settings.updatePreference("clipsLibraryView", "manual");
+
+    expect(store.getState().settings.value?.clipsLibraryView).toBe("manual");
+    expect(store.getState().settings.pendingPreferences.clipsLibraryView).toBe(
+      true,
+    );
+    await expect(request).resolves.toBe(true);
+    expect(
+      store.getState().settings.pendingPreferences.clipsLibraryView,
+    ).toBeUndefined();
+    expect(
+      store.getState().settings.preferenceErrors.clipsLibraryView,
+    ).toBeUndefined();
+  });
+
+  it("rolls back a failed preference update and exposes an error", async () => {
+    updateSettings.mockRejectedValueOnce(new Error("save failed"));
+    const store = createTestStore();
+    await store.getState().settings.hydrate();
+
+    await expect(
+      store.getState().settings.updatePreference("clipsLibraryView", "manual"),
+    ).resolves.toBe(false);
+
+    expect(store.getState().settings.value?.clipsLibraryView).toBe("death");
+    expect(store.getState().settings.preferenceErrors.clipsLibraryView).toBe(
+      "Could not save this preference.",
+    );
+  });
+
+  it("does not let a stale preference failure roll back a newer value", async () => {
+    const firstUpdate = createDeferred<AppSettings>();
+    const secondUpdate = createDeferred<AppSettings>();
+    updateSettings
+      .mockReturnValueOnce(firstUpdate.promise)
+      .mockReturnValueOnce(secondUpdate.promise);
+    const store = createTestStore();
+    await store.getState().settings.hydrate();
+
+    const firstRequest = store
+      .getState()
+      .settings.updatePreference("clipsLibraryView", "manual");
+    const secondRequest = store
+      .getState()
+      .settings.updatePreference("clipsLibraryView", "death");
+
+    secondUpdate.resolve({ ...settings, clipsLibraryView: "death" });
+    await expect(secondRequest).resolves.toBe(true);
+    firstUpdate.reject(new Error("stale failure"));
+    await expect(firstRequest).resolves.toBe(false);
+
+    expect(store.getState().settings.value?.clipsLibraryView).toBe("death");
+    expect(
+      store.getState().settings.preferenceErrors.clipsLibraryView,
+    ).toBeUndefined();
   });
 
   it("rejects settings updates when the current window exposes read-only settings", async () => {
@@ -271,24 +325,6 @@ describe("Settings slice", () => {
     expect(updateSettings).toHaveBeenCalledWith({
       poe1CharacterName: "Ailucannon",
     });
-    expect(analyticsMocks.trackEvent).not.toHaveBeenCalled();
-    expect(shouldTrackSettingsUpdate({ poe2CharacterName: "Ailumonk" })).toBe(
-      false,
-    );
-    expect(
-      shouldTrackSettingsUpdate({
-        activeLeague: "Hardcore",
-        poe1CharacterName: "Ailucannon",
-      }),
-    ).toBe(true);
-    expect(shouldTrackSettingsUpdate({ selectedProfileId: "profile-1" })).toBe(
-      false,
-    );
-    expect(
-      shouldTrackSettingsUpdate({
-        selectedCaptureProfileIdsByGame: { poe2: "capture-profile-1" },
-      }),
-    ).toBe(false);
   });
 
   it("keeps capture profile settings unchanged while the profile is locked", async () => {
@@ -423,7 +459,6 @@ describe("Settings slice", () => {
 
     expect(updateCaptureProfile).toHaveBeenCalledTimes(1);
     expect(store.getState().settings.value?.recordingFps).toBe(30);
-    expect(analyticsMocks.trackEvent).toHaveBeenCalledTimes(1);
   });
 
   it("keeps synced profile selection when the profile list is stale", async () => {
@@ -548,7 +583,6 @@ describe("Settings slice", () => {
     });
     expect(store.getState().settings.value?.recordingFps).toBe(60);
     expect(store.getState().captureProfiles.items[0]?.recordingFps).toBe(60);
-    expect(analyticsMocks.trackEvent).toHaveBeenCalledTimes(1);
   });
 
   it("ignores stale capture profile sync results after a newer settings update", async () => {
@@ -592,7 +626,6 @@ describe("Settings slice", () => {
 
     expect(store.getState().settings.value?.recordingFps).toBe(60);
     expect(store.getState().captureProfiles.items[0]?.recordingFps).toBe(60);
-    expect(analyticsMocks.trackEvent).toHaveBeenCalledTimes(1);
   });
 
   it("ignores stale capture profile sync failures after a newer settings update", async () => {

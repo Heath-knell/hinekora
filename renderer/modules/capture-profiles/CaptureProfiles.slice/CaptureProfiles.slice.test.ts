@@ -5,17 +5,15 @@ import { createCaptureProfileTestFixture as createProfile } from "~/renderer/mod
 import { createManagedRecorderStatusTestFixture as createManagedRecorderStatus } from "~/renderer/modules/managed-recorder/ManagedRecorder.test-utils";
 import type { BoundStore } from "~/renderer/store/store.types";
 import { createBoundStoreForTests } from "~/renderer/test/createBoundStoreForTests";
+import { createPoeLeagueFixtureCatalog } from "~/types/test-fixtures/poe-leagues";
 
 import {
   type CapturePreviewSource,
   type CaptureProfile,
   createDefaultSettings,
+  getCurrentLeague,
   type ManagedRecorderStatus,
 } from "~/types";
-
-vi.mock("~/renderer/modules/umami", () => ({
-  trackEvent: vi.fn(),
-}));
 
 const poe1Source: CapturePreviewSource = {
   displayId: "display-poe1",
@@ -79,6 +77,24 @@ const poe2AltProfile = createProfile({
   id: "poe2-alt",
   name: "PoE 2 Alt Capture",
 });
+
+function createSyncedLeagueStatus() {
+  return {
+    error: null,
+    isFetching: false,
+    lastSyncedAt: "2026-07-15T00:00:00.000Z",
+    provider: "test-provider",
+  };
+}
+
+function createFailedInitialLeagueStatus() {
+  return {
+    error: "offline",
+    isFetching: false,
+    lastSyncedAt: null,
+    provider: "test-provider",
+  };
+}
 
 describe("CaptureProfiles slice", () => {
   let captureProfilesChanged: ((profiles: CaptureProfile[]) => void) | null =
@@ -161,6 +177,22 @@ describe("CaptureProfiles slice", () => {
           stopBuffer: vi.fn(),
           stopRunRecording: vi.fn(),
         },
+        poeLeagues: {
+          byGame: createPoeLeagueFixtureCatalog(),
+          errors: {},
+          hydrate: vi.fn(),
+          isFetchingByGame: { poe1: false, poe2: false },
+          isSessionUserIdLoading: false,
+          loadSessionUserId: vi.fn(),
+          previousSessionUserIds: [],
+          sessionUserId: null,
+          sessionUserIdError: null,
+          startListening: vi.fn(),
+          statusByGame: {
+            poe1: createSyncedLeagueStatus(),
+            poe2: createSyncedLeagueStatus(),
+          },
+        },
       } as unknown as BoundStore;
     });
 
@@ -198,7 +230,147 @@ describe("CaptureProfiles slice", () => {
     expect(updateSettings).toHaveBeenLastCalledWith(
       expect.objectContaining({
         activeGame: "poe2",
+        activeLeague: "Standard",
         selectedCaptureProfileId: "poe2",
+      }),
+    );
+  });
+
+  it("does not persist a fallback league when selecting a profile during catalog fetch", async () => {
+    const store = createTestStore();
+    store.setState((state) => ({
+      poeLeagues: {
+        ...state.poeLeagues,
+        isFetchingByGame: { poe1: false, poe2: true },
+        statusByGame: {
+          ...state.poeLeagues.statusByGame,
+          poe2: { ...createSyncedLeagueStatus(), isFetching: true },
+        },
+      },
+    }));
+
+    store.getState().captureProfiles.select("poe2-alt");
+
+    await vi.waitFor(() => {
+      expect(updateSettings).toHaveBeenCalled();
+    });
+    const update = updateSettings.mock.lastCall?.[0];
+    expect(update).toMatchObject({
+      activeGame: "poe2",
+      selectedCaptureProfileId: "poe2-alt",
+    });
+    expect(update).not.toHaveProperty("activeLeague");
+    expect(update).not.toHaveProperty("poe2SelectedLeague");
+  });
+
+  it("does not persist a fallback league when switching to a game without a profile during catalog fetch", async () => {
+    const store = createTestStore();
+    store.setState((state) => ({
+      captureProfiles: {
+        ...state.captureProfiles,
+        items: [poe1Profile],
+      },
+      poeLeagues: {
+        ...state.poeLeagues,
+        isFetchingByGame: { poe1: false, poe2: true },
+        statusByGame: {
+          ...state.poeLeagues.statusByGame,
+          poe2: { ...createSyncedLeagueStatus(), isFetching: true },
+        },
+      },
+    }));
+
+    await store.getState().captureProfiles.selectForGame("poe2");
+
+    const update = updateSettings.mock.lastCall?.[0];
+    expect(update).toMatchObject({
+      activeGame: "poe2",
+      selectedCaptureProfileId: null,
+    });
+    expect(update).not.toHaveProperty("activeLeague");
+    expect(update).not.toHaveProperty("poe2SelectedLeague");
+  });
+
+  it("does not persist a fallback league when selecting a profile after the first catalog refresh fails", async () => {
+    const store = createTestStore();
+    store.setState((state) => ({
+      poeLeagues: {
+        ...state.poeLeagues,
+        byGame: {
+          ...state.poeLeagues.byGame,
+          poe2: state.poeLeagues.byGame.poe2.filter(
+            (league) => league.name === "Standard",
+          ),
+        },
+        statusByGame: {
+          ...state.poeLeagues.statusByGame,
+          poe2: createFailedInitialLeagueStatus(),
+        },
+      },
+    }));
+
+    store.getState().captureProfiles.select("poe2-alt");
+
+    await vi.waitFor(() => expect(updateSettings).toHaveBeenCalled());
+    const update = updateSettings.mock.lastCall?.[0];
+    expect(update).toMatchObject({
+      activeGame: "poe2",
+      selectedCaptureProfileId: "poe2-alt",
+    });
+    expect(update).not.toHaveProperty("activeLeague");
+    expect(update).not.toHaveProperty("poe2SelectedLeague");
+  });
+
+  it("does not persist a fallback league when switching games after the first catalog refresh fails", async () => {
+    const store = createTestStore();
+    store.setState((state) => ({
+      captureProfiles: {
+        ...state.captureProfiles,
+        items: [poe1Profile],
+      },
+      poeLeagues: {
+        ...state.poeLeagues,
+        statusByGame: {
+          ...state.poeLeagues.statusByGame,
+          poe2: createFailedInitialLeagueStatus(),
+        },
+      },
+    }));
+
+    await store.getState().captureProfiles.selectForGame("poe2");
+
+    const update = updateSettings.mock.lastCall?.[0];
+    expect(update).toMatchObject({
+      activeGame: "poe2",
+      selectedCaptureProfileId: null,
+    });
+    expect(update).not.toHaveProperty("activeLeague");
+    expect(update).not.toHaveProperty("poe2SelectedLeague");
+  });
+
+  it("persists the dynamic league when a fetched catalog is ready", async () => {
+    const store = createTestStore();
+    store.setState((state) => ({
+      captureProfiles: {
+        ...state.captureProfiles,
+        items: [poe1Profile],
+      },
+      settings: {
+        ...state.settings,
+        value: {
+          ...state.settings.value!,
+          poe2SelectedLeague: "Missing League",
+        },
+      },
+    }));
+
+    await store.getState().captureProfiles.selectForGame("poe2");
+
+    expect(updateSettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        activeGame: "poe2",
+        activeLeague: "Runes of Aldur",
+        poe2SelectedLeague: "Runes of Aldur",
       }),
     );
   });
@@ -618,6 +790,7 @@ describe("CaptureProfiles slice", () => {
         value: {
           ...createDefaultSettings(),
           activeGame: "poe2",
+          activeLeague: getCurrentLeague("poe2"),
           recordingFps: 60,
           selectedCaptureProfileId: "poe2-alt",
           selectedCaptureProfileIdsByGame: {

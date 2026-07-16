@@ -23,12 +23,17 @@ import { MainWindowService } from "./modules/main-window";
 import { ManagedRecorderService } from "./modules/managed-recorder";
 import { setupMediaProtocol } from "./modules/media-protocol";
 import { OverlayWindowsService } from "./modules/overlay-windows";
+import {
+  PoeLeaguesService,
+  startPoeLeaguesWhenSetupCompleted,
+} from "./modules/poe-leagues";
 import { PoeProcessService } from "./modules/poe-process";
 import { ProfilesService } from "./modules/profiles";
 import { RecordingStorageService } from "./modules/recording-storage";
 import { ReplayClipsService } from "./modules/replay-clips";
 import { SavedEditsService } from "./modules/saved-edits";
 import { SentryService } from "./modules/sentry";
+import { shouldReportFatalStartupError } from "./modules/sentry/Sentry.bootstrap-preference";
 import { captureSentryException } from "./modules/sentry/Sentry.reporter";
 import { SettingsStoreService } from "./modules/settings-store";
 import { StateTransferService } from "./modules/state-transfer";
@@ -104,6 +109,8 @@ function wireClientLogConsumers(
   });
 }
 
+let bootstrapDatabasePath: string | null = null;
+
 async function bootstrap(): Promise<void> {
   const singleInstanceLocked = app.requestSingleInstanceLock();
   if (!singleInstanceLocked) {
@@ -112,13 +119,6 @@ async function bootstrap(): Promise<void> {
   }
 
   initializeLocalDiagnostics();
-
-  if (process.env.E2E_TESTING !== "true") {
-    await SentryService.getInstance().initialize();
-    logInfo("startup", "Sentry initialized", {
-      initialized: SentryService.getInstance().isInitialized(),
-    });
-  }
 
   await app.whenReady();
 
@@ -132,6 +132,7 @@ async function bootstrap(): Promise<void> {
     app.getPath("userData"),
     app.isPackaged,
   );
+  bootstrapDatabasePath = databasePath;
   DatabaseService.getInstance(databasePath);
   logInfo("startup", "Database initialized", {
     ...createSafePathLogFields(databasePath, "database"),
@@ -151,10 +152,18 @@ async function bootstrap(): Promise<void> {
   const settingsStore = SettingsStoreService.getInstance();
   const settings = settingsStore.get();
   settingsStore.applyStartupSettings(settings);
-  if (!settings.telemetryCrashReporting) {
-    await SentryService.getInstance().disable();
+  if (process.env.E2E_TESTING !== "true" && settings.telemetryCrashReporting) {
+    await SentryService.getInstance().initialize();
+    logInfo("startup", "Sentry initialized", {
+      initialized: SentryService.getInstance().isInitialized(),
+    });
   }
   logInfo("startup", "Settings store initialized");
+
+  startPoeLeaguesWhenSetupCompleted(
+    PoeLeaguesService.getInstance(),
+    settingsStore,
+  );
 
   const profilesService = ProfilesService.getInstance();
   profilesService.ensureDefaultProfile();
@@ -253,13 +262,23 @@ if (
 ) {
   registerPrivilegedProtocols();
 
-  void bootstrap().catch((error) => {
-    captureSentryException(
-      error instanceof Error ? error : new Error(String(error)),
-      {
-        tags: { module: "main", operation: "bootstrap" },
-      },
-    );
+  void bootstrap().catch(async (error) => {
+    const sentry = SentryService.getInstance();
+    if (
+      !sentry.isInitialized() &&
+      process.env.E2E_TESTING !== "true" &&
+      shouldReportFatalStartupError(bootstrapDatabasePath)
+    ) {
+      await sentry.initialize();
+    }
+    if (sentry.isInitialized()) {
+      captureSentryException(
+        error instanceof Error ? error : new Error(String(error)),
+        {
+          tags: { module: "main", operation: "bootstrap" },
+        },
+      );
+    }
     logError("startup", "Fatal startup error", {
       error: error instanceof Error ? error.message : String(error),
     });

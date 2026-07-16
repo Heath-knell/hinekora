@@ -3,11 +3,14 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const storeMocks = vi.hoisted(() => ({
+  editorLogEnabled: false,
   useEditorShallow: vi.fn(),
 }));
 
 vi.mock("~/renderer/store", () => ({
   useEditorShallow: storeMocks.useEditorShallow,
+  useSettingsSelector: (selector: (settings: unknown) => unknown) =>
+    selector({ value: { editorLogEnabled: storeMocks.editorLogEnabled } }),
 }));
 
 vi.mock("../EditorDeleteAllEditsAction/EditorDeleteAllEditsAction", () => ({
@@ -69,32 +72,23 @@ import { EditorActionsMenu } from "./EditorActionsMenu";
 
 let container: HTMLDivElement;
 let root: Root;
-const onToggleHistory = vi.fn();
-const onToggleBookmarks = vi.fn();
-const onToggleShortcuts = vi.fn();
+const toggleSidePanel = vi.fn();
 
 function configureEditorState(overrides: Record<string, unknown> = {}) {
   storeMocks.useEditorShallow.mockImplementation((selector) =>
     selector({
       clipboardState: { error: null, requestId: null, status: "idle" },
       exportState: { status: "idle" },
+      toggleSidePanel,
+      visibleSidePanel: null,
       ...overrides,
     }),
   );
 }
 
-async function renderActionsMenu(isHistoryVisible: boolean) {
+async function renderActionsMenu() {
   await act(async () => {
-    root.render(
-      <EditorActionsMenu
-        isBookmarksVisible={false}
-        isHistoryVisible={isHistoryVisible}
-        isShortcutsVisible={false}
-        onToggleBookmarks={onToggleBookmarks}
-        onToggleHistory={onToggleHistory}
-        onToggleShortcuts={onToggleShortcuts}
-      />,
-    );
+    root.render(<EditorActionsMenu />);
   });
 }
 
@@ -103,6 +97,7 @@ describe("EditorActionsMenu", () => {
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
+    storeMocks.editorLogEnabled = false;
     configureEditorState();
   });
 
@@ -113,7 +108,9 @@ describe("EditorActionsMenu", () => {
   });
 
   it("renders compact editor actions in the menu", async () => {
-    await renderActionsMenu(true);
+    storeMocks.editorLogEnabled = true;
+    configureEditorState({ visibleSidePanel: "history" });
+    await renderActionsMenu();
     const content = container.textContent ?? "";
     const menu = container.querySelector("ul");
     const dividers = container.querySelectorAll('li[aria-hidden="true"]');
@@ -155,8 +152,17 @@ describe("EditorActionsMenu", () => {
     expect(dividers).toHaveLength(3);
   });
 
+  it("hides debug tools unless editor logging is enabled", async () => {
+    await renderActionsMenu();
+
+    expect(container.textContent).not.toContain("Debug");
+    expect(container.querySelectorAll('li[aria-hidden="true"]')).toHaveLength(
+      2,
+    );
+  });
+
   it("toggles the history rail", async () => {
-    await renderActionsMenu(false);
+    await renderActionsMenu();
     const historyButton = Array.from(container.querySelectorAll("button")).find(
       (button) => button.textContent?.includes("Show history"),
     );
@@ -165,11 +171,11 @@ describe("EditorActionsMenu", () => {
       historyButton?.click();
     });
 
-    expect(onToggleHistory).toHaveBeenCalledTimes(1);
+    expect(toggleSidePanel).toHaveBeenCalledWith("history");
   });
 
   it("toggles the bookmarks rail", async () => {
-    await renderActionsMenu(false);
+    await renderActionsMenu();
     const bookmarksButton = Array.from(
       container.querySelectorAll("button"),
     ).find((button) => button.textContent?.includes("Show bookmarks"));
@@ -178,11 +184,11 @@ describe("EditorActionsMenu", () => {
       bookmarksButton?.click();
     });
 
-    expect(onToggleBookmarks).toHaveBeenCalledTimes(1);
+    expect(toggleSidePanel).toHaveBeenCalledWith("bookmarks");
   });
 
   it("toggles the shortcuts rail", async () => {
-    await renderActionsMenu(false);
+    await renderActionsMenu();
     const shortcutsButton = Array.from(
       container.querySelectorAll("button"),
     ).find((button) => button.textContent?.includes("Show shortcuts"));
@@ -191,14 +197,14 @@ describe("EditorActionsMenu", () => {
       shortcutsButton?.click();
     });
 
-    expect(onToggleShortcuts).toHaveBeenCalledTimes(1);
+    expect(toggleSidePanel).toHaveBeenCalledWith("shortcuts");
   });
 
   it("disables processing actions while keeping menu toggles available", async () => {
     configureEditorState({
       clipboardState: { error: null, requestId: "copy-1", status: "copying" },
     });
-    await renderActionsMenu(false);
+    await renderActionsMenu();
     const summary = container.querySelector<HTMLElement>(
       '[aria-label="More editor actions"]',
     );
@@ -229,8 +235,7 @@ describe("EditorActionsMenu", () => {
     expect(copyButton?.disabled).toBe(true);
     expect(newEditButton?.disabled).toBe(true);
     expect(deleteEditButton?.disabled).toBe(true);
-    expect(onToggleHistory).toHaveBeenCalledTimes(1);
-    expect(onToggleBookmarks).not.toHaveBeenCalled();
-    expect(onToggleShortcuts).not.toHaveBeenCalled();
+    expect(toggleSidePanel).toHaveBeenCalledOnce();
+    expect(toggleSidePanel).toHaveBeenCalledWith("history");
   });
 });

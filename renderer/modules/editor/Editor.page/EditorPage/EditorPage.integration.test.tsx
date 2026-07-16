@@ -22,6 +22,7 @@ const storeMocks = vi.hoisted(() => ({
   setEditorRecordingHoveredBookmarkId: vi.fn(),
   setEditorRecordingPageIndex: vi.fn(),
   setEditorRecordingSelectedBookmarkId: vi.fn(),
+  setMediaFilter: vi.fn(),
   setZoom: vi.fn(),
   undoProjectChange: vi.fn(),
   useBookmarksShallow: vi.fn(),
@@ -30,12 +31,31 @@ const storeMocks = vi.hoisted(() => ({
   useSettingsSelector: vi.fn(),
 }));
 
-vi.mock("~/renderer/store", () => ({
-  useBookmarksShallow: storeMocks.useBookmarksShallow,
-  useEditorShallow: storeMocks.useEditorShallow,
-  useSavedEditsShallow: storeMocks.useSavedEditsShallow,
-  useSettingsSelector: storeMocks.useSettingsSelector,
-}));
+vi.mock("~/renderer/store", async () => {
+  const { createPoeLeagueFixtureCatalog: createPoeLeagueTestCatalog } =
+    await import("~/types/test-fixtures/poe-leagues");
+
+  return {
+    useBookmarksShallow: storeMocks.useBookmarksShallow,
+    useEditorShallow: storeMocks.useEditorShallow,
+    usePoeLeaguesShallow: (selector: (value: unknown) => unknown) =>
+      selector({
+        byGame: createPoeLeagueTestCatalog(),
+        errors: {},
+        isFetchingByGame: { poe1: false, poe2: false },
+      }),
+    useSavedEditsShallow: storeMocks.useSavedEditsShallow,
+    useSettingsShallow: (selector: (settings: unknown) => unknown) =>
+      storeMocks.useSettingsSelector((settings: unknown) =>
+        selector({
+          ...(settings as object),
+          preferenceErrors: {},
+          updatePreference: vi.fn(),
+        }),
+      ),
+    useSettingsSelector: storeMocks.useSettingsSelector,
+  };
+});
 
 vi.mock("../../Editor.components/EditorAssetRail/EditorAssetRail", () => ({
   EditorAssetRail: () => <div data-testid="asset-rail" />,
@@ -162,12 +182,14 @@ function configureEditorState(overrides: Record<string, unknown> = {}) {
     hoveredTimelineGap: null,
     hydrate: storeMocks.hydrate,
     isLoading: false,
+    mediaFilter: "death-clip",
     project: createEditorTestProject(),
     redoProjectChange: storeMocks.redoProjectChange,
     removeTimelineClip: storeMocks.removeTimelineClip,
     removeTimelineGap: storeMocks.removeTimelineGap,
     selectedClipId: "timeline-1",
     setHoveredTimelineGap: storeMocks.setHoveredTimelineGap,
+    setMediaFilter: storeMocks.setMediaFilter,
     setZoom: storeMocks.setZoom,
     undoProjectChange: storeMocks.undoProjectChange,
     zoom: 1,

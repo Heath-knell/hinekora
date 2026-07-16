@@ -170,7 +170,7 @@ test("covers bookmark table pagination, sorting, filters, separators, and row ac
       label: "Highgate",
       occurredAt: minutesAfterTimelineFixtureBase(123),
       sourceGame: "poe1",
-      sourceLeague: "Standard",
+      sourceLeague: "Mirage",
     }),
     ...Array.from({ length: 16 }, (_, index) =>
       createBookmark({
@@ -198,6 +198,33 @@ test("covers bookmark table pagination, sorting, filters, separators, and row ac
     page.getByText("End of previous Recording").first(),
   ).toBeVisible();
   await expect(page.getByText("Start of new Recording").first()).toBeVisible();
+
+  const gradientRow = page
+    .locator("tbody tr")
+    .filter({ hasText: "Atlas Hideout" })
+    .first();
+  await expect(gradientRow).toBeVisible();
+  await expect
+    .poll(() =>
+      gradientRow.evaluate((row) => {
+        const style = getComputedStyle(row, "::before");
+        const rowBounds = row.getBoundingClientRect();
+        return {
+          backgroundImage: style.backgroundImage,
+          heightMatchesRow:
+            Math.abs(Number.parseFloat(style.height) - rowBounds.height) <= 2,
+          position: style.position,
+          spansRow:
+            Math.abs(Number.parseFloat(style.width) - rowBounds.width) < 1,
+        };
+      }),
+    )
+    .toEqual({
+      backgroundImage: expect.stringContaining("linear-gradient"),
+      heightMatchesRow: true,
+      position: "absolute",
+      spansRow: true,
+    });
 
   await page.getByRole("button", { name: "Next page" }).click();
   await expect(page.getByText("Page 2 of 2")).toBeVisible();
@@ -247,7 +274,7 @@ test("covers bookmark table pagination, sorting, filters, separators, and row ac
     .toEqual({
       category: undefined,
       game: "poe1",
-      league: undefined,
+      league: "Mirage",
       pageIndex: 0,
     });
   await page.getByRole("button", { name: /Path of Exile 2/ }).click();

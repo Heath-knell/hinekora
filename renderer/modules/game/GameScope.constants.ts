@@ -1,4 +1,9 @@
-import type { GameId } from "~/types";
+import {
+  currentLeagueOptions,
+  type GameId,
+  getCurrentLeague,
+  getLeagueSettingKey,
+} from "~/types";
 
 export const gameOptions: Array<{ id: GameId; label: string }> = [
   { id: "poe1", label: "Path of Exile 1" },
@@ -9,26 +14,24 @@ export function getGameLabel(game: GameId): string {
   return gameOptions.find((option) => option.id === game)?.label ?? game;
 }
 
-export const leagueOptions: Record<GameId, string[]> = {
-  poe1: ["Standard", "Mirage"],
-  poe2: ["Standard", "Runes of Aldur"],
-};
+export const leagueOptions: Record<GameId, readonly string[]> =
+  currentLeagueOptions;
 
-export type LeagueSettingKey = "poe1SelectedLeague" | "poe2SelectedLeague";
-
-export function getFallbackLeague(game: GameId): string {
-  return leagueOptions[game][0] ?? "Standard";
-}
-
-export function getLeagueSettingKey(game: GameId): LeagueSettingKey {
-  return game === "poe1" ? "poe1SelectedLeague" : "poe2SelectedLeague";
+export function getFallbackLeague(
+  game: GameId,
+  leagues: readonly string[] = leagueOptions[game],
+): string {
+  return leagues[0] ?? getCurrentLeague(game);
 }
 
 export function normalizeLeagueForGame(
   game: GameId,
   league: string | null | undefined,
+  leagues: readonly string[] = leagueOptions[game],
 ): string {
-  return league && leagueOptions[game].includes(league)
+  return league && leagues.includes(league)
     ? league
-    : getFallbackLeague(game);
+    : getFallbackLeague(game, leagues);
 }
+
+export { getLeagueSettingKey };

@@ -153,7 +153,30 @@ test("prevents Live Preview refresh loops and covers source preview controls", a
   });
   await expect(sourceSelect).toHaveValue("screen:1:0");
   await expect(sourceSelect).toBeDisabled();
+  const sourceJoin = sourceSelect.locator("..");
+  const sourceLockButton = sourceJoin.getByRole("button");
+  await expect
+    .poll(async () => {
+      const [selectBorder, lockBorder] = await Promise.all([
+        sourceSelect.evaluate(
+          (element) => getComputedStyle(element).borderColor,
+        ),
+        sourceLockButton.evaluate(
+          (element) => getComputedStyle(element).borderColor,
+        ),
+      ]);
+      return selectBorder === lockBorder;
+    })
+    .toBe(true);
   await expect(page.getByText("Preview stopped")).toBeVisible();
+  await expect
+    .poll(() =>
+      page
+        .getByLabel("Capture preview")
+        .locator("..")
+        .evaluate((element) => getComputedStyle(element).backgroundColor),
+    )
+    .toBe("rgb(0, 0, 0)");
 
   const callsBeforeRefresh = await getDashboardE2ECalls(page);
   const sourceRequestCountBeforeRefresh =
@@ -471,7 +494,9 @@ test("covers recorder mode, capture settings, and audio settings interactions", 
     page.getByRole("heading", { name: "Audio Settings" }),
   ).toBeHidden();
 
-  const captureModeTabs = page.getByRole("tablist", { name: "Capture mode" });
+  const captureModeGroup = page.getByRole("radiogroup", {
+    name: "Capture mode",
+  });
   const recordingSettingsTabs = page.getByRole("tablist", {
     name: "Recording settings",
   });
@@ -486,8 +511,45 @@ test("covers recorder mode, capture settings, and audio settings interactions", 
     name: /Path of Exile 1/,
   });
 
+  const sessionOption = captureModeGroup.getByRole("radio", {
+    name: "Session Recording",
+  });
+  const rewindOption = captureModeGroup.getByRole("radio", { name: "Rewind" });
+  await expect
+    .poll(async () => {
+      const [containerBox, sessionBox, rewindBox] = await Promise.all([
+        captureModeGroup.boundingBox(),
+        sessionOption.boundingBox(),
+        rewindOption.boundingBox(),
+      ]);
+      if (!containerBox || !sessionBox || !rewindBox) {
+        return false;
+      }
+      return containerBox.width <= sessionBox.width + rewindBox.width + 10;
+    })
+    .toBe(true);
+  await expect
+    .poll(async () => {
+      const active = await rewindOption.evaluate(
+        (element) => getComputedStyle(element).backgroundColor,
+      );
+      const inactive = await sessionOption.evaluate(
+        (element) => getComputedStyle(element).backgroundColor,
+      );
+      return active !== inactive;
+    })
+    .toBe(true);
+  await expect
+    .poll(async () => {
+      const box = await page
+        .getByRole("button", { exact: true, name: "Start" })
+        .boundingBox();
+      return box?.height ?? Number.POSITIVE_INFINITY;
+    })
+    .toBeLessThanOrEqual(36);
+
   await unlockCaptureProfile(page);
-  await captureModeTabs.getByRole("tab", { name: "Session Recording" }).click();
+  await sessionOption.click();
   await expect
     .poll(async () => {
       const calls = await getDashboardE2ECalls(page);
@@ -522,7 +584,7 @@ test("covers recorder mode, capture settings, and audio settings interactions", 
     })
     .toBe(1);
 
-  await captureModeTabs.getByRole("tab", { name: "Rewind" }).click();
+  await rewindOption.click();
   await page.getByRole("button", { exact: true, name: "Start" }).click();
   await expect
     .poll(async () => {
@@ -674,6 +736,66 @@ test("covers keybind settings keyboard recording", async ({ page }) => {
   await expect(recordingPrompt).not.toBeVisible();
 });
 
+test("shows and copies the pseudonymous user ID from privacy settings", async ({
+  page,
+}) => {
+  await setupDashboardE2E(page, {
+    initialHash: "/#/settings?tab=privacy",
+    skipDashboardShellChecks: true,
+  });
+
+  const userIdInput = page.getByRole("textbox", {
+    name: "Pseudonymous user ID",
+  });
+  await expect(userIdInput).toHaveAttribute("type", "password");
+  await expect(userIdInput).toHaveValue("3f886c8b-18cf-4a48-8cdd-6a51cd44c6d5");
+
+  await page.getByRole("button", { name: "Copy pseudonymous user ID" }).click();
+  await expect(page.getByRole("status")).toHaveText("User ID copied.");
+  await expect
+    .poll(async () => (await getDashboardE2ECalls(page)).clipboardWrites)
+    .toEqual(["3f886c8b-18cf-4a48-8cdd-6a51cd44c6d5"]);
+});
+
+test("restores clips view and media league across library routes", async ({
+  page,
+}) => {
+  await setupDashboardE2E(page);
+
+  await page.getByRole("link", { name: "Clips" }).click();
+  await page.getByRole("tab", { name: "Manual Replays" }).click();
+  await page.getByLabel("Library league").selectOption("Standard");
+
+  for (const route of ["Recordings", "Rewinds", "Bookmarks", "Saved Edits"]) {
+    await page.getByRole("link", { name: route, exact: true }).click();
+    await expect(page.getByLabel("Library league")).toHaveValue("Standard");
+  }
+
+  await page.getByRole("link", { name: "Clips" }).click();
+  await expect(
+    page.getByRole("tab", { name: "Manual Replays" }),
+  ).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByLabel("Library league")).toHaveValue("Standard");
+
+  await page.getByLabel("Library league").selectOption("__all__");
+  await page.getByRole("button", { name: /Path of Exile 1/ }).click();
+  await expect(page.getByLabel("Library league")).toHaveValue("Mirage");
+  await page.getByLabel("Library league").selectOption("Standard");
+  await page.getByRole("button", { name: /Path of Exile 2/ }).click();
+  await expect(page.getByLabel("Library league")).toHaveValue("__all__");
+
+  await expect
+    .poll(async () => (await getDashboardE2ECalls(page)).settingsUpdates)
+    .toEqual(
+      expect.arrayContaining([
+        { clipsLibraryView: "manual" },
+        { poe1MediaLibraryLeague: "Standard" },
+        { poe2MediaLibraryLeague: "__all__" },
+        { poe2MediaLibraryLeague: "Standard" },
+      ]),
+    );
+});
+
 test("covers dashboard app shell game, overlay, and window controls", async ({
   page,
 }) => {
@@ -687,7 +809,8 @@ test("covers dashboard app shell game, overlay, and window controls", async ({
       return calls.clientLogActiveGames.at(-1);
     })
     .toEqual({ game: "poe1" });
-  await page.getByLabel("poe1 league").selectOption("Mirage");
+  await expect(page.getByLabel("poe1 league")).toHaveValue("Mirage");
+  await page.getByLabel("poe1 league").selectOption("Standard");
   await expect
     .poll(async () => {
       const calls = await getDashboardE2ECalls(page);
@@ -698,12 +821,11 @@ test("covers dashboard app shell game, overlay, and window controls", async ({
       expect.arrayContaining([
         expect.objectContaining({
           activeGame: "poe1",
-          activeLeague: "Standard",
+          activeLeague: "Mirage",
           selectedCaptureProfileId: "default-capture-poe1",
         }),
         expect.objectContaining({
-          activeLeague: "Mirage",
-          poe1SelectedLeague: "Mirage",
+          poe1SelectedLeague: "Standard",
         }),
       ]),
     );

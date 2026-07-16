@@ -1,10 +1,8 @@
-import type { GameId } from "~/types";
+import type { EditorMediaAssetCategory, GameId } from "~/types";
+
+export type { EditorMediaAssetCategory } from "~/types";
 
 export type EditorMediaKind = "clip" | "recording";
-export type EditorMediaAssetCategory =
-  | "death-clip"
-  | "manual-replay"
-  | "recording";
 export type EditorAssetStatus = "ready" | "missing" | "processing" | "failed";
 export type EditorTrackKind = "video";
 export type EditorExportMode = "overwrite" | "new-file";

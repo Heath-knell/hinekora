@@ -5,7 +5,7 @@ import { PageContainer } from "~/renderer/components/PageContainer/PageContainer
 import { PageContent } from "~/renderer/components/PageContent/PageContent";
 import { PageHeader } from "~/renderer/components/PageHeader/PageHeader";
 import {
-  type TabsBoxItem,
+  type TabsBoxTabItem,
   TabsBoxTabs,
 } from "~/renderer/components/TabsBoxTabs/TabsBoxTabs";
 import { CaptureProfilesPanel } from "~/renderer/modules/capture-profiles/CaptureProfiles.components/CaptureProfilesPanel/CaptureProfilesPanel";
@@ -59,7 +59,7 @@ function getSettingsCategoryFromSlug(slug: unknown): SettingsCategory | null {
 
   return settingsCategoryBySlug[slug as SettingsCategorySlug];
 }
-const settingsTabItems: TabsBoxItem<SettingsCategory>[] =
+const settingsTabItems: TabsBoxTabItem<SettingsCategory>[] =
   settingsCategories.map((category) => {
     const categorySlug = getSettingsCategorySlug(category);
 
@@ -110,7 +110,9 @@ function SettingsPage({
             onChange={handleCategoryChange}
           />
           <div
-            aria-labelledby={`settings-tab-${getSettingsCategorySlug(activeCategory)}`}
+            aria-labelledby={`settings-tab-${getSettingsCategorySlug(
+              activeCategory,
+            )}`}
             className="w-full bg-base-200 p-6"
             id={`settings-panel-${getSettingsCategorySlug(activeCategory)}`}
             role="tabpanel"

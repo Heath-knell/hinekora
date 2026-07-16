@@ -46,6 +46,8 @@ import type { UpdaterSlice } from "~/renderer/modules/updater/Updater.slice/Upda
 
 import type {
   AppSettings,
+  AppSettingsKey,
+  AppSettingsUpdate,
   AppSetupStep,
   CapturePreviewSource,
   CaptureProfile,
@@ -53,6 +55,8 @@ import type {
   ClientLogStatus,
   GameId,
   ManagedRecorderStatus,
+  PoeLeague,
+  PoeLeaguesSyncStatus,
   Profile,
   ProfileUpdateInput,
   StateImportPreview,
@@ -64,7 +68,6 @@ export interface AppSetupSlice {
     validation: StepValidationResult | null;
     isLoading: boolean;
     error: string | null;
-    setupStartTime: number | null;
     hydrate: () => Promise<void>;
     validateCurrentStep: () => Promise<void>;
     toggleGame: (game: GameId) => Promise<void>;
@@ -74,7 +77,6 @@ export interface AppSetupSlice {
     completeSetup: () => Promise<boolean>;
     skipSetup: () => Promise<void>;
     resetSetup: () => Promise<void>;
-    trackSetupStarted: () => void;
     setSetupState: (state: SetupState) => void;
     setValidation: (validation: StepValidationResult | null) => void;
     setError: (error: string | null) => void;
@@ -151,10 +153,16 @@ export interface ManagedRecorderSlice {
 
 export interface SettingsSlice {
   settings: {
+    pendingPreferences: Partial<Record<AppSettingsKey, boolean>>;
+    preferenceErrors: Partial<Record<AppSettingsKey, string>>;
     value: Partial<AppSettings> | null;
     hydrate: () => Promise<void>;
     startListening: () => () => void;
-    update: (input: Partial<AppSettings>) => Promise<void>;
+    update: (input: AppSettingsUpdate) => Promise<void>;
+    updatePreference: <TKey extends AppSettingsKey>(
+      key: TKey,
+      value: AppSettings[TKey],
+    ) => Promise<boolean>;
   };
 }
 
@@ -180,6 +188,22 @@ export interface PoeProcessSlice {
     states: PoeProcessStatesByGame;
     error: string | null;
     hydrate: () => Promise<void>;
+    startListening: () => () => void;
+  };
+}
+
+export interface PoeLeaguesSlice {
+  poeLeagues: {
+    byGame: Record<GameId, PoeLeague[]>;
+    errors: Partial<Record<GameId, string>>;
+    isFetchingByGame: Record<GameId, boolean>;
+    statusByGame: Partial<Record<GameId, PoeLeaguesSyncStatus>>;
+    previousSessionUserIds: string[];
+    sessionUserId: string | null;
+    sessionUserIdError: string | null;
+    isSessionUserIdLoading: boolean;
+    hydrate: () => Promise<void>;
+    loadSessionUserId: () => Promise<void>;
     startListening: () => () => void;
   };
 }
@@ -339,6 +363,7 @@ export type BoundStore = AppMenuSlice &
   ManagedRecorderSlice &
   SettingsSlice &
   ClientLogSlice &
+  PoeLeaguesSlice &
   PoeProcessSlice &
   ReplayClipsSlice &
   RecordingStorageSlice &

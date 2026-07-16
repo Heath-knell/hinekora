@@ -1,5 +1,4 @@
 import { resolveActiveGameProfile } from "~/renderer/modules/profiles/Profiles.utils/Profiles.utils";
-import { trackEvent } from "~/renderer/modules/umami";
 import type {
   BoundStore,
   BoundStoreStateCreator,
@@ -76,9 +75,6 @@ export const createProfilesSlice: BoundStoreStateCreator<ProfilesSlice> = (
           state.profiles.selectedProfileId = created.id;
         });
         persistSelectedProfileId(created.id);
-        trackEvent("profile-created", {
-          game: created.game ?? "all",
-        });
       },
       update: async (input: ProfileUpdateInput) => {
         markProfilesChanged();
@@ -89,7 +85,6 @@ export const createProfilesSlice: BoundStoreStateCreator<ProfilesSlice> = (
           state.profiles.selectedProfileId = updated.id;
         });
         persistSelectedProfileId(updated.id);
-        trackEvent("profile-updated");
       },
       delete: async (id: string) => {
         markProfilesChanged();
@@ -108,7 +103,6 @@ export const createProfilesSlice: BoundStoreStateCreator<ProfilesSlice> = (
           state.profiles.error = null;
         });
         persistSelectedProfileId(selectedProfileId);
-        trackEvent("profile-deleted");
       },
       select: (id: string) => {
         markProfilesChanged();
@@ -117,7 +111,6 @@ export const createProfilesSlice: BoundStoreStateCreator<ProfilesSlice> = (
           state.profiles.selectedProfileId = id;
         });
         persistSelectedProfileId(id);
-        trackEvent("profile-selected");
       },
       startListening: () =>
         window.electron.profiles.onChanged((items) => {

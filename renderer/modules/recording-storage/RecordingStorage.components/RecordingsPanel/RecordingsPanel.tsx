@@ -35,10 +35,11 @@ import {
 import { useRecordingsPanelColumns } from "./useRecordingsPanelColumns/useRecordingsPanelColumns";
 
 interface RecordingsPanelProps {
+  isScopeReady?: boolean;
   scope: MediaLibraryScope;
 }
 
-function RecordingsPanel({ scope }: RecordingsPanelProps) {
+function RecordingsPanel({ isScopeReady = true, scope }: RecordingsPanelProps) {
   const navigate = useNavigate();
   const managedRecorderStatus = useManagedRecorderSelector(
     (managedRecorder) => managedRecorder.status,
@@ -142,8 +143,12 @@ function RecordingsPanel({ scope }: RecordingsPanelProps) {
   }, [clearSelectedRecordings, scopeResetKey]);
 
   useEffect(() => {
+    if (!isScopeReady) {
+      return;
+    }
+
     void refreshRecordings(recordingQuery);
-  }, [recordingQuery, refreshRecordings]);
+  }, [isScopeReady, recordingQuery, refreshRecordings]);
 
   const handlePaginationChange: OnChangeFn<PaginationState> = (updater) => {
     clearSelectedRecordings();

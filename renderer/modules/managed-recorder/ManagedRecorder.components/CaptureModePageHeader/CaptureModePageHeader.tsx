@@ -127,9 +127,9 @@ function CaptureModePageHeader({
 
             <div
               aria-label="Capture mode"
-              className="tabs tabs-box tabs-xs min-w-0 flex-auto bg-base-200"
+              className="tabs tabs-boxed tabs-xs inline-grid shrink-0 auto-cols-max grid-flow-col bg-base-300 p-1"
               data-onboarding="capture-mode"
-              role="tablist"
+              role="radiogroup"
             >
               <TabsBoxTabs
                 items={
@@ -146,8 +146,9 @@ function CaptureModePageHeader({
                     },
                   ] satisfies TabsBoxItem<CaptureMode>[]
                 }
-                size="xs"
+                selectionRole="radio"
                 value={selectedMode}
+                variant="primary"
                 onChange={handleCaptureModeChange}
               />
             </div>
@@ -164,11 +165,11 @@ function CaptureModePageHeader({
                 onClick={handlePrimaryAction}
               >
                 {isBusy ? (
-                  <Loader2 className="animate-spin" size={16} />
+                  <Loader2 className="animate-spin" size={14} />
                 ) : isSelectedModeActive ? (
-                  <Square size={16} />
+                  <Square size={14} />
                 ) : (
-                  <Play size={16} />
+                  <Play size={14} />
                 )}
                 {primaryLabel}
               </button>

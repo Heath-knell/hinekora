@@ -21,6 +21,7 @@ import {
   type AppSettings,
   type CaptureProfile,
   type GameId,
+  gameIds,
   type StateBundle,
   StateBundleSchema,
   type StateImportMode,
@@ -72,7 +73,7 @@ function sanitizeImportedCaptureProfileSelections(
   captureProfiles: CaptureProfile[],
 ): AppSettings["selectedCaptureProfileIdsByGame"] {
   const selections: AppSettings["selectedCaptureProfileIdsByGame"] = {};
-  for (const game of ["poe1", "poe2"] as const) {
+  for (const game of gameIds) {
     const selectedProfileId = settings.selectedCaptureProfileIdsByGame[game];
     if (
       selectedProfileId &&

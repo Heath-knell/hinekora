@@ -2,6 +2,26 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const settingsMocks = vi.hoisted(() => ({
+  editorLogEnabled: false,
+  preferenceError: null as string | null,
+  update: vi.fn(),
+}));
+
+vi.mock("~/renderer/store", () => ({
+  useSettingsShallow: (selector: (settings: unknown) => unknown) =>
+    selector({
+      pendingPreferences: {},
+      preferenceErrors: {
+        ...(settingsMocks.preferenceError
+          ? { editorLogEnabled: settingsMocks.preferenceError }
+          : {}),
+      },
+      updatePreference: settingsMocks.update,
+      value: { editorLogEnabled: settingsMocks.editorLogEnabled },
+    }),
+}));
+
 import { TroubleshootingSettingsCard } from "./TroubleshootingSettingsCard";
 
 let container: HTMLDivElement;
@@ -31,6 +51,9 @@ describe("TroubleshootingSettingsCard", () => {
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
+    settingsMocks.editorLogEnabled = false;
+    settingsMocks.preferenceError = null;
+    settingsMocks.update.mockResolvedValue(true);
     revealLogFile.mockResolvedValue({ success: true });
     openDevTools.mockResolvedValue(undefined);
     Object.defineProperty(window, "electron", {
@@ -103,5 +126,34 @@ describe("TroubleshootingSettingsCard", () => {
 
     expect(container.textContent).toContain("Could not open developer tools.");
     expect(openDevTools).toHaveBeenCalledTimes(1);
+  });
+
+  it("persists the editor log toggle", async () => {
+    await renderCard();
+    const toggle = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Editor log"]',
+    );
+
+    await act(async () => {
+      toggle?.click();
+    });
+
+    expect(settingsMocks.update).toHaveBeenCalledWith("editorLogEnabled", true);
+  });
+
+  it("reports when the editor log toggle cannot be saved", async () => {
+    settingsMocks.update.mockResolvedValueOnce(false);
+    await renderCard();
+
+    await act(async () => {
+      container
+        .querySelector<HTMLInputElement>('input[aria-label="Editor log"]')
+        ?.click();
+    });
+
+    settingsMocks.preferenceError = "Could not save this preference.";
+    await renderCard();
+
+    expect(container.textContent).toContain("Could not save this preference.");
   });
 });

@@ -1,24 +1,28 @@
 import clsx from "clsx";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { FiTrash2 as Trash2 } from "react-icons/fi";
 
 import type { ReplayClipLibraryQuery } from "~/main/modules/replay-clips";
 import { PageContainer } from "~/renderer/components/PageContainer/PageContainer";
 import { PageContent } from "~/renderer/components/PageContent/PageContent";
 import { PageHeader } from "~/renderer/components/PageHeader/PageHeader";
+import { MediaLibraryLeagueControl } from "~/renderer/modules/media-library/MediaLibrary.components/MediaLibraryLeagueControl/MediaLibraryLeagueControl";
 import { MediaLibraryPageActions } from "~/renderer/modules/media-library/MediaLibrary.components/MediaLibraryPageActions/MediaLibraryPageActions";
 import { useMediaLibraryScope } from "~/renderer/modules/media-library/MediaLibrary.hooks/useMediaLibraryScope/useMediaLibraryScope";
-import {
-  ALL_LEAGUES_VALUE,
-  buildMediaLibraryLeagueOptions,
-} from "~/renderer/modules/media-library/MediaLibrary.utils/MediaLibrary.utils";
+import { ALL_LEAGUES_VALUE } from "~/renderer/modules/media-library/MediaLibrary.utils/MediaLibrary.utils";
 import { ReplayClipsPanel } from "~/renderer/modules/replay-clips/ReplayClips.components/ReplayClipsPanel/ReplayClipsPanel";
-import { useReplayClipsShallow } from "~/renderer/store";
+import { useReplayClipsShallow, useSettingsShallow } from "~/renderer/store";
 
 import type { ReplayClipKind } from "~/types";
 
 function ClipsLibraryPage() {
-  const [clipKind, setClipKind] = useState<ReplayClipKind>("death");
+  const { clipError, clipKind, updatePreference } = useSettingsShallow(
+    (settings) => ({
+      clipError: settings.preferenceErrors.clipsLibraryView ?? null,
+      clipKind: settings.value?.clipsLibraryView ?? "death",
+      updatePreference: settings.updatePreference,
+    }),
+  );
   const {
     clearSelectedClips,
     deleteSelectedClips,
@@ -32,12 +36,7 @@ function ClipsLibraryPage() {
       Boolean,
     ).length,
   }));
-  const { scope, setLeague } = useMediaLibraryScope();
-  const scopedLeagueOptions = useMemo(
-    () =>
-      buildMediaLibraryLeagueOptions(scope.game, libraryLeagues, scope.league),
-    [libraryLeagues, scope.game, scope.league],
-  );
+  const { isReady: isMediaScopeReady, scope } = useMediaLibraryScope();
   const libraryQuery = useMemo<ReplayClipLibraryQuery>(() => {
     const query: ReplayClipLibraryQuery = {
       game: scope.game,
@@ -56,14 +55,17 @@ function ClipsLibraryPage() {
     void deleteSelectedClips();
   };
 
-  const handleDeathClipsTab = () => {
+  const selectClipKind = (nextClipKind: ReplayClipKind) => {
     clearSelectedClips();
-    setClipKind("death");
+    void updatePreference("clipsLibraryView", nextClipKind);
+  };
+
+  const handleDeathClipsTab = () => {
+    selectClipKind("death");
   };
 
   const handleManualReplaysTab = () => {
-    clearSelectedClips();
-    setClipKind("manual");
+    selectClipKind("manual");
   };
 
   return (
@@ -73,38 +75,46 @@ function ClipsLibraryPage() {
         subtitle="Death clips and manual replay saves filtered by this page."
         actions={
           <MediaLibraryPageActions
-            league={scope.league}
-            leagueOptions={scopedLeagueOptions}
             leadingAction={
-              <div
-                aria-label="Clip type"
-                className="tabs tabs-box tabs-xs no-drag bg-base-200 p-1"
-                role="tablist"
-              >
-                <button
-                  aria-selected={clipKind === "death"}
-                  className={clsx(
-                    "tab px-3 font-semibold",
-                    clipKind === "death" && "tab-active text-primary",
-                  )}
-                  role="tab"
-                  type="button"
-                  onClick={handleDeathClipsTab}
+              <div className="flex min-w-0 items-center gap-2">
+                <div
+                  aria-label="Clip type"
+                  className="tabs tabs-box tabs-xs no-drag shrink-0 bg-base-200 p-1"
+                  role="tablist"
                 >
-                  Death Clips
-                </button>
-                <button
-                  aria-selected={clipKind === "manual"}
-                  className={clsx(
-                    "tab px-3 font-semibold",
-                    clipKind === "manual" && "tab-active text-primary",
-                  )}
-                  role="tab"
-                  type="button"
-                  onClick={handleManualReplaysTab}
-                >
-                  Manual Replays
-                </button>
+                  <button
+                    aria-selected={clipKind === "death"}
+                    className={clsx(
+                      "tab px-3 font-semibold",
+                      clipKind === "death" && "tab-active text-primary",
+                    )}
+                    role="tab"
+                    type="button"
+                    onClick={handleDeathClipsTab}
+                  >
+                    Death Clips
+                  </button>
+                  <button
+                    aria-selected={clipKind === "manual"}
+                    className={clsx(
+                      "tab px-3 font-semibold",
+                      clipKind === "manual" && "tab-active text-primary",
+                    )}
+                    role="tab"
+                    type="button"
+                    onClick={handleManualReplaysTab}
+                  >
+                    Manual Replays
+                  </button>
+                </div>
+                {clipError && (
+                  <span
+                    className="max-w-64 truncate text-error text-xs"
+                    title={clipError}
+                  >
+                    {clipError}
+                  </span>
+                )}
               </div>
             }
             bulkAction={
@@ -119,12 +129,15 @@ function ClipsLibraryPage() {
                 </button>
               ) : null
             }
-            onLeagueChange={setLeague}
+            leagueControl={
+              <MediaLibraryLeagueControl savedLeagues={libraryLeagues} />
+            }
           />
         }
       />
       <PageContent className="grid h-full min-h-0 grid-cols-12 items-stretch gap-4 [grid-auto-flow:dense]">
         <ReplayClipsPanel
+          isQueryEnabled={isMediaScopeReady}
           query={libraryQuery}
           queryKey={tableQueryKey}
           showLeagueColumn={showLeagueColumn}

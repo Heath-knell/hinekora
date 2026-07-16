@@ -18,6 +18,10 @@ import {
   e2eBridgeDomainFactorySource,
 } from "./bridge-fixture";
 import {
+  captureUnexpectedConsoleErrors,
+  getUnexpectedConsoleErrors,
+} from "./console-errors";
+import {
   type E2EPoeProcessSnapshotFactory,
   e2ePoeProcessSnapshotFactoryScript,
 } from "./poe-process-fixture";
@@ -181,7 +185,6 @@ function createAuraOverlayE2EFixture(
       setupStep: 3,
       setupVersion: 1,
       telemetryCrashReporting: false,
-      telemetryUsageAnalytics: false,
     },
   };
 }
@@ -191,6 +194,7 @@ async function setupAuraOverlayE2E(
   options: AuraOverlayE2EOptions = {},
 ) {
   await page.setViewportSize({ height: 760, width: 1280 });
+  captureUnexpectedConsoleErrors(page);
   await page.addInitScript(
     (input: {
       bridgeFactorySource: string;
@@ -408,6 +412,7 @@ async function expectNoUnexpectedAuraOverlayBridgeCalls(page: Page) {
   });
 
   expect(unexpectedBridgeCalls).toEqual([]);
+  expect(getUnexpectedConsoleErrors(page)).toEqual([]);
 }
 
 export {

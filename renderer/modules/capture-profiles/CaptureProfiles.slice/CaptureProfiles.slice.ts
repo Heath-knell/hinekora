@@ -11,10 +11,10 @@ import {
 } from "~/renderer/modules/capture-profiles/CaptureProfiles.utils/CaptureProfiles.utils";
 import {
   getLeagueSettingKey,
+  leagueOptions,
   normalizeLeagueForGame,
 } from "~/renderer/modules/game/GameScope.constants";
 import { isManagedRecorderStatusActive } from "~/renderer/modules/managed-recorder/ManagedRecorder.utils/ManagedRecorder.utils";
-import { trackEvent } from "~/renderer/modules/umami";
 import type {
   BoundStore,
   BoundStoreStateCreator,
@@ -28,8 +28,9 @@ import type {
   CaptureTarget,
   GameId,
 } from "~/types";
+import { canNormalizePoeLeagueSelection, gameIds } from "~/types";
 
-const captureProfileMemoryGames: GameId[] = ["poe1", "poe2"];
+const captureProfileMemoryGames = gameIds;
 
 export const createCaptureProfilesSlice: BoundStoreStateCreator<
   CaptureProfilesSlice
@@ -147,9 +148,6 @@ export const createCaptureProfilesSlice: BoundStoreStateCreator<
         });
         rememberProfileSelection(created);
         void applySelectedProfileSettings(created);
-        trackEvent("capture-profile-created", {
-          game: created.game,
-        });
       },
       update: async (input: CaptureProfileUpdateInput) => {
         if (isCaptureProfileMutationBlocked(get)) {
@@ -177,7 +175,6 @@ export const createCaptureProfilesSlice: BoundStoreStateCreator<
           rememberProfileSelection(updated);
           void applySelectedProfileSettings(updated);
         }
-        trackEvent("capture-profile-updated");
       },
       delete: async (id: string) => {
         if (isCaptureProfileMutationBlocked(get)) {
@@ -210,7 +207,6 @@ export const createCaptureProfilesSlice: BoundStoreStateCreator<
           rememberProfileSelection(selectedProfile);
           void applySelectedProfileSettings(selectedProfile);
         }
-        trackEvent("capture-profile-deleted");
       },
       select: (id: string) => {
         if (isCaptureProfileMutationBlocked(get)) {
@@ -232,7 +228,6 @@ export const createCaptureProfilesSlice: BoundStoreStateCreator<
         });
         rememberProfileSelection(profile);
         void applySelectedProfileSettings(profile);
-        trackEvent("capture-profile-selected");
       },
       selectWithPreviewSource: (id: string) => {
         if (isCaptureProfileMutationBlocked(get)) {
@@ -260,7 +255,6 @@ export const createCaptureProfilesSlice: BoundStoreStateCreator<
         );
         rememberProfileSelection(profile);
         void applySelectedProfileSettings(profile);
-        trackEvent("capture-profile-selected");
       },
       selectForGame: async (game: GameId) => {
         if (isCaptureProfileMutationBlocked(get)) {
@@ -298,7 +292,6 @@ export const createCaptureProfilesSlice: BoundStoreStateCreator<
           }
           await applyGameSettings(set, get, game);
         }
-        trackEvent("capture-profile-game-selected", { game });
       },
       setProfileUnlocked: (isUnlocked: boolean) => {
         if (isUnlocked && isCaptureProfileMutationBlocked(get)) {
@@ -451,7 +444,13 @@ async function applyGameSettings(
   const settings = get().settings;
   const currentSettings = settings.value;
   const leagueKey = getLeagueSettingKey(game);
-  const nextLeague = normalizeLeagueForGame(game, currentSettings?.[leagueKey]);
+  const activeLeagues = getActiveLeagueNames(get, game);
+  const nextLeague = normalizeLeagueForGame(
+    game,
+    currentSettings?.[leagueKey],
+    activeLeagues,
+  );
+  const includeActiveLeague = canNormalizeLeagueSelection(get, game);
   const selectedCaptureProfileIdsByGame = currentSettings
     ? createValidSelectedProfileIdsByGame(
         get().captureProfiles.items,
@@ -467,8 +466,9 @@ async function applyGameSettings(
 
     await settings.update({
       activeGame: game,
-      activeLeague: nextLeague,
-      [leagueKey]: nextLeague,
+      ...(includeActiveLeague
+        ? { activeLeague: nextLeague, [leagueKey]: nextLeague }
+        : {}),
       selectedCaptureProfileId: null,
       selectedCaptureProfileIdsByGame,
     });
@@ -512,6 +512,10 @@ function createSelectedProfileSettingsApplier(
     const settingsUpdate = createSettingsUpdateFromCaptureProfile(
       profile,
       currentSettingsWithProfileMemory,
+      {
+        activeLeagues: getActiveLeagueNames(get, profile.game),
+        includeActiveLeague: canNormalizeLeagueSelection(get, profile.game),
+      },
     );
     if (
       isCaptureProfileMutationBlocked(get) ||
@@ -545,6 +549,21 @@ function createSelectedProfileSettingsApplier(
       });
     }
   };
+}
+
+function getActiveLeagueNames(get: () => BoundStore, game: GameId): string[] {
+  return (
+    get().poeLeagues?.byGame[game].map((league) => league.name) ?? [
+      ...leagueOptions[game],
+    ]
+  );
+}
+
+function canNormalizeLeagueSelection(
+  get: () => BoundStore,
+  game: GameId,
+): boolean {
+  return canNormalizePoeLeagueSelection(get().poeLeagues?.statusByGame[game]);
 }
 
 function createValidSelectedProfileIdsByGame(

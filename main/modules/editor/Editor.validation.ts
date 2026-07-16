@@ -8,7 +8,7 @@ import {
   IpcValidationError,
 } from "~/main/utils/ipc-validation";
 
-import type { GameId } from "~/types";
+import { EditorMediaAssetCategorySchema, type GameId } from "~/types";
 import { EditorChannel } from "./Editor.channels";
 import type {
   EditorCopyToClipboardInput,
@@ -46,11 +46,6 @@ const maxEditorExportClips = 200;
 const maxEditorProjectTracks = 8;
 const maxEditorSaveProjectPayloadBytes = 2 * 1024 * 1024;
 const editorTimelineEpsilonSeconds = 0.001;
-const editorMediaAssetCategories: EditorMediaAssetCategory[] = [
-  "death-clip",
-  "manual-replay",
-  "recording",
-];
 const editorMediaKinds: EditorMediaKind[] = ["clip", "recording"];
 const editorExportModes: EditorExportMode[] = ["overwrite", "new-file"];
 const editorExportResolutions: EditorExportResolution[] = ["720p", "1080p"];
@@ -110,11 +105,7 @@ function validateEditorMediaAssetPageQuery(
       max: 32,
     },
   );
-  if (
-    !editorMediaAssetCategories.includes(
-      value.category as EditorMediaAssetCategory,
-    )
-  ) {
+  if (!EditorMediaAssetCategorySchema.safeParse(value.category).success) {
     throw new IpcValidationError(
       EditorChannel.ListMediaAssets,
       "asset category is invalid",
@@ -764,11 +755,7 @@ function validateEditorProjectAsset(
   assertObject(value, "asset", channel);
   assertString(value.assetKey, "asset key", channel, { min: 1, max: 2_080 });
   assertString(value.category, "asset category", channel, { min: 1, max: 32 });
-  if (
-    !editorMediaAssetCategories.includes(
-      value.category as EditorMediaAssetCategory,
-    )
-  ) {
+  if (!EditorMediaAssetCategorySchema.safeParse(value.category).success) {
     throw new IpcValidationError(channel, "asset category is invalid");
   }
   assertString(value.createdAt, "asset created at", channel, {

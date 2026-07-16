@@ -1,4 +1,3 @@
-import { trackEvent } from "~/renderer/modules/umami";
 import type {
   BoundStoreStateCreator,
   ClientLogSlice,
@@ -35,7 +34,6 @@ export const createClientLogSlice: BoundStoreStateCreator<ClientLogSlice> = (
         state.clientLog.status = status;
         state.clientLog.pendingPath = nextPath;
       });
-      trackEvent("client-log-path-saved", { game });
     },
     saveGamePath: async (game, path) => {
       const settings = get().settings.value;
@@ -49,7 +47,6 @@ export const createClientLogSlice: BoundStoreStateCreator<ClientLogSlice> = (
           state.clientLog.pendingPath = status.path ?? "";
         });
         await get().settings.hydrate();
-        trackEvent("client-log-path-saved", { game });
         return;
       }
 
@@ -58,7 +55,6 @@ export const createClientLogSlice: BoundStoreStateCreator<ClientLogSlice> = (
           ? { poe1ClientTxtPath: path }
           : { poe2ClientTxtPath: path },
       );
-      trackEvent("client-log-path-saved", { game });
     },
     setActiveGame: async (game, options = {}) => {
       const status = await window.electron.clientLog.setActiveGame({ game });
@@ -69,7 +65,6 @@ export const createClientLogSlice: BoundStoreStateCreator<ClientLogSlice> = (
         state.clientLog.status = status;
         state.clientLog.pendingPath = status.path ?? "";
       });
-      trackEvent("active-game-selected", { game });
     },
     startListening: () =>
       window.electron.clientLog.onStatusChanged((status) => {

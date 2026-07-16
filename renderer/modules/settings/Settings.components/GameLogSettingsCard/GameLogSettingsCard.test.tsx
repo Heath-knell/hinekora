@@ -115,4 +115,33 @@ describe("GameLogSettingsCard", () => {
       poe2CharacterName: "Ailumonk",
     });
   });
+
+  it("uses the shared path mask until the user reveals a Client.txt path", async () => {
+    storeMocks.settingsValue = {
+      ...createDefaultSettings(),
+      poe1ClientTxtPath:
+        "C:\\Users\\Łukasz\\Documents\\My Games\\Path of Exile\\Client.txt",
+    };
+
+    await renderGameLogSettings();
+
+    const input = container.querySelector<HTMLInputElement>("input[readonly]");
+    expect(input?.value).toBe("C:\\**\\Path of Exile\\Client.txt");
+    expect(input?.title).toBe("C:\\**\\Path of Exile\\Client.txt");
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          'button[aria-label="Reveal full path"]',
+        )
+        ?.click();
+    });
+
+    expect(input?.value).toBe(
+      "C:\\Users\\Łukasz\\Documents\\My Games\\Path of Exile\\Client.txt",
+    );
+    expect(input?.title).toBe(
+      "C:\\Users\\Łukasz\\Documents\\My Games\\Path of Exile\\Client.txt",
+    );
+  });
 });

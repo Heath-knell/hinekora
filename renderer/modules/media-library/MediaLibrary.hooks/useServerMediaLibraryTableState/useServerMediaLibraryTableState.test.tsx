@@ -20,6 +20,7 @@ let hookResult: ReturnType<
   typeof useServerMediaLibraryTableState<ProbeQuery>
 > | null = null;
 let resetKey = "poe2:Standard:all";
+let isEnabled = true;
 let refresh = vi.fn<(query: ProbeQuery) => Promise<void>>();
 
 function createQuery({
@@ -37,6 +38,7 @@ function createQuery({
 function Probe() {
   hookResult = useServerMediaLibraryTableState({
     createQuery,
+    enabled: isEnabled,
     initialSorting: [{ desc: true, id: "createdAt" }],
     refresh,
     resetKey,
@@ -64,6 +66,7 @@ describe("useServerMediaLibraryTableState", () => {
     root = createRoot(container);
     hookResult = null;
     resetKey = "poe2:Standard:all";
+    isEnabled = true;
     refresh = vi.fn(async (_query: ProbeQuery) => undefined);
   });
 
@@ -99,5 +102,22 @@ describe("useServerMediaLibraryTableState", () => {
       return query.resetKey === "poe1:Standard:all" && query.pageIndex === 2;
     });
     expect(staleCalls).toHaveLength(0);
+  });
+
+  it("does not refresh until enabled", async () => {
+    isEnabled = false;
+    await renderHookProbe();
+
+    expect(refresh).not.toHaveBeenCalled();
+
+    isEnabled = true;
+    await renderHookProbe();
+
+    expect(refresh).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pageIndex: 0,
+        resetKey: "poe2:Standard:all",
+      }),
+    );
   });
 });

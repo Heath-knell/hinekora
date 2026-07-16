@@ -32,10 +32,11 @@ import {
 } from "./RewindsPanel.utils";
 
 interface RewindsPanelProps {
+  isScopeReady?: boolean;
   scope: MediaLibraryScope;
 }
 
-function RewindsPanel({ scope }: RewindsPanelProps) {
+function RewindsPanel({ isScopeReady = true, scope }: RewindsPanelProps) {
   const navigate = useNavigate();
   const { error, isLoading, items, page, refresh } = useRewindsShallow(
     (rewinds) => ({
@@ -71,6 +72,7 @@ function RewindsPanel({ scope }: RewindsPanelProps) {
   const { handlePaginationChange, handleSortingChange, pagination, sorting } =
     useServerMediaLibraryTableState({
       createQuery: createRewindQuery,
+      enabled: isScopeReady,
       initialSorting: [{ id: "startedAt", desc: true }],
       refresh,
       resetKey: `${scope.game}:${scope.league}`,

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const storeMocks = vi.hoisted(() => ({
   editorAutoPruneProjects: false,
+  preferenceError: null as string | null,
   refreshMedia: vi.fn(),
   updateSettings: vi.fn(),
   useEditorShallow: vi.fn(),
@@ -46,10 +47,11 @@ describe("EditorProjectRetentionToggle", () => {
     document.body.append(container);
     root = createRoot(container);
     storeMocks.editorAutoPruneProjects = false;
+    storeMocks.preferenceError = null;
     storeMocks.refreshMedia.mockReset();
     storeMocks.refreshMedia.mockResolvedValue(undefined);
     storeMocks.updateSettings.mockReset();
-    storeMocks.updateSettings.mockResolvedValue(undefined);
+    storeMocks.updateSettings.mockResolvedValue(true);
     storeMocks.useEditorShallow.mockImplementation((selector) =>
       selector({
         refreshMedia: storeMocks.refreshMedia,
@@ -57,7 +59,13 @@ describe("EditorProjectRetentionToggle", () => {
     );
     storeMocks.useSettingsShallow.mockImplementation((selector) =>
       selector({
-        update: storeMocks.updateSettings,
+        pendingPreferences: {},
+        preferenceErrors: {
+          ...(storeMocks.preferenceError
+            ? { editorAutoPruneProjects: storeMocks.preferenceError }
+            : {}),
+        },
+        updatePreference: storeMocks.updateSettings,
         value: {
           editorAutoPruneProjects: storeMocks.editorAutoPruneProjects,
         },
@@ -88,10 +96,26 @@ describe("EditorProjectRetentionToggle", () => {
       await Promise.resolve();
     });
 
-    expect(storeMocks.updateSettings).toHaveBeenCalledWith({
-      editorAutoPruneProjects: true,
-    });
+    expect(storeMocks.updateSettings).toHaveBeenCalledWith(
+      "editorAutoPruneProjects",
+      true,
+    );
     expect(storeMocks.refreshMedia).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports failed retention updates without refreshing media", async () => {
+    storeMocks.updateSettings.mockResolvedValueOnce(false);
+    await renderRetentionToggle();
+
+    await act(async () => {
+      getRetentionCheckbox().click();
+    });
+
+    expect(storeMocks.refreshMedia).not.toHaveBeenCalled();
+
+    storeMocks.preferenceError = "Could not save this preference.";
+    await renderRetentionToggle();
+    expect(container.textContent).toContain("Could not save this preference.");
   });
 
   it("disables the retention toggle when editor actions are disabled", async () => {

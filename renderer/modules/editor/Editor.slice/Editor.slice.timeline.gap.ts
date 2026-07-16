@@ -1,5 +1,3 @@
-import { trackEvent } from "~/renderer/modules/umami";
-
 import {
   calculateTimelineDuration,
   calculateTimelineGaps,
@@ -71,7 +69,6 @@ function createEditorTimelineGapActions({
         },
         { historyLabel: "Delete gap" },
       );
-      trackEvent("editor-gap-deleted");
     },
     removeAllTimelineGaps: () => {
       set((state) => {
@@ -79,7 +76,6 @@ function createEditorTimelineGapActions({
         state.editor.hoveredTimelineGap = null;
       });
 
-      let didRemoveAnyGap = false;
       updateProject(
         (project) => {
           let didCompact = false;
@@ -119,7 +115,6 @@ function createEditorTimelineGapActions({
             return project;
           }
 
-          didRemoveAnyGap = true;
           return {
             ...project,
             durationSeconds,
@@ -129,9 +124,6 @@ function createEditorTimelineGapActions({
         },
         { historyLabel: "Clear gaps" },
       );
-      if (didRemoveAnyGap) {
-        trackEvent("editor-all-gaps-deleted");
-      }
     },
     setHoveredTimelineGap: (gap) => {
       set((state) => {

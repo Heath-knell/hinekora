@@ -12,6 +12,7 @@ import { KeybindsAPI } from "~/main/modules/keybinds/Keybinds.api";
 import { MainWindowAPI } from "~/main/modules/main-window/MainWindow.api";
 import { ManagedRecorderAPI } from "~/main/modules/managed-recorder/ManagedRecorder.api";
 import { OverlayWindowsAPI } from "~/main/modules/overlay-windows/OverlayWindows.api";
+import { PoeLeaguesAPI } from "~/main/modules/poe-leagues/PoeLeagues.api";
 import { PoeProcessAPI } from "~/main/modules/poe-process/PoeProcess.api";
 import { ProfilesAPI } from "~/main/modules/profiles/Profiles.api";
 import { RecordingStorageAPI } from "~/main/modules/recording-storage/RecordingStorage.api";
@@ -35,6 +36,7 @@ const fullApi = {
   mainWindow: MainWindowAPI,
   managedRecorder: ManagedRecorderAPI,
   overlayWindows: OverlayWindowsAPI,
+  poeLeagues: PoeLeaguesAPI,
   poeProcess: PoeProcessAPI,
   profiles: ProfilesAPI,
   recordingStorage: RecordingStorageAPI,

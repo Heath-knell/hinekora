@@ -1,4 +1,4 @@
-import type { AppSettings } from "~/types";
+import type { AppSettings, AppSettingsUpdate } from "~/types";
 
 type SettingsStoreOverlaySnapshot = Pick<
   AppSettings,
@@ -10,19 +10,16 @@ type SettingsStoreOverlaySnapshot = Pick<
   | "selectedCaptureProfileIdsByGame"
   | "selectedProfileId"
   | "telemetryCrashReporting"
-  | "telemetryUsageAnalytics"
 >;
 type SettingsStoreClipPreviewOverlaySnapshot = Pick<
   AppSettings,
-  | "clipPreviewInfoAlertDismissed"
-  | "telemetryCrashReporting"
-  | "telemetryUsageAnalytics"
+  "clipPreviewInfoAlertDismissed" | "telemetryCrashReporting"
 >;
 type SettingsStoreScopedSnapshot =
   | SettingsStoreClipPreviewOverlaySnapshot
   | SettingsStoreOverlaySnapshot;
 
-export type SettingsUpdateInput = Partial<AppSettings>;
+export type SettingsUpdateInput = AppSettingsUpdate;
 export type {
   SettingsStoreClipPreviewOverlaySnapshot,
   SettingsStoreOverlaySnapshot,
@@ -41,7 +38,6 @@ export function createSettingsStoreOverlaySnapshot(
     selectedCaptureProfileIdsByGame: settings.selectedCaptureProfileIdsByGame,
     selectedProfileId: settings.selectedProfileId,
     telemetryCrashReporting: settings.telemetryCrashReporting,
-    telemetryUsageAnalytics: settings.telemetryUsageAnalytics,
   };
 }
 
@@ -51,6 +47,5 @@ export function createSettingsStoreClipPreviewOverlaySnapshot(
   return {
     clipPreviewInfoAlertDismissed: settings.clipPreviewInfoAlertDismissed,
     telemetryCrashReporting: settings.telemetryCrashReporting,
-    telemetryUsageAnalytics: settings.telemetryUsageAnalytics,
   };
 }

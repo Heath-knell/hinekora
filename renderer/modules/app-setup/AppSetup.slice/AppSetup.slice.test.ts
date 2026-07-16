@@ -9,12 +9,6 @@ import { createBoundStoreForTests } from "~/renderer/test/createBoundStoreForTes
 
 import { createAppSetupSlice } from "./AppSetup.slice";
 
-const umamiMocks = vi.hoisted(() => ({
-  trackEvent: vi.fn(),
-}));
-
-vi.mock("~/renderer/modules/umami", () => umamiMocks);
-
 function createSetupState(
   selectedGames: SetupState["selectedGames"],
   overrides: Partial<SetupState> = {},
@@ -25,8 +19,6 @@ function createSetupState(
     selectedGames,
     poe1ClientPath: null,
     poe2ClientPath: null,
-    telemetryCrashReporting: false,
-    telemetryUsageAnalytics: false,
     ...overrides,
   } satisfies SetupState;
 }
@@ -137,12 +129,6 @@ describe("AppSetup slice", () => {
       installedGames: ["poe1", "poe2"],
       activeGame: "poe1",
     });
-    expect(umamiMocks.trackEvent).toHaveBeenCalledWith("setup-game-toggled", {
-      game: "poe2",
-      action: "added",
-      games: ["poe1", "poe2"],
-      selection_type: "both",
-    });
   });
 
   it("removes selected games and tracks removal", async () => {
@@ -159,12 +145,6 @@ describe("AppSetup slice", () => {
       installedGames: ["poe1"],
       activeGame: "poe1",
     });
-    expect(umamiMocks.trackEvent).toHaveBeenCalledWith("setup-game-toggled", {
-      game: "poe2",
-      action: "removed",
-      games: ["poe1"],
-      selection_type: "poe1_only",
-    });
   });
 
   it("reverts selected games when persistence fails", async () => {
@@ -178,7 +158,6 @@ describe("AppSetup slice", () => {
       "poe1",
     ]);
     expect(store.getState().appSetup.error).toBe("write failed");
-    expect(umamiMocks.trackEvent).not.toHaveBeenCalled();
   });
 
   it("stores unknown persistence errors when game selection save fails", async () => {
@@ -277,14 +256,6 @@ describe("AppSetup slice", () => {
     expect(saveGamePath).toHaveBeenCalledWith("poe2", "C:\\PoE2\\Client.txt");
     expect(getSetupState).toHaveBeenCalled();
     expect(validateCurrentStep).toHaveBeenCalled();
-    expect(umamiMocks.trackEvent).toHaveBeenCalledWith(
-      "setup-client-path-selected",
-      {
-        game: "poe2",
-        has_path: true,
-        selection_type: "both",
-      },
-    );
   });
 
   it("tracks client path selection without a hydrated setup state", async () => {
@@ -293,49 +264,23 @@ describe("AppSetup slice", () => {
     await store
       .getState()
       .appSetup.selectClientPath("poe1", "C:\\PoE\\Client.txt");
-
-    expect(umamiMocks.trackEvent).toHaveBeenCalledWith(
-      "setup-client-path-selected",
-      {
-        game: "poe1",
-        has_path: true,
-        selection_type: "poe1_only",
-      },
-    );
   });
 
   it("advances setup steps and tracks viewed next steps", async () => {
     const nextClientPathState = createSetupState(["poe1"], {
       currentStep: SETUP_STEPS.SELECT_CLIENT_PATH,
     });
-    const nextTelemetryState = createSetupState(["poe1"], {
-      currentStep: SETUP_STEPS.TELEMETRY_CONSENT,
+    const nextPrivacyState = createSetupState(["poe1"], {
+      currentStep: SETUP_STEPS.PRIVACY_INFO,
     });
     getSetupState
       .mockResolvedValueOnce(nextClientPathState)
-      .mockResolvedValueOnce(nextTelemetryState);
+      .mockResolvedValueOnce(nextPrivacyState);
     const { store } = createTestStore();
 
     await expect(store.getState().appSetup.advanceStep()).resolves.toBe(true);
     store.getState().appSetup.setSetupState(nextClientPathState);
     await expect(store.getState().appSetup.advanceStep()).resolves.toBe(true);
-
-    expect(umamiMocks.trackEvent).toHaveBeenCalledWith(
-      "setup-step-completed-game",
-      expect.objectContaining({ step_name: "game" }),
-    );
-    expect(umamiMocks.trackEvent).toHaveBeenCalledWith(
-      "setup-step-viewed-client-path",
-      expect.objectContaining({ step_name: "client-path" }),
-    );
-    expect(umamiMocks.trackEvent).toHaveBeenCalledWith(
-      "setup-step-completed-client-path",
-      expect.objectContaining({ step_name: "client-path" }),
-    );
-    expect(umamiMocks.trackEvent).toHaveBeenCalledWith(
-      "setup-step-viewed-telemetry",
-      expect.objectContaining({ step_name: "telemetry" }),
-    );
   });
 
   it("handles failed and thrown advance step results", async () => {
@@ -385,7 +330,7 @@ describe("AppSetup slice", () => {
   it("handles failed and thrown go back results", async () => {
     const { store } = createTestStore({
       setupState: createSetupState(["poe1"], {
-        currentStep: SETUP_STEPS.TELEMETRY_CONSENT,
+        currentStep: SETUP_STEPS.PRIVACY_INFO,
       }),
     });
     goToStep
@@ -403,29 +348,16 @@ describe("AppSetup slice", () => {
     expect(store.getState().appSetup.error).toBe("back failed");
   });
 
-  it("completes setup and tracks elapsed setup time", async () => {
+  it("completes setup", async () => {
     const completedState = createSetupState(["poe1", "poe2"], {
-      currentStep: SETUP_STEPS.TELEMETRY_CONSENT,
+      currentStep: SETUP_STEPS.PRIVACY_INFO,
       isComplete: true,
-      telemetryCrashReporting: true,
-      telemetryUsageAnalytics: true,
     });
     getSetupState.mockResolvedValueOnce(completedState);
     const { store } = createTestStore({ setupState: completedState });
-    store.getState().appSetup.trackSetupStarted();
-    vi.setSystemTime(new Date("2026-06-18T12:00:05.000Z"));
-
     await expect(store.getState().appSetup.completeSetup()).resolves.toBe(true);
 
     expect(store.getState().appSetup.setupState).toBe(completedState);
-    expect(umamiMocks.trackEvent).toHaveBeenCalledWith(
-      "setup-completed",
-      expect.objectContaining({
-        completion_status: "completed",
-        selection_type: "both",
-        timeTaken: 5000,
-      }),
-    );
   });
 
   it("handles failed and thrown complete setup results", async () => {
@@ -457,13 +389,6 @@ describe("AppSetup slice", () => {
     const { store } = createTestStore({ setupState });
 
     await expect(store.getState().appSetup.completeSetup()).resolves.toBe(true);
-
-    expect(umamiMocks.trackEvent).toHaveBeenCalledWith(
-      "setup-completed",
-      expect.objectContaining({
-        timeTaken: undefined,
-      }),
-    );
   });
 
   it("skips and resets setup through hydrate", async () => {
@@ -481,21 +406,12 @@ describe("AppSetup slice", () => {
     expect(resetSetup).toHaveBeenCalled();
     expect(store.getState().appSetup.validation).toBeNull();
     expect(store.getState().appSetup.isLoading).toBe(false);
-    expect(umamiMocks.trackEvent).toHaveBeenCalledWith("setup-skipped", {
-      completion_status: "skipped",
-      currentStep: SETUP_STEPS.SELECT_CLIENT_PATH,
-    });
   });
 
   it("tracks skipped setup before setup state is hydrated", async () => {
     const { store } = createTestStore({ setupState: null });
 
     await store.getState().appSetup.skipSetup();
-
-    expect(umamiMocks.trackEvent).toHaveBeenCalledWith("setup-skipped", {
-      completion_status: "skipped",
-      currentStep: SETUP_STEPS.NOT_STARTED,
-    });
   });
 
   it("stores skip and reset failures", async () => {
@@ -528,7 +444,7 @@ describe("AppSetup slice", () => {
     expect(store.getState().appSetup.getSelectedGames()).toEqual([]);
 
     const setupState = createSetupState(["poe2"], {
-      currentStep: SETUP_STEPS.TELEMETRY_CONSENT,
+      currentStep: SETUP_STEPS.PRIVACY_INFO,
       isComplete: true,
     });
     store.getState().appSetup.setSetupState(setupState);
@@ -537,7 +453,7 @@ describe("AppSetup slice", () => {
 
     expect(store.getState().appSetup.isSetupComplete()).toBe(true);
     expect(store.getState().appSetup.getCurrentStep()).toBe(
-      SETUP_STEPS.TELEMETRY_CONSENT,
+      SETUP_STEPS.PRIVACY_INFO,
     );
     expect(store.getState().appSetup.getSelectedGames()).toEqual(["poe2"]);
     expect(store.getState().appSetup.validation).toEqual({

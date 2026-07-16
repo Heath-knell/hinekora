@@ -23,6 +23,7 @@ export default defineConfig({
     setupFiles: ["main/test/setup.ts"],
     testTimeout: 10_000,
     pool: "forks",
+    ...(process.argv.includes("--coverage") ? { maxWorkers: 2 } : {}),
     coverage: {
       provider: "v8",
       include: [
@@ -44,6 +45,7 @@ export default defineConfig({
         "main/pollers/index.ts",
         "main/**/*.test.ts",
         "types/index.ts",
+        "types/test-fixtures/**",
         "types/**/*.test.ts",
       ],
       reporter: ["text", "html", "lcov"],

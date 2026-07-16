@@ -30,11 +30,17 @@ import {
   createDefaultSettings,
   type ManagedRecorderStatus,
 } from "../../types";
+import { createPoeLeagueFixtureCatalog as createE2EPoeLeagueCatalog } from "../../types/test-fixtures/poe-leagues";
+import { resolveE2EAppUrl } from "./app-url";
 import {
   type E2EBridgeDomainFactory,
   type E2EBridgeDomainMethods,
   e2eBridgeDomainFactorySource,
 } from "./bridge-fixture";
+import {
+  captureUnexpectedConsoleErrors,
+  getUnexpectedConsoleErrors,
+} from "./console-errors";
 import { createDefaultKeybindRegistrationStatus } from "./keybinds-fixture";
 import {
   type E2EPoeProcessSnapshotFactory,
@@ -104,6 +110,7 @@ interface SetupEditorE2EOptions {
   extraProjects?: EditorProject[];
   initialRoute?: string;
   recordingBookmarkPages?: Record<string, RecordingBookmarksPage>;
+  settings?: Partial<AppSettings>;
 }
 
 const editorE2ENow = "2026-06-25T00:00:00.000Z";
@@ -288,6 +295,8 @@ function createEditorE2EFixture(): EditorE2EFixture {
       activeGame: "poe2",
       activeLeague: "Standard",
       installedGames: ["poe2"],
+      poe2MediaLibraryLeague: "Standard",
+      telemetryCrashReporting: false,
       poe2SelectedLeague: "Standard",
       setupCompleted: true,
       setupStep: 3,
@@ -438,7 +447,9 @@ function resolveCommonEditorE2EAssetValue<TValue extends string>(
 
 async function setupEditorE2E(page: Page, options: SetupEditorE2EOptions = {}) {
   await page.setViewportSize({ height: 760, width: 1280 });
+  captureUnexpectedConsoleErrors(page);
   const fixture = createEditorE2EFixture();
+  fixture.settings = { ...fixture.settings, ...options.settings };
   fixture.assets.mediaAssets.push(...(options.extraAssets ?? []));
   fixture.extraProjects = options.extraProjects ?? [];
   fixture.recordingBookmarkPages = options.recordingBookmarkPages ?? {};
@@ -453,6 +464,7 @@ async function setupEditorE2E(page: Page, options: SetupEditorE2EOptions = {}) {
     (input: {
       bridgeFactorySource: string;
       fixture: EditorE2EFixture;
+      leagueCatalog: ReturnType<typeof createE2EPoeLeagueCatalog>;
       poeProcessSnapshotFactoryScript: string;
     }) => {
       const { fixture } = input;
@@ -747,8 +759,6 @@ async function setupEditorE2E(page: Page, options: SetupEditorE2EOptions = {}) {
               poe1ClientPath: null,
               poe2ClientPath: null,
               selectedGames: ["poe2"],
-              telemetryCrashReporting: false,
-              telemetryUsageAnalytics: false,
             }),
           },
         ),
@@ -811,6 +821,19 @@ async function setupEditorE2E(page: Page, options: SetupEditorE2EOptions = {}) {
           list: async () => [],
           onChanged: () => unsubscribe,
         }),
+        poeLeagues: createBridgeDomain<EditorE2EElectron["poeLeagues"]>(
+          "poeLeagues",
+          {
+            list: async (game) => clone(input.leagueCatalog[game]),
+            onChanged: () => unsubscribe,
+            status: async () => ({
+              error: null,
+              isFetching: false,
+              lastSyncedAt: now,
+              provider: "e2e-fixture",
+            }),
+          },
+        ),
         clientLog: createBridgeDomain<EditorE2EElectron["clientLog"]>(
           "clientLog",
           {
@@ -1058,11 +1081,14 @@ async function setupEditorE2E(page: Page, options: SetupEditorE2EOptions = {}) {
     {
       bridgeFactorySource: e2eBridgeDomainFactorySource,
       fixture,
+      leagueCatalog: createE2EPoeLeagueCatalog(),
       poeProcessSnapshotFactoryScript: e2ePoeProcessSnapshotFactoryScript,
     },
   );
 
-  await page.goto(options.initialRoute ?? "/#/editor?kind=clip&id=asset-1");
+  await page.goto(
+    resolveE2EAppUrl(options.initialRoute ?? "/#/editor?kind=clip&id=asset-1"),
+  );
   await expect(page.getByRole("heading", { name: "Editor" })).toBeVisible();
   await expect(page.locator("[data-timeline-grid='true']")).toBeVisible();
 }
@@ -1087,6 +1113,7 @@ async function expectNoUnexpectedEditorBridgeCalls(page: Page) {
   });
 
   expect(unexpectedBridgeCalls).toEqual([]);
+  expect(getUnexpectedConsoleErrors(page)).toEqual([]);
 }
 
 async function waitForSavedProjectCount(page: Page, count: number) {

@@ -146,11 +146,22 @@ const createEditorSlice: BoundStoreStateCreator<EditorSlice> = (set, get) => {
   return {
     editor: {
       ...createEditorInitialState(),
+      closeSidePanel: () => {
+        set((state) => {
+          state.editor.visibleSidePanel = null;
+        });
+      },
       ...createEditorHistoryActions(context),
       ...createEditorProjectActions(context),
       ...createEditorWorkspaceActions(context),
       ...createEditorExportActions(context),
       ...createEditorTimelineActions(context),
+      toggleSidePanel: (panel) => {
+        set((state) => {
+          state.editor.visibleSidePanel =
+            state.editor.visibleSidePanel === panel ? null : panel;
+        });
+      },
     },
   };
 };

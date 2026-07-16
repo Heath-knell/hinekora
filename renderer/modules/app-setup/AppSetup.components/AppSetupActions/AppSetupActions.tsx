@@ -1,5 +1,6 @@
+import clsx from "clsx";
+
 import { SETUP_STEPS } from "~/main/modules/app-setup/AppSetup.types";
-import { trackEvent } from "~/renderer/modules/umami";
 import { useAppSetupShallow } from "~/renderer/store";
 
 function AppSetupActions() {
@@ -21,32 +22,20 @@ function AppSetupActions() {
 
   const currentStep = setupState?.currentStep ?? SETUP_STEPS.NOT_STARTED;
   const isFirstStep = currentStep === SETUP_STEPS.SELECT_GAME;
-  const isLastStep = currentStep === SETUP_STEPS.TELEMETRY_CONSENT;
+  const isLastStep = currentStep === SETUP_STEPS.PRIVACY_INFO;
   const isNextDisabled =
     isLoading || (validation != null && !validation.isValid);
   const actionLabel = isLastStep ? "Finish" : "Next";
 
   const handleBack = () => {
-    trackEvent("setup-back-clicked", {
-      currentStep,
-      can_go_back: !isFirstStep,
-    });
     void goBack();
   };
 
   const handleNext = () => {
-    trackEvent("setup-next-clicked", {
-      currentStep,
-      can_continue: !isNextDisabled,
-    });
     void advanceStep();
   };
 
   const handleComplete = () => {
-    trackEvent("setup-finish-clicked", {
-      currentStep,
-      can_finish: !isNextDisabled,
-    });
     void completeSetup();
   };
 
@@ -54,7 +43,7 @@ function AppSetupActions() {
     <div className="flex items-center justify-end">
       <div className="flex gap-3">
         <button
-          className={`btn btn-ghost ${isFirstStep ? "invisible" : ""}`}
+          className={clsx("btn btn-ghost", { invisible: isFirstStep })}
           disabled={isLoading || isFirstStep}
           type="button"
           onClick={handleBack}

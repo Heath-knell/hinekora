@@ -1,5 +1,7 @@
 import * as Sentry from "@sentry/electron/renderer";
 
+import { scrubSensitiveText, scrubSentryValue } from "~/types";
+
 let initialized = false;
 
 function initSentry(enabled = true): void {
@@ -14,15 +16,18 @@ function initSentry(enabled = true): void {
 
   Sentry.init({
     dsn: import.meta.env.VITE_SENTRY_DSN,
+    sendDefaultPii: false,
+    beforeSend(event) {
+      return scrubSentryValue(event) as typeof event;
+    },
     beforeBreadcrumb(breadcrumb) {
-      if (
-        breadcrumb.category === "console" &&
-        breadcrumb.message?.includes("username=")
-      ) {
-        breadcrumb.message = breadcrumb.message.replace(
-          /username=[^\s,)]+/g,
-          "username=[redacted]",
-        );
+      if (breadcrumb.message) {
+        breadcrumb.message = scrubSensitiveText(breadcrumb.message);
+      }
+      if (breadcrumb.data) {
+        breadcrumb.data = scrubSentryValue(
+          breadcrumb.data,
+        ) as typeof breadcrumb.data;
       }
 
       return breadcrumb;

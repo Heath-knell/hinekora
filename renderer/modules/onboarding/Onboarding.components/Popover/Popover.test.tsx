@@ -3,11 +3,8 @@ import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const analyticsMocks = vi.hoisted(() => ({
-  trackEvent: vi.fn(),
-}));
-
 const storeMocks = vi.hoisted(() => ({
+  acknowledge: vi.fn(),
   dismissedBeacons: ["game-selector"] as string[],
   dismissAll: vi.fn(),
   refreshBeaconHost: vi.fn(),
@@ -33,7 +30,7 @@ vi.mock("@repere/react", () => {
     ),
     {
       AcknowledgeButton: ({ children, ...props }: { children: ReactNode }) => (
-        <button {...props} type="button">
+        <button {...props} type="button" onClick={storeMocks.acknowledge}>
           {children}
         </button>
       ),
@@ -59,10 +56,6 @@ vi.mock("@repere/react", () => {
 
   return { ReperePopover };
 });
-
-vi.mock("~/renderer/modules/umami", () => ({
-  trackEvent: analyticsMocks.trackEvent,
-}));
 
 vi.mock("~/renderer/store", () => ({
   useBoundStore: {
@@ -102,6 +95,8 @@ async function renderPopover() {
       </Popover>,
     );
   });
+
+  return popoverProps;
 }
 
 describe("Popover", () => {
@@ -121,35 +116,6 @@ describe("Popover", () => {
     vi.clearAllMocks();
   });
 
-  it("tracks when a beacon opens", async () => {
-    await renderPopover();
-
-    expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
-      "onboarding-beacon-opened",
-      {
-        beaconId: "game-selector",
-      },
-    );
-  });
-
-  it("tracks when a beacon closes", async () => {
-    await renderPopover();
-    const closeButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Close beacon"]',
-    );
-
-    await act(async () => {
-      closeButton?.click();
-    });
-
-    expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
-      "onboarding-beacon-closed",
-      {
-        beaconId: "game-selector",
-      },
-    );
-  });
-
   it("dismisses all onboarding beacons and refreshes Repere", async () => {
     await renderPopover();
     const dismissAllButton = Array.from(
@@ -162,37 +128,21 @@ describe("Popover", () => {
 
     expect(storeMocks.dismissAll).toHaveBeenCalledTimes(1);
     expect(storeMocks.refreshBeaconHost).toHaveBeenCalledTimes(1);
-    expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
-      "onboarding-dismiss-all-clicked",
-      {
-        source: "popover",
-        beaconId: "game-selector",
-      },
-    );
-    expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
-      "onboarding-all-dismissed",
-      {
-        source: "popover",
-        beaconId: "game-selector",
-      },
-    );
   });
 
-  it("tracks when the beacon is acknowledged", async () => {
-    await renderPopover();
-    const acknowledgeButton = Array.from(
-      container.querySelectorAll("button"),
-    ).find((button) => button.textContent?.includes("Got it"));
+  it("forwards close and renders the Repere acknowledgement action", async () => {
+    const popoverProps = await renderPopover();
 
     await act(async () => {
-      acknowledgeButton?.click();
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="Close beacon"]')
+        ?.click();
+      Array.from(container.querySelectorAll("button"))
+        .find((button) => button.textContent === "Got it")
+        ?.click();
     });
 
-    expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
-      "onboarding-beacon-acknowledged",
-      {
-        beaconId: "game-selector",
-      },
-    );
+    expect(popoverProps.onClose).toHaveBeenCalledOnce();
+    expect(storeMocks.acknowledge).toHaveBeenCalledOnce();
   });
 });

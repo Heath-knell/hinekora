@@ -15,12 +15,17 @@ import {
   registerGuardedIpcHandler,
 } from "~/main/utils/ipc-window-roles";
 
-import { type AppSettings, AppSettingsSchema } from "~/types";
+import {
+  type AppSettings,
+  type AppSettingsUpdate,
+  AppSettingsUpdateSchema,
+} from "~/types";
 import { SettingsStoreChannel } from "./SettingsStore.channels";
 import {
   createSettingsStoreClipPreviewOverlaySnapshot,
   createSettingsStoreOverlaySnapshot,
 } from "./SettingsStore.dto";
+import { normalizeLeagueSettingsUpdate } from "./SettingsStore.normalization";
 import { SettingsStoreRepository } from "./SettingsStore.repository";
 
 const START_MINIMIZED_ARG = "--hidden";
@@ -76,13 +81,16 @@ class SettingsStoreService {
     };
   }
 
-  update(input: Partial<AppSettings>): AppSettings {
-    const current = this.get();
-    const next = AppSettingsSchema.parse({ ...current, ...input });
+  update(input: AppSettingsUpdate): AppSettings {
+    const parsedInput = AppSettingsUpdateSchema.parse(input);
+    const normalizedInput = normalizeLeagueSettingsUpdate(
+      this.get(),
+      parsedInput,
+    );
     const shouldApplyStartupSettings =
-      Object.hasOwn(input, "appLaunchOnStartup") ||
-      Object.hasOwn(input, "appStartMinimized");
-    const storedSettings = this.repository.setMany(next);
+      Object.hasOwn(normalizedInput, "appLaunchOnStartup") ||
+      Object.hasOwn(normalizedInput, "appStartMinimized");
+    const storedSettings = this.repository.setMany(normalizedInput);
     this.settingsCache = storedSettings;
 
     if (shouldApplyStartupSettings) {
@@ -92,6 +100,24 @@ class SettingsStoreService {
     this.notifyChangeListeners(storedSettings);
 
     return storedSettings;
+  }
+
+  refreshCatalogDefaults(): AppSettings {
+    const previous = this.settingsCache;
+    const next = this.repository.get();
+    this.settingsCache = next;
+
+    if (
+      previous &&
+      previous.activeLeague === next.activeLeague &&
+      previous.poe1SelectedLeague === next.poe1SelectedLeague &&
+      previous.poe2SelectedLeague === next.poe2SelectedLeague
+    ) {
+      return next;
+    }
+
+    this.notifyChangeListeners(next);
+    return next;
   }
 
   replace(settings: AppSettings): AppSettings {

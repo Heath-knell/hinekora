@@ -1,14 +1,14 @@
 import type { ChangeEvent } from "react";
 import { useEffect } from "react";
 
-import {
-  getLeagueSettingKey,
-  leagueOptions,
-  normalizeLeagueForGame,
-} from "~/renderer/modules/game/GameScope.constants";
-import { useSettingsShallow } from "~/renderer/store";
+import { normalizeLeagueForGame } from "~/renderer/modules/game/GameScope.constants";
+import { usePoeLeaguesShallow, useSettingsShallow } from "~/renderer/store";
 
-import type { GameId } from "~/types";
+import {
+  canNormalizePoeLeagueSelection,
+  type GameId,
+  getLeagueSettingKey,
+} from "~/types";
 
 interface LeagueSelectProps {
   game: GameId;
@@ -16,39 +16,42 @@ interface LeagueSelectProps {
 }
 
 function LeagueSelect({ disabled = false, game }: LeagueSelectProps) {
-  const { settingsValue, updateSettings } = useSettingsShallow((settings) => ({
-    settingsValue: settings.value,
-    updateSettings: settings.update,
-  }));
-  const activeGame = settingsValue?.activeGame ?? "poe1";
+  const { preferenceError, settingsValue, updatePreference } =
+    useSettingsShallow((settings) => ({
+      preferenceError:
+        settings.preferenceErrors[getLeagueSettingKey(game)] ?? null,
+      settingsValue: settings.value,
+      updatePreference: settings.updatePreference,
+    }));
+  const { isFetching, leagueItems, syncStatus } = usePoeLeaguesShallow(
+    (poeLeagues) => ({
+      isFetching: poeLeagues.isFetchingByGame[game],
+      leagueItems: poeLeagues.byGame[game],
+      syncStatus: poeLeagues.statusByGame[game],
+    }),
+  );
+  const leagues = leagueItems.map((league) => league.name);
   const leagueKey = getLeagueSettingKey(game);
   const storedLeague = settingsValue?.[leagueKey];
-  const leagues = leagueOptions[game];
-  const selectedLeague = normalizeLeagueForGame(game, storedLeague);
+  const selectedLeague = normalizeLeagueForGame(game, storedLeague, leagues);
+  const canNormalizeSelection = canNormalizePoeLeagueSelection(syncStatus);
 
   useEffect(() => {
-    if (selectedLeague !== storedLeague) {
-      void updateSettings({
-        [leagueKey]: selectedLeague,
-        ...(activeGame === game ? { activeLeague: selectedLeague } : {}),
-      });
+    if (canNormalizeSelection && selectedLeague !== storedLeague) {
+      void updatePreference(leagueKey, selectedLeague);
     }
   }, [
-    activeGame,
-    game,
+    canNormalizeSelection,
     leagueKey,
     selectedLeague,
     storedLeague,
-    updateSettings,
+    updatePreference,
   ]);
 
   const handleLeagueChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const nextLeague = event.target.value;
 
-    void updateSettings({
-      [leagueKey]: nextLeague,
-      ...(activeGame === game ? { activeLeague: nextLeague } : {}),
-    });
+    void updatePreference(leagueKey, nextLeague);
   };
 
   return (
@@ -58,8 +61,10 @@ function LeagueSelect({ disabled = false, game }: LeagueSelectProps) {
     >
       <span className="label">League</span>
       <select
+        aria-invalid={preferenceError ? true : undefined}
         className="-me-[30px] -ms-[18px]"
-        disabled={disabled}
+        disabled={disabled || isFetching}
+        title={preferenceError ?? undefined}
         value={selectedLeague}
         onChange={handleLeagueChange}
       >

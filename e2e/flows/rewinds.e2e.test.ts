@@ -196,6 +196,8 @@ test("covers rewind table pagination, sorting, filtering, and disabled processin
   ).toBeVisible();
 
   await page.getByRole("button", { name: /Path of Exile 1/ }).click();
+  await expect(page.getByLabel("Library league")).toHaveValue("Mirage");
+  await page.getByLabel("Library league").selectOption("Standard");
   await expect(page.getByText("Showing 1 to 1 of 1 results")).toBeVisible();
   await page.getByRole("button", { name: /Path of Exile 2/ }).click();
   await page.getByLabel("Library league").selectOption("Runes of Aldur");

@@ -1,6 +1,5 @@
 import type { ChangeEvent } from "react";
 
-import { trackEvent } from "~/renderer/modules/umami";
 import { useSettingsShallow } from "~/renderer/store";
 
 import type { AppSettings } from "~/types";
@@ -13,14 +12,12 @@ type DismissibleAlertSettingKey =
   | "clipPreviewInfoAlertDismissed";
 
 interface DismissibleAlertVisibilityRowProps {
-  alertId: string;
   description: string;
   settingKey: DismissibleAlertSettingKey;
   title: string;
 }
 
 function DismissibleAlertVisibilityRow({
-  alertId,
   description,
   settingKey,
   title,
@@ -38,10 +35,6 @@ function DismissibleAlertVisibilityRow({
     };
 
     void updateSettings(nextSettings);
-    trackEvent("dismissible-alert-visibility-toggled", {
-      alertId,
-      visible,
-    });
   };
 
   return (

@@ -1,7 +1,6 @@
 import type { ChangeEvent } from "react";
 import { useCallback } from "react";
 
-import { trackEvent } from "~/renderer/modules/umami";
 import { useClipPreviewOverlayShallow } from "~/renderer/store";
 
 import { useClipPreviewOverlayCopyOperation } from "../useClipPreviewOverlayCopyOperation/useClipPreviewOverlayCopyOperation";
@@ -86,7 +85,6 @@ function useClipPreviewOverlayOperations(
   });
 
   const handleClose = useCallback(() => {
-    trackEvent("clip-preview-overlay-closed");
     void window.electron.overlayWindows.hideClipPreview();
   }, []);
 
@@ -104,7 +102,6 @@ function useClipPreviewOverlayOperations(
         },
       })
       .then(async () => {
-        trackEvent("clip-preview-overlay-edit-opened");
         await window.electron.overlayWindows.hideClipPreview();
       })
       .catch((error: unknown) => {
@@ -143,7 +140,6 @@ function useClipPreviewOverlayOperations(
     void window.electron.mainWindow
       .openClip(clip.id)
       .then(async () => {
-        trackEvent("clip-preview-overlay-edit-saved-opened");
         await window.electron.overlayWindows.hideClipPreview();
       })
       .catch((error: unknown) => {

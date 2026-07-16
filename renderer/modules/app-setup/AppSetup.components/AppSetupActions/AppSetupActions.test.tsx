@@ -5,16 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SETUP_STEPS } from "~/main/modules/app-setup/AppSetup.types";
 
-const analyticsMocks = vi.hoisted(() => ({
-  trackEvent: vi.fn(),
-}));
-
 const storeMocks = vi.hoisted(() => ({
   useAppSetupShallow: vi.fn(),
-}));
-
-vi.mock("~/renderer/modules/umami", () => ({
-  trackEvent: analyticsMocks.trackEvent,
 }));
 
 vi.mock("~/renderer/store", () => ({
@@ -66,7 +58,7 @@ describe("AppSetupActions", () => {
     expect(html).not.toContain("loading-spinner");
   });
 
-  it("tracks next clicks with the current setup step", async () => {
+  it("advances from the current setup step", async () => {
     const advanceStep = vi.fn();
     storeMocks.useAppSetupShallow.mockImplementation((selector) =>
       selector({
@@ -88,16 +80,9 @@ describe("AppSetupActions", () => {
     });
 
     expect(advanceStep).toHaveBeenCalledTimes(1);
-    expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
-      "setup-next-clicked",
-      {
-        currentStep: SETUP_STEPS.SELECT_GAME,
-        can_continue: true,
-      },
-    );
   });
 
-  it("tracks back clicks with the current setup step", async () => {
+  it("returns to the previous setup step", async () => {
     const goBack = vi.fn();
     storeMocks.useAppSetupShallow.mockImplementation((selector) =>
       selector({
@@ -121,21 +106,14 @@ describe("AppSetupActions", () => {
     });
 
     expect(goBack).toHaveBeenCalledTimes(1);
-    expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
-      "setup-back-clicked",
-      {
-        currentStep: SETUP_STEPS.SELECT_CLIENT_PATH,
-        can_go_back: true,
-      },
-    );
   });
 
-  it("tracks finish clicks with the current setup step", async () => {
+  it("finishes setup from the privacy step", async () => {
     const completeSetup = vi.fn();
     storeMocks.useAppSetupShallow.mockImplementation((selector) =>
       selector({
         setupState: {
-          currentStep: SETUP_STEPS.TELEMETRY_CONSENT,
+          currentStep: SETUP_STEPS.PRIVACY_INFO,
         },
         validation: { isValid: true, errors: [] },
         isLoading: false,
@@ -152,12 +130,5 @@ describe("AppSetupActions", () => {
     });
 
     expect(completeSetup).toHaveBeenCalledTimes(1);
-    expect(analyticsMocks.trackEvent).toHaveBeenCalledWith(
-      "setup-finish-clicked",
-      {
-        currentStep: SETUP_STEPS.TELEMETRY_CONSENT,
-        can_finish: true,
-      },
-    );
   });
 });

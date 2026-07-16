@@ -48,8 +48,6 @@ class AppSetupService {
       selectedGames: this.normalizeSelectedGames(settings.installedGames),
       poe1ClientPath: settings.poe1ClientTxtPath,
       poe2ClientPath: settings.poe2ClientTxtPath,
-      telemetryCrashReporting: settings.telemetryCrashReporting,
-      telemetryUsageAnalytics: settings.telemetryUsageAnalytics,
     };
   }
 
@@ -65,7 +63,7 @@ class AppSetupService {
         return this.validateGameSelection();
       case SETUP_STEPS.SELECT_CLIENT_PATH:
         return this.validateClientPaths();
-      case SETUP_STEPS.TELEMETRY_CONSENT:
+      case SETUP_STEPS.PRIVACY_INFO:
       case SETUP_STEPS.NOT_STARTED:
         return { isValid: true, errors: [] };
     }
@@ -83,15 +81,8 @@ class AppSetupService {
     const currentStep = this.settingsStore.get().setupStep;
     const nextStep = (currentStep + 1) as AppSetupStep;
 
-    if (nextStep > SETUP_STEPS.TELEMETRY_CONSENT) {
+    if (nextStep > SETUP_STEPS.PRIVACY_INFO) {
       return this.completeSetup();
-    }
-
-    if (nextStep === SETUP_STEPS.TELEMETRY_CONSENT) {
-      this.settingsStore.update({
-        telemetryCrashReporting: true,
-        telemetryUsageAnalytics: true,
-      });
     }
 
     this.settingsStore.update({ setupStep: nextStep });
@@ -134,7 +125,7 @@ class AppSetupService {
       activeGame: this.getPrimaryGame(selectedGames),
       installedGames: selectedGames,
       setupCompleted: true,
-      setupStep: SETUP_STEPS.TELEMETRY_CONSENT,
+      setupStep: SETUP_STEPS.PRIVACY_INFO,
     });
 
     return { success: true };
@@ -155,10 +146,8 @@ class AppSetupService {
     this.settingsStore.update({
       activeGame: this.getPrimaryGame(selectedGames),
       installedGames: selectedGames,
-      telemetryCrashReporting: true,
-      telemetryUsageAnalytics: true,
       setupCompleted: true,
-      setupStep: SETUP_STEPS.TELEMETRY_CONSENT,
+      setupStep: SETUP_STEPS.PRIVACY_INFO,
     });
   }
 
@@ -302,7 +291,7 @@ class AppSetupService {
       value !== SETUP_STEPS.NOT_STARTED &&
       value !== SETUP_STEPS.SELECT_GAME &&
       value !== SETUP_STEPS.SELECT_CLIENT_PATH &&
-      value !== SETUP_STEPS.TELEMETRY_CONSENT
+      value !== SETUP_STEPS.PRIVACY_INFO
     ) {
       throw new IpcValidationError(channel, "setup step is invalid");
     }

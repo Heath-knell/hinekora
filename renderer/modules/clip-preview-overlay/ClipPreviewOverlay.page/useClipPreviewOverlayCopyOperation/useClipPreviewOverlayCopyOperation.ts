@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 
 import type { ReplayClipView } from "~/main/modules/replay-clips";
-import { trackEvent } from "~/renderer/modules/umami";
 import { useClipPreviewOverlayShallow } from "~/renderer/store";
 
 import type { ClipPreviewTrimRange } from "../../ClipPreviewOverlay.utils/ClipPreviewOverlay.utils";
@@ -74,7 +73,6 @@ function useClipPreviewOverlayCopyOperation(input: {
         }),
       fallbackError: "Could not copy clip.",
       onSuccess: () => {
-        trackEvent("clip-copied");
         setOperationProgress(1);
         setCopied(true);
         copiedTimeoutRef.current = window.setTimeout(() => {

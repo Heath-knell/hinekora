@@ -11,6 +11,8 @@ const storeMocks = vi.hoisted(() => ({
 
 vi.mock("~/renderer/store", () => ({
   useEditorShallow: storeMocks.useEditorShallow,
+  useSettingsSelector: (selector: (settings: unknown) => unknown) =>
+    selector({ value: { editorLogEnabled: false } }),
 }));
 
 vi.mock("../EditorCopyActions/EditorCopyActions", () => ({
@@ -77,22 +79,15 @@ function configureEditorState() {
       exportState: { status: "idle" },
       project,
       selectedClipId: "timeline-1",
+      toggleSidePanel: vi.fn(),
+      visibleSidePanel: null,
     }),
   );
 }
 
 async function renderActionsMenu() {
   await act(async () => {
-    root.render(
-      <EditorActionsMenu
-        isBookmarksVisible={false}
-        isHistoryVisible={false}
-        isShortcutsVisible={false}
-        onToggleBookmarks={vi.fn()}
-        onToggleHistory={vi.fn()}
-        onToggleShortcuts={vi.fn()}
-      />,
-    );
+    root.render(<EditorActionsMenu />);
   });
 }
 

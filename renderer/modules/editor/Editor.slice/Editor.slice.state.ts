@@ -14,6 +14,7 @@ type EditorStateFields = Omit<
   | "commitHistoryTransaction"
   | "copyExport"
   | "copyProjectToClipboard"
+  | "closeSidePanel"
   | "createProject"
   | "deleteAllProjects"
   | "deleteProject"
@@ -50,6 +51,7 @@ type EditorStateFields = Omit<
   | "setZoom"
   | "splitTimelineClipAt"
   | "toggleProjectAudioMuted"
+  | "toggleSidePanel"
   | "trimTimelineClipEdge"
   | "undoProjectChange"
 >;
@@ -88,6 +90,7 @@ function createEditorInitialState(): EditorStateFields {
     selectedAssetKey: null,
     selectedClipId: null,
     savedEditPageIndex: 0,
+    visibleSidePanel: null,
     workspace: null,
     zoom: 1,
   };

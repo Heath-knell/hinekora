@@ -6,34 +6,29 @@ import {
 } from "./DismissibleAlertVisibilityRow/DismissibleAlertVisibilityRow";
 
 const dismissibleAlertRows: ReadonlyArray<{
-  alertId: string;
   description: string;
   settingKey: DismissibleAlertSettingKey;
   title: string;
 }> = [
   {
-    alertId: "group-play-death",
     description:
       "Reminds group players to add a character name so teammate deaths do not trigger death clips.",
     settingKey: "groupPlayDeathAlertDismissed",
     title: "Group play death clip alert",
   },
   {
-    alertId: "capture-mode-info",
     description:
       "Explains the selected Recording or Rewind mode on the dashboard.",
     settingKey: "captureModeInfoAlertDismissed",
     title: "Capture mode info alert",
   },
   {
-    alertId: "recorder-settings-info",
     description:
       "Reminds you that dashboard recorder settings are saved locally.",
     settingKey: "recorderSettingsInfoAlertDismissed",
     title: "Recorder settings info alert",
   },
   {
-    alertId: "clip-preview-info",
     description:
       "Reminds you that Manual Replays and Death Clips are available on the Clips page.",
     settingKey: "clipPreviewInfoAlertDismissed",

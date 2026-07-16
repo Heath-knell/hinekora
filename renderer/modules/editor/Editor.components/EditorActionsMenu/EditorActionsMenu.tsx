@@ -1,7 +1,7 @@
 import { type MouseEvent, useRef } from "react";
 import { FiMoreHorizontal } from "react-icons/fi";
 
-import { useEditorShallow } from "~/renderer/store";
+import { useEditorShallow, useSettingsSelector } from "~/renderer/store";
 
 import { EditorCopyActions } from "../EditorCopyActions/EditorCopyActions";
 import { EditorDebugCopyAction } from "../EditorDebugCopyAction/EditorDebugCopyAction";
@@ -12,36 +12,26 @@ import { EditorProjectRetentionToggle } from "../EditorProjectRetentionToggle/Ed
 import { EditorSaveActions } from "../EditorSaveActions/EditorSaveActions";
 import { EditorShortcutCombo } from "../EditorShortcutCombo/EditorShortcutCombo";
 
-interface EditorActionsMenuProps {
-  isBookmarksVisible: boolean;
-  isHistoryVisible: boolean;
-  isShortcutsVisible: boolean;
-  onToggleBookmarks: () => void;
-  onToggleHistory: () => void;
-  onToggleShortcuts: () => void;
-}
-
-function EditorActionsMenu({
-  isBookmarksVisible,
-  isHistoryVisible,
-  isShortcutsVisible,
-  onToggleBookmarks,
-  onToggleHistory,
-  onToggleShortcuts,
-}: EditorActionsMenuProps) {
+function EditorActionsMenu() {
   const detailsRef = useRef<HTMLDetailsElement>(null);
-  const isProcessing = useEditorShallow(
-    (editor) =>
-      editor.clipboardState.status === "copying" ||
-      editor.exportState.status === "exporting",
+  const { isProcessing, toggleSidePanel, visibleSidePanel } = useEditorShallow(
+    (editor) => ({
+      isProcessing:
+        editor.clipboardState.status === "copying" ||
+        editor.exportState.status === "exporting",
+      toggleSidePanel: editor.toggleSidePanel,
+      visibleSidePanel: editor.visibleSidePanel,
+    }),
   );
-  const bookmarksLabel = isBookmarksVisible
-    ? "Hide bookmarks"
-    : "Show bookmarks";
-  const historyLabel = isHistoryVisible ? "Hide history" : "Show history";
-  const shortcutsLabel = isShortcutsVisible
-    ? "Hide shortcuts"
-    : "Show shortcuts";
+  const isEditorLogEnabled = useSettingsSelector(
+    (settings) => settings.value?.editorLogEnabled ?? false,
+  );
+  const bookmarksLabel =
+    visibleSidePanel === "bookmarks" ? "Hide bookmarks" : "Show bookmarks";
+  const historyLabel =
+    visibleSidePanel === "history" ? "Hide history" : "Show history";
+  const shortcutsLabel =
+    visibleSidePanel === "shortcuts" ? "Hide shortcuts" : "Show shortcuts";
 
   const handleMenuClick = (event: MouseEvent<HTMLUListElement>) => {
     if (
@@ -53,15 +43,15 @@ function EditorActionsMenu({
   };
 
   const handleToggleHistory = () => {
-    onToggleHistory();
+    toggleSidePanel("history");
   };
 
   const handleToggleBookmarks = () => {
-    onToggleBookmarks();
+    toggleSidePanel("bookmarks");
   };
 
   const handleToggleShortcuts = () => {
-    onToggleShortcuts();
+    toggleSidePanel("shortcuts");
   };
 
   return (
@@ -130,12 +120,16 @@ function EditorActionsMenu({
         <li className="list-none">
           <EditorProjectRetentionToggle disabled={isProcessing} />
         </li>
-        <li aria-hidden="true" className="list-none py-1">
-          <div className="h-px w-full bg-base-content/10" />
-        </li>
-        <li className="list-none">
-          <EditorDebugCopyAction />
-        </li>
+        {isEditorLogEnabled && (
+          <>
+            <li aria-hidden="true" className="list-none py-1">
+              <div className="h-px w-full bg-base-content/10" />
+            </li>
+            <li className="list-none">
+              <EditorDebugCopyAction />
+            </li>
+          </>
+        )}
       </ul>
     </details>
   );

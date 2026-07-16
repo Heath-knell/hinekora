@@ -34,6 +34,7 @@ import {
   createDefaultCaptureProfile,
   createDefaultSettings,
   type GameId,
+  getCurrentLeague,
   type ManagedRecorderStatus,
 } from "~/types";
 import { ManagedRecorderChannel } from "../ManagedRecorder.channels";
@@ -995,7 +996,7 @@ describe("ManagedRecorderService", () => {
     });
   });
 
-  it("starts and stops full run recordings while registering saved runs", async () => {
+  it("keeps the starting game and league when registering saved runs", async () => {
     const savedPath = join(directory, "run.mp4");
     vi.spyOn(SettingsStoreService, "getInstance").mockReturnValue({
       get: () => ({
@@ -1023,7 +1024,7 @@ describe("ManagedRecorderService", () => {
       path: savedPath,
       sizeBytes: 1024,
       sourceGame: "poe1" as const,
-      sourceLeague: "Runes of Aldur",
+      sourceLeague: getCurrentLeague("poe1"),
       startedAt: "2026-07-03T20:00:00.000Z",
       stoppedAt: "2026-07-03T20:00:30.000Z",
       updatedAt: "2026-07-03T20:00:30.000Z",
@@ -1117,7 +1118,7 @@ describe("ManagedRecorderService", () => {
     expect(beginRecordingSession).toHaveBeenCalledWith(
       expect.objectContaining({
         game: "poe1",
-        league: "Standard",
+        league: getCurrentLeague("poe1"),
       }),
     );
     expect(registerRunRecording).toHaveBeenCalledWith(
@@ -1125,7 +1126,7 @@ describe("ManagedRecorderService", () => {
         path: savedPath,
         startedAt: runStartedAt,
         sourceGame: "poe1",
-        sourceLeague: "Runes of Aldur",
+        sourceLeague: getCurrentLeague("poe1"),
       }),
     );
     expect(getRecording).toHaveBeenCalledWith(registeredRecording.id);

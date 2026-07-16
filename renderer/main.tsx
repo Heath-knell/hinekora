@@ -7,7 +7,6 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 
 import { App } from "./App";
-import { trackPageView } from "./modules/umami";
 import { routeTree } from "./routeTree.gen";
 import "./styles.css";
 import { initTelemetry } from "./telemetry";
@@ -38,12 +37,6 @@ const router = createRouter({
   history: hashHistory,
   defaultPreload: "intent",
   defaultPreloadStaleTime: 5_000,
-});
-
-router.subscribe("onResolved", ({ toLocation, pathChanged, fromLocation }) => {
-  if (pathChanged || !fromLocation) {
-    trackPageView(toLocation.pathname);
-  }
 });
 
 declare module "@tanstack/react-router" {

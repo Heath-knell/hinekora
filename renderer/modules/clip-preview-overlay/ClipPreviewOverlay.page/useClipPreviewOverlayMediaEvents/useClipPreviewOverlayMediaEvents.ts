@@ -1,7 +1,5 @@
 import type { RefObject, SyntheticEvent } from "react";
 
-import { trackEvent } from "~/renderer/modules/umami";
-
 import {
   type ClipPreviewTrimRange,
   roundClipPreviewSeconds,
@@ -30,12 +28,9 @@ function useClipPreviewOverlayMediaEvents(input: {
     if (!video || !input.canUseClip) {
       return;
     }
-    void video
-      .requestFullscreen()
-      .then(() => trackEvent("clip-preview-overlay-fullscreen-opened"))
-      .catch((error: unknown) => {
-        console.warn("[clip-preview] Could not enter fullscreen", { error });
-      });
+    void video.requestFullscreen().catch((error: unknown) => {
+      console.warn("[clip-preview] Could not enter fullscreen", { error });
+    });
   };
 
   const handleTogglePlayback = () => {

@@ -141,6 +141,19 @@ describe("SavedEditsPanel", () => {
     });
   });
 
+  it("does not hydrate the library before the media scope is ready", async () => {
+    await act(async () => {
+      root.render(
+        <SavedEditsPanel
+          isScopeReady={false}
+          scope={{ game: "poe2", league: "Standard" }}
+        />,
+      );
+    });
+
+    expect(storeMocks.hydrateLibrary).not.toHaveBeenCalled();
+  });
+
   it("resets pagination when the library scope changes", async () => {
     configureSavedEditsState({ pageCount: 3, totalCount: 41 });
     await act(async () => {

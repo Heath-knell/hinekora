@@ -1,5 +1,3 @@
-import { trackEvent } from "~/renderer/modules/umami";
-
 import {
   calculateTimelineDuration,
   createEditorTrimHistoryLabel,
@@ -107,7 +105,6 @@ function createEditorTimelineTrimActions({
         },
         { historyLabel: "Split" },
       );
-      trackEvent("editor-clip-split");
     },
     trimTimelineClipEdge: (clipId, edge, timelineSeconds) => {
       const trimActionLabel = createEditorTrimHistoryLabel(edge);

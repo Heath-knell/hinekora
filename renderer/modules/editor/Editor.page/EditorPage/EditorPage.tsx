@@ -1,29 +1,22 @@
 import clsx from "clsx";
-import { useCallback, useMemo, useState } from "react";
+import { useEffect } from "react";
 
 import type { EditorMediaReference } from "~/main/modules/editor";
 import { PageContainer } from "~/renderer/components/PageContainer/PageContainer";
 import { PageContent } from "~/renderer/components/PageContent/PageContent";
 import { PageHeader } from "~/renderer/components/PageHeader/PageHeader";
 import { useMediaLibraryScope } from "~/renderer/modules/media-library/MediaLibrary.hooks/useMediaLibraryScope/useMediaLibraryScope";
-import { buildMediaLibraryLeagueOptions } from "~/renderer/modules/media-library/MediaLibrary.utils/MediaLibrary.utils";
-import {
-  useBookmarksShallow,
-  useEditorShallow,
-  useSavedEditsShallow,
-} from "~/renderer/store";
+import { useEditorShallow, useSettingsShallow } from "~/renderer/store";
 
 import { EditorAssetRail } from "../../Editor.components/EditorAssetRail/EditorAssetRail";
 import { EditorDragDropProvider } from "../../Editor.components/EditorDragDropProvider/EditorDragDropProvider";
 import { EditorExportActions } from "../../Editor.components/EditorExportActions/EditorExportActions";
 import { EditorExportView } from "../../Editor.components/EditorExportView/EditorExportView";
+import { EditorMediaLeagueControl } from "../../Editor.components/EditorMediaLeagueControl/EditorMediaLeagueControl";
 import { EditorPageHeaderActions } from "../../Editor.components/EditorPageHeaderActions/EditorPageHeaderActions";
 import { EditorPreviewStage } from "../../Editor.components/EditorPreviewStage/EditorPreviewStage";
 import { EditorRecordingBookmarksProvider } from "../../Editor.components/EditorRecordingBookmarksProvider/EditorRecordingBookmarksProvider";
-import {
-  EditorSidePanel,
-  type EditorSidePanelKind,
-} from "../../Editor.components/EditorSidePanel/EditorSidePanel";
+import { EditorSidePanel } from "../../Editor.components/EditorSidePanel/EditorSidePanel";
 import { EditorTimelineWithBookmarks } from "../../Editor.components/EditorTimelineWithBookmarks/EditorTimelineWithBookmarks";
 import type { EditorRouteTrimDraft } from "./EditorPage.utils";
 import { createExportSubtitle, createExportTitle } from "./EditorPage.utils";
@@ -42,16 +35,7 @@ function EditorPage({
   projectId = null,
   source = null,
 }: EditorPageProps) {
-  const [visibleSidePanel, setVisibleSidePanel] =
-    useState<EditorSidePanelKind | null>(null);
-  const {
-    isReady: isMediaScopeReady,
-    scope,
-    setLeague,
-  } = useMediaLibraryScope();
-  const savedEditAvailableLeagues = useSavedEditsShallow(
-    (savedEdits) => savedEdits.libraryPage?.availableLeagues ?? [],
-  );
+  const { isReady: isMediaScopeReady, scope } = useMediaLibraryScope();
   const {
     error,
     clipboardStatus,
@@ -60,9 +44,11 @@ function EditorPage({
     exportStatus,
     hydrate,
     isLoading,
+    mediaFilter,
     openProject,
     project,
-    workspace,
+    setMediaFilter,
+    visibleSidePanel,
   } = useEditorShallow((editor) => ({
     clipboardStatus: editor.clipboardState.status,
     error: editor.error,
@@ -71,57 +57,17 @@ function EditorPage({
     exportStatus: editor.exportState.status,
     hydrate: editor.hydrate,
     isLoading: editor.isLoading,
+    mediaFilter: editor.mediaFilter,
     openProject: editor.openProject,
     project: editor.project,
-    workspace: editor.workspace,
+    setMediaFilter: editor.setMediaFilter,
+    visibleSidePanel: editor.visibleSidePanel,
   }));
+  const preferredMediaFilter = useSettingsShallow((settings) =>
+    settings.value ? (settings.value.editorMediaFilter ?? "death-clip") : null,
+  );
   const isClipboardBusy = clipboardStatus === "copying";
   const isBookmarksVisible = visibleSidePanel === "bookmarks";
-  const isHistoryVisible = visibleSidePanel === "history";
-  const isShortcutsVisible = visibleSidePanel === "shortcuts";
-  const {
-    hasSelectedBookmark,
-    setSelectedBookmarkId: setEditorRecordingSelectedBookmarkId,
-  } = useBookmarksShallow((bookmarks) => ({
-    hasSelectedBookmark: bookmarks.editorRecording.selectedBookmarkId !== null,
-    setSelectedBookmarkId: bookmarks.setEditorRecordingSelectedBookmarkId,
-  }));
-  const editorMediaLeagueOptions = useMemo(() => {
-    const mediaLeagues =
-      workspace?.assets
-        .filter((asset) => asset.sourceGame === scope.game)
-        .map((asset) => asset.sourceLeague) ?? [];
-
-    return buildMediaLibraryLeagueOptions(
-      scope.game,
-      [...mediaLeagues, ...savedEditAvailableLeagues],
-      scope.league,
-    );
-  }, [savedEditAvailableLeagues, scope.game, scope.league, workspace?.assets]);
-
-  const handleToggleHistory = useCallback(() => {
-    setVisibleSidePanel((currentPanel) =>
-      currentPanel === "history" ? null : "history",
-    );
-  }, []);
-
-  const handleToggleBookmarks = useCallback(() => {
-    setVisibleSidePanel((currentPanel) =>
-      currentPanel === "bookmarks" ? null : "bookmarks",
-    );
-  }, []);
-
-  const handleToggleShortcuts = () => {
-    setVisibleSidePanel((currentPanel) =>
-      currentPanel === "shortcuts" ? null : "shortcuts",
-    );
-  };
-
-  const handleCloseSidePanel = () => setVisibleSidePanel(null);
-
-  const handleClearSelectedBookmark = useCallback(() => {
-    setEditorRecordingSelectedBookmarkId(null);
-  }, [setEditorRecordingSelectedBookmarkId]);
 
   const isRouteHydrated = useEditorRouteHydration({
     hydrate,
@@ -135,14 +81,20 @@ function EditorPage({
     isRouteHydrated,
     source,
   });
-  const isAssetRailHydrationEnabled = isMediaScopeReady && isRouteHydrated;
+  const isPreferredMediaFilterApplied =
+    preferredMediaFilter !== null && mediaFilter === preferredMediaFilter;
+  const isAssetRailHydrationEnabled =
+    isMediaScopeReady && isRouteHydrated && isPreferredMediaFilterApplied;
 
-  useEditorKeyboardShortcuts({
-    hasSelectedBookmark,
-    onClearSelectedBookmark: handleClearSelectedBookmark,
-    onToggleBookmarks: handleToggleBookmarks,
-    onToggleHistory: handleToggleHistory,
-  });
+  useEffect(() => {
+    if (preferredMediaFilter === null || mediaFilter === preferredMediaFilter) {
+      return;
+    }
+
+    setMediaFilter(preferredMediaFilter);
+  }, [mediaFilter, preferredMediaFilter, setMediaFilter]);
+
+  useEditorKeyboardShortcuts();
 
   if (exportStatus !== "idle") {
     return (
@@ -173,16 +125,9 @@ function EditorPage({
       <PageHeader
         actions={
           <EditorPageHeaderActions
-            isClipboardBusy={isClipboardBusy}
-            isBookmarksVisible={isBookmarksVisible}
-            isHistoryVisible={isHistoryVisible}
-            isShortcutsVisible={isShortcutsVisible}
-            league={scope.league}
-            leagueOptions={editorMediaLeagueOptions}
-            onLeagueChange={setLeague}
-            onToggleBookmarks={handleToggleBookmarks}
-            onToggleHistory={handleToggleHistory}
-            onToggleShortcuts={handleToggleShortcuts}
+            leagueControl={
+              <EditorMediaLeagueControl disabled={isClipboardBusy} />
+            }
           />
         }
         title="Editor"
@@ -195,9 +140,10 @@ function EditorPage({
       <PageContent
         className={clsx(
           "relative grid h-full min-h-0 grid-rows-[minmax(0,1fr)_220px] gap-3 !overflow-hidden",
-          visibleSidePanel
-            ? "grid-cols-[260px_minmax(0,1fr)_260px]"
-            : "grid-cols-[260px_minmax(0,1fr)]",
+          {
+            "grid-cols-[260px_minmax(0,1fr)_260px]": visibleSidePanel !== null,
+            "grid-cols-[260px_minmax(0,1fr)]": visibleSidePanel === null,
+          },
         )}
       >
         <EditorDragDropProvider>
@@ -207,10 +153,7 @@ function EditorPage({
           />
           <EditorPreviewStage />
           <EditorRecordingBookmarksProvider isEnabled={isBookmarksVisible}>
-            <EditorSidePanel
-              visibleSidePanel={visibleSidePanel}
-              onClose={handleCloseSidePanel}
-            />
+            <EditorSidePanel />
             <EditorTimelineWithBookmarks />
           </EditorRecordingBookmarksProvider>
         </EditorDragDropProvider>

@@ -22,6 +22,7 @@ const storeMocks = vi.hoisted(() => ({
   setMediaPageIndex: vi.fn(),
   setMediaRailTab: vi.fn(),
   setSavedEditPageIndex: vi.fn(),
+  updateSettings: vi.fn(),
   useEditorShallow: vi.fn(),
   useSavedEditsShallow: vi.fn(),
 }));
@@ -38,6 +39,14 @@ vi.mock("@dnd-kit/react", () => ({
 vi.mock("~/renderer/store", () => ({
   useEditorShallow: storeMocks.useEditorShallow,
   useSavedEditsShallow: storeMocks.useSavedEditsShallow,
+  useSettingsShallow: (selector: (settings: unknown) => unknown) =>
+    selector({
+      preferenceErrors: {},
+      updatePreference: storeMocks.updateSettings,
+      value: {
+        editorMediaFilter: currentEditorState?.mediaFilter ?? "death-clip",
+      },
+    }),
 }));
 
 vi.mock("../EditorAssetCard/EditorAssetCard", () => ({

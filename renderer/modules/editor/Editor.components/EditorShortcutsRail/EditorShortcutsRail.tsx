@@ -2,20 +2,19 @@ import clsx from "clsx";
 import { useState } from "react";
 import { FiCommand, FiX } from "react-icons/fi";
 
+import { useEditorShallow } from "~/renderer/store";
+
 import {
   editorCommandShortcutItems,
   editorShortcutItems,
   editorTimelineShortcutItems,
 } from "../../Editor.utils/EditorShortcuts.utils";
 
-interface EditorShortcutsRailProps {
-  onClose: () => void;
-}
-
 type EditorShortcutsTab = "editor" | "timeline";
 
-function EditorShortcutsRail({ onClose }: EditorShortcutsRailProps) {
+function EditorShortcutsRail() {
   const [activeTab, setActiveTab] = useState<EditorShortcutsTab>("timeline");
+  const closeSidePanel = useEditorShallow((editor) => editor.closeSidePanel);
   const activeItems =
     activeTab === "timeline"
       ? editorTimelineShortcutItems
@@ -49,7 +48,7 @@ function EditorShortcutsRail({ onClose }: EditorShortcutsRailProps) {
             aria-label="Close shortcuts panel"
             className="btn btn-ghost btn-xs"
             type="button"
-            onClick={onClose}
+            onClick={closeSidePanel}
           >
             <FiX size={15} />
           </button>

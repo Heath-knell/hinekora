@@ -1,5 +1,4 @@
 import type { CropRegionSelectionShape } from "~/main/modules/overlay-windows/OverlayWindows.dto";
-import { trackEvent } from "~/renderer/modules/umami";
 
 interface OpenRecorderAuraOverlayInput {
   addAuraShape?: CropRegionSelectionShape;
@@ -20,10 +19,6 @@ function openRecorderAuraOverlay({
     return;
   }
 
-  trackEvent(startAddingAura ? "aura-add-started" : "aura-edit-started", {
-    shape: addAuraShape ?? "rect",
-    source: "recorder-overlay",
-  });
   const showAuraOptions = startAddingAura
     ? ({ startAddingAura: true, addAuraShape: addAuraShape ?? "rect" } as const)
     : undefined;
@@ -38,16 +33,10 @@ function openRecorderAuraOverlay({
       console.warn("[recorder-overlay] Aura overlay action failed", {
         error,
       });
-      trackEvent(startAddingAura ? "aura-add-failed" : "aura-edit-failed", {
-        source: "recorder-overlay",
-      });
     });
 }
 
 function closeRecorderOverlay(): void {
-  trackEvent("recorder-overlay-closed", {
-    source: "overlay",
-  });
   void window.electron.overlayWindows.hideRecorder();
 }
 

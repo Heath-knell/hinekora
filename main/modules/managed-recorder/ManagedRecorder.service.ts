@@ -153,6 +153,11 @@ interface RecordingSession {
   startedAt: string;
 }
 
+interface RecordingSourceScope {
+  game: GameId;
+  league: string;
+}
+
 interface EnsureNoobsRuntimeInitializedOptions {
   publishStatus?: boolean;
 }
@@ -211,6 +216,7 @@ class ManagedRecorderService {
     output: null,
   };
   private activeRecordingBaselinePaths = new Set<string>();
+  private activeRunRecordingSource: RecordingSourceScope | null = null;
   private recordingStopWaiter: (() => void) | null = null;
   private activeReplaySaveRequest: Promise<ManagedReplaySaveResult> | null =
     null;
@@ -553,9 +559,15 @@ class ManagedRecorderService {
       /* v8 ignore next -- ensureActiveGameRunning refreshes activeGame before startup; fallback protects stale status mutations. */
       const sessionGame =
         this.status.activeGame ?? this.resolveConfiguredGame();
+      const sessionLeague =
+        SettingsStoreService.getInstance().get().activeLeague;
+      this.activeRunRecordingSource = {
+        game: sessionGame,
+        league: sessionLeague,
+      };
       BookmarksService.getInstance().beginRecordingSession({
         game: sessionGame,
-        league: SettingsStoreService.getInstance().get().activeLeague,
+        league: sessionLeague,
         startedAt: session.startedAt,
       });
       logInfo(MANAGED_RECORDER_LOG_SCOPE, "Full run recording started", {
@@ -564,6 +576,7 @@ class ManagedRecorderService {
     } catch (error) {
       this.activeRecordingMode = null;
       this.activeRecordingBaselinePaths = new Set();
+      this.activeRunRecordingSource = null;
       logError(MANAGED_RECORDER_LOG_SCOPE, "Full run recording start failed", {
         error: safeErrorMessage(error),
       });
@@ -596,6 +609,7 @@ class ManagedRecorderService {
     try {
       let savedPath: string | null = null;
       const sessionGame = this.status.activeGame ?? null;
+      const recordingSource = this.activeRunRecordingSource;
       const outputDirectory = this.status.activeSessionDirectory;
       const runRecordingStartedAt = this.status.runRecordingStartedAt;
       const modifiedAfterMs = this.status.runRecordingStartedAt
@@ -635,14 +649,16 @@ class ManagedRecorderService {
       if (savedPath && runRecordingStartedAt) {
         const settings = SettingsStoreService.getInstance().get();
         const configuredGame =
-          sessionGame ?? this.resolveConfiguredGame(settings);
+          recordingSource?.game ??
+          sessionGame ??
+          this.resolveConfiguredGame(settings);
         const recordingStorage = RecordingStorageService.getInstance();
         const recordingMetadata = recordingStorage.registerRunRecording({
           path: savedPath,
           startedAt: runRecordingStartedAt,
           stoppedAt: new Date().toISOString(),
           sourceGame: configuredGame,
-          sourceLeague: settings.activeLeague,
+          sourceLeague: recordingSource?.league ?? settings.activeLeague,
         });
         const recordingDetail = recordingMetadata?.id
           ? recordingStorage.getRecording(recordingMetadata.id)
@@ -657,6 +673,7 @@ class ManagedRecorderService {
       } else {
         BookmarksService.getInstance().discardRecordingSession();
       }
+      this.activeRunRecordingSource = null;
       this.setStatus({
         bufferActive: false,
         recording: false,

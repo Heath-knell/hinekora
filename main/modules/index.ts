@@ -12,6 +12,7 @@ export * from "./grid-lines-overlay";
 export * from "./main-window";
 export * from "./managed-recorder";
 export * from "./overlay-windows";
+export * from "./poe-leagues";
 export * from "./poe-process";
 export * from "./profiles";
 export * from "./recording-controls-overlay";

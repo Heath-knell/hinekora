@@ -6,15 +6,22 @@ import {
   editorCommandShortcutItems,
   editorTimelineShortcutItems,
 } from "../../Editor.utils/EditorShortcuts.utils";
+
+const onClose = vi.fn();
+
+vi.mock("~/renderer/store", () => ({
+  useEditorShallow: (selector: (editor: unknown) => unknown) =>
+    selector({ closeSidePanel: onClose }),
+}));
+
 import { EditorShortcutsRail } from "./EditorShortcutsRail";
 
 let container: HTMLDivElement;
 let root: Root;
-const onClose = vi.fn();
 
 async function renderShortcutsRail() {
   await act(async () => {
-    root.render(<EditorShortcutsRail onClose={onClose} />);
+    root.render(<EditorShortcutsRail />);
   });
 }
 

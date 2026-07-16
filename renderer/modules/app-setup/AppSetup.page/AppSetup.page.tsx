@@ -9,23 +9,19 @@ import {
   AppSetupContainer,
   AppSetupErrorDisplay,
   AppSetupGameStep,
-  AppSetupTelemetryStep,
+  AppSetupPrivacyStep,
 } from "../AppSetup.components";
 
 function AppSetupPage() {
-  const { setupState, trackSetupStarted, validateCurrentStep, advanceStep } =
-    useAppSetupShallow((appSetup) => ({
+  const { setupState, validateCurrentStep, advanceStep } = useAppSetupShallow(
+    (appSetup) => ({
       setupState: appSetup.setupState,
-      trackSetupStarted: appSetup.trackSetupStarted,
       validateCurrentStep: appSetup.validateCurrentStep,
       advanceStep: appSetup.advanceStep,
-    }));
+    }),
+  );
   const hasAutoAdvanced = useRef(false);
   const currentStep = setupState?.currentStep ?? SETUP_STEPS.NOT_STARTED;
-
-  useEffect(() => {
-    trackSetupStarted();
-  }, [trackSetupStarted]);
 
   useEffect(() => {
     if (
@@ -61,9 +57,7 @@ function AppSetupPage() {
         {currentStep === SETUP_STEPS.SELECT_CLIENT_PATH && (
           <AppSetupClientPathStep />
         )}
-        {currentStep === SETUP_STEPS.TELEMETRY_CONSENT && (
-          <AppSetupTelemetryStep />
-        )}
+        {currentStep === SETUP_STEPS.PRIVACY_INFO && <AppSetupPrivacyStep />}
       </div>
 
       <AppSetupActions />

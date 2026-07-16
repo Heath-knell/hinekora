@@ -52,11 +52,12 @@ jobs:
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
           # VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
           VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
-          VITE_UMAMI_ID: ${{ secrets.VITE_UMAMI_ID }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
         run: |
           missing=0
 
-          for secret_name in SENTRY_AUTH_TOKEN VITE_SENTRY_DSN VITE_UMAMI_ID; do
+          for secret_name in SENTRY_AUTH_TOKEN VITE_SENTRY_DSN VITE_SUPABASE_PUBLISHABLE_KEY; do
             secret_value="${!secret_name}"
             if [ -z "${secret_value//[[:space:]]/}" ]; then
               echo "::error::${secret_name} repository secret is not set or is empty"
@@ -64,7 +65,7 @@ jobs:
             fi
           done
 
-          for var_name in SENTRY_ORG SENTRY_PROJECT; do
+          for var_name in SENTRY_ORG SENTRY_PROJECT VITE_SUPABASE_URL; do
             var_value="${!var_name}"
             if [ -z "${var_value//[[:space:]]/}" ]; then
               echo "::error::${var_name} repository variable is not set or is empty"
@@ -140,7 +141,7 @@ jobs:
         run: pnpm rebuild electron
 
       - name: Run main-process tests
-        run: pnpm test:main
+        run: pnpm test:main:coverage
 
   test-renderer:
     name: Renderer Tests
@@ -162,6 +163,27 @@ jobs:
 
       - name: Run renderer tests
         run: pnpm test:renderer
+
+  test-e2e:
+    name: Browser E2E Tests
+    if: "!contains(github.event.head_commit.message, '[ci] release')"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js and dependencies
+        uses: ./.github/actions/setup-pnpm-node
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache-version: ${{ env.NODE_MODULES_CACHE_VERSION }}
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run browser E2E tests
+        run: pnpm test:e2e
 
   rust-helper:
     name: Rust Process Helper
@@ -227,7 +249,7 @@ jobs:
 
   package-windows:
     name: Windows Package Check
-    needs: [biome, typecheck, test-main, test-renderer, rust-helper]
+    needs: [biome, typecheck, test-main, test-renderer, test-e2e, rust-helper]
     # Version-bump commits skip the regular quality jobs, but packaging still
     # needs to fail in CI before the Publish workflow reaches upload steps.
     if: >-
@@ -243,6 +265,7 @@ jobs:
           needs.typecheck.result == 'success' &&
           needs['test-main'].result == 'success' &&
           needs['test-renderer'].result == 'success' &&
+          needs['test-e2e'].result == 'success' &&
           needs['rust-helper'].result == 'success'
         )
       )

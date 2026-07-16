@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { gameIds, getCurrentLeague } from "./game-leagues";
 import {
   keybindActionConfigs,
   OptionalKeybindAcceleratorSchema,
@@ -10,8 +11,28 @@ import {
   minRewindSaveSeconds,
 } from "./recording";
 
-export const GameIdSchema = z.enum(["poe1", "poe2"]);
+export const GameIdSchema = z.enum(gameIds);
 export type GameId = z.infer<typeof GameIdSchema>;
+
+export const ReplayClipKindSchema = z.enum(["death", "manual"]);
+export type ReplayClipKind = z.infer<typeof ReplayClipKindSchema>;
+
+const editorMediaAssetCategories = [
+  "recording",
+  "death-clip",
+  "manual-replay",
+] as const;
+export const EditorMediaAssetCategorySchema = z.enum(
+  editorMediaAssetCategories,
+);
+export type EditorMediaAssetCategory = z.infer<
+  typeof EditorMediaAssetCategorySchema
+>;
+export const EditorMediaFilterSchema = z.enum([
+  ...editorMediaAssetCategories,
+  "saved-edits",
+]);
+export type EditorMediaFilter = z.infer<typeof EditorMediaFilterSchema>;
 
 export const AppSetupStepSchema = z.union([
   z.literal(0),
@@ -529,12 +550,24 @@ export const AppSettingsSchema = z.object({
   groupPlayDeathAlertDismissed: z.boolean().default(false),
   recorderSettingsInfoAlertDismissed: z.boolean().default(false),
   activeGame: GameIdSchema.default("poe1"),
-  activeLeague: z.string().min(1).max(80).default("Standard"),
-  poe1SelectedLeague: z.string().min(1).max(80).default("Standard"),
-  poe2SelectedLeague: z.string().min(1).max(80).default("Standard"),
-  editorAutoPruneProjects: z.boolean().default(false),
-  telemetryCrashReporting: z.boolean().default(false),
-  telemetryUsageAnalytics: z.boolean().default(false),
+  activeLeague: z.string().min(1).max(80).default(getCurrentLeague("poe1")),
+  poe1SelectedLeague: z
+    .string()
+    .min(1)
+    .max(80)
+    .default(getCurrentLeague("poe1")),
+  poe2SelectedLeague: z
+    .string()
+    .min(1)
+    .max(80)
+    .default(getCurrentLeague("poe2")),
+  poe1MediaLibraryLeague: z.string().min(1).max(80).nullable().default(null),
+  poe2MediaLibraryLeague: z.string().min(1).max(80).nullable().default(null),
+  clipsLibraryView: ReplayClipKindSchema.default("death"),
+  editorMediaFilter: EditorMediaFilterSchema.default("death-clip"),
+  editorAutoPruneProjects: z.boolean().default(true),
+  editorLogEnabled: z.boolean().default(false),
+  telemetryCrashReporting: z.boolean().default(true),
   lastSeenAppVersion: z.string().min(1).max(64).nullable().default(null),
   onboardingDismissedBeacons: z
     .array(z.string().min(1).max(128))
@@ -542,6 +575,36 @@ export const AppSettingsSchema = z.object({
     .default([]),
 });
 export type AppSettings = z.infer<typeof AppSettingsSchema>;
+export type AppSettingsUpdate = Partial<AppSettings>;
+const AppSettingsUpdateShape = Object.fromEntries(
+  Object.entries(AppSettingsSchema.shape).map(([key, schema]) => [
+    key,
+    removeSchemaDefaults(schema).optional(),
+  ]),
+) as z.ZodRawShape;
+export const AppSettingsUpdateSchema = z
+  .object(AppSettingsUpdateShape)
+  .strict()
+  .superRefine((settings, context) => {
+    for (const [key, value] of Object.entries(settings)) {
+      if (value === undefined) {
+        context.addIssue({
+          code: "custom",
+          message: "Setting values cannot be undefined",
+          path: [key],
+        });
+      }
+    }
+  }) as z.ZodType<AppSettingsUpdate>;
+
+function removeSchemaDefaults(schema: z.ZodType): z.ZodType {
+  let unwrapped = schema;
+  while (unwrapped instanceof z.ZodDefault) {
+    unwrapped = unwrapped.removeDefault() as z.ZodType;
+  }
+
+  return unwrapped;
+}
 export type AppSettingsKey = keyof AppSettings;
 export const appSettingsKeys = Object.freeze(
   Object.keys(AppSettingsSchema.shape),
@@ -581,9 +644,6 @@ export const DeathClipStatusSchema = z.enum([
   "failed",
 ]);
 export type DeathClipStatus = z.infer<typeof DeathClipStatusSchema>;
-
-export const ReplayClipKindSchema = z.enum(["death", "manual"]);
-export type ReplayClipKind = z.infer<typeof ReplayClipKindSchema>;
 
 export const ReplayClipSchema = z.object({
   id: z.string().min(1).max(128),

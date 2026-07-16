@@ -19,14 +19,9 @@ const storeMocks = vi.hoisted(() => ({
   revealClip: vi.fn(),
   requestFullscreen: vi.fn(),
   settingsValue: null as AppSettings | null,
-  trackEvent: vi.fn(),
   updateClip: vi.fn(),
   useSettingsShallow: vi.fn(),
   writeClipPreviewEvent: vi.fn(),
-}));
-
-vi.mock("~/renderer/modules/umami", () => ({
-  trackEvent: storeMocks.trackEvent,
 }));
 
 vi.mock("~/renderer/store", async (importOriginal) => {
@@ -202,9 +197,6 @@ describe("ClipPreviewOverlayPage", () => {
       trim: { inSeconds: 0, outSeconds: 10 },
     });
     expect(storeMocks.hideClipPreview).toHaveBeenCalledTimes(1);
-    expect(storeMocks.trackEvent).toHaveBeenCalledWith(
-      "clip-preview-overlay-edit-opened",
-    );
   });
 
   it("saves a mute-only edit", async () => {

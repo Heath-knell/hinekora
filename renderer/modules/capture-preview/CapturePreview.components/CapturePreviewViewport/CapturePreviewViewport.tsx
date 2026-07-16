@@ -37,7 +37,7 @@ function CapturePreviewViewport({
         : "No capture source";
 
   return (
-    <div className="relative grid min-h-[252px] min-w-[18px] place-items-center overflow-hidden rounded-lg border border-base-content/10 bg-gradient-to-br from-base-300 to-base-200">
+    <div className="relative grid min-h-[252px] min-w-[18px] place-items-center overflow-hidden rounded-lg border border-base-content/10 bg-black">
       <video
         aria-label="Capture preview"
         className="absolute inset-0 h-full w-full object-contain"

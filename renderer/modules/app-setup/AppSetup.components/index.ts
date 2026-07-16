@@ -5,5 +5,5 @@ export { default as AppSetupClientPathStep } from "./AppSetupClientPathStep/AppS
 export { default as AppSetupContainer } from "./AppSetupContainer/AppSetupContainer";
 export { default as AppSetupErrorDisplay } from "./AppSetupErrorDisplay/AppSetupErrorDisplay";
 export { default as AppSetupGameStep } from "./AppSetupGameStep/AppSetupGameStep";
+export { default as AppSetupPrivacyStep } from "./AppSetupPrivacyStep/AppSetupPrivacyStep";
 export { default as AppSetupProgressBar } from "./AppSetupProgressBar/AppSetupProgressBar";
-export { default as AppSetupTelemetryStep } from "./AppSetupTelemetryStep/AppSetupTelemetryStep";

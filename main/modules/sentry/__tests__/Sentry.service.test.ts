@@ -1,13 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const sentryMocks = vi.hoisted(() => ({
-  closeSentry: vi.fn().mockResolvedValue(true),
   initSentry: vi.fn().mockResolvedValue(undefined),
   isPackaged: { value: false },
 }));
 
 vi.mock("~/main/modules/sentry/Sentry.reporter", () => ({
-  closeSentry: sentryMocks.closeSentry,
   formatSentryErrorMessage: (error: unknown) =>
     error instanceof Error ? error.message : String(error),
   initSentry: sentryMocks.initSentry,
@@ -33,7 +31,6 @@ describe("SentryService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubEnv("VITE_SENTRY_DSN", "https://public@example.com/1");
-    sentryMocks.closeSentry.mockResolvedValue(true);
     sentryMocks.initSentry.mockResolvedValue(undefined);
     sentryMocks.isPackaged.value = false;
     SentryService.resetForTests();
@@ -56,7 +53,6 @@ describe("SentryService", () => {
     await service.initialize();
 
     expect(service.isInitialized()).toBe(true);
-    expect(service.isDisabled()).toBe(false);
     expect(sentryMocks.initSentry).toHaveBeenCalledWith(
       expect.objectContaining({
         beforeBreadcrumb: expect.any(Function),
@@ -118,61 +114,6 @@ describe("SentryService", () => {
     expect(service.isInitialized()).toBe(true);
     expect(sentryMocks.initSentry).toHaveBeenCalledTimes(2);
   });
-
-  it("disables initialized crash reporting and tolerates repeated calls", async () => {
-    const service = SentryService.getInstance();
-
-    await service.disable();
-    expect(sentryMocks.closeSentry).not.toHaveBeenCalled();
-
-    await service.initialize();
-    await service.disable();
-    await service.disable();
-
-    expect(sentryMocks.closeSentry).toHaveBeenCalledTimes(1);
-    expect(sentryMocks.closeSentry).toHaveBeenCalledWith(2000);
-    expect(service.isInitialized()).toBe(true);
-    expect(service.isDisabled()).toBe(true);
-    expect(console.info).toHaveBeenCalledWith(
-      expect.stringContaining(
-        "INFO [sentry] Crash reporting disabled by user preference",
-      ),
-    );
-  });
-
-  it("waits for in-flight initialization before disabling", async () => {
-    let resolveInit: (() => void) | undefined;
-    sentryMocks.initSentry.mockReturnValueOnce(
-      new Promise<void>((resolve) => {
-        resolveInit = resolve;
-      }),
-    );
-    const service = SentryService.getInstance();
-    const initializing = service.initialize();
-    const disabling = service.disable();
-
-    expect(sentryMocks.closeSentry).not.toHaveBeenCalled();
-
-    resolveInit?.();
-    await Promise.all([initializing, disabling]);
-
-    expect(sentryMocks.closeSentry).toHaveBeenCalledWith(2000);
-    expect(service.isDisabled()).toBe(true);
-  });
-
-  it("still marks Sentry disabled when closing fails", async () => {
-    sentryMocks.closeSentry.mockRejectedValueOnce("close failed");
-    const service = SentryService.getInstance();
-
-    await service.initialize();
-    await service.disable();
-
-    expect(service.isDisabled()).toBe(true);
-    expect(console.warn).toHaveBeenCalledWith(
-      expect.stringContaining("WARN [sentry] Failed to close crash reporting"),
-      expect.objectContaining({ error: "close failed" }),
-    );
-  });
 });
 
 describe("Sentry path scrubbing", () => {
@@ -207,7 +148,7 @@ describe("Sentry path scrubbing", () => {
     expect(scrubPaths("")).toBe("");
   });
 
-  it("scrubs breadcrumb strings and string array items only", () => {
+  it("recursively scrubs breadcrumb strings", () => {
     const data = {
       args: [
         "C:\\Users\\SomeUser\\AppData\\Roaming\\Hinekora\\log.txt",
@@ -215,7 +156,9 @@ describe("Sentry path scrubbing", () => {
         42,
       ],
       flag: true,
-      nested: { key: "value" },
+      nested: {
+        key: "C:\\Users\\NestedUser\\AppData\\Local\\Hinekora\\state.json",
+      },
       url: "file:///C:\\Users\\SomeUser\\AppData\\Local\\Hinekora\\index.html",
     };
 
@@ -224,7 +167,7 @@ describe("Sentry path scrubbing", () => {
     expect(result).toEqual({
       args: ["C:\\**\\Hinekora\\log.txt", "normal", 42],
       flag: true,
-      nested: { key: "value" },
+      nested: { key: "C:\\**\\Hinekora\\state.json" },
       url: "file:///C:\\**\\Hinekora\\index.html",
     });
     expect(scrubBreadcrumbData({})).toEqual({});
@@ -238,7 +181,6 @@ describe("Sentry callbacks", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     vi.stubEnv("VITE_SENTRY_DSN", "https://public@example.com/1");
-    sentryMocks.closeSentry.mockResolvedValue(true);
     sentryMocks.initSentry.mockResolvedValue(undefined);
     sentryMocks.isPackaged.value = false;
     SentryService.resetForTests();
@@ -327,10 +269,45 @@ describe("Sentry callbacks", () => {
     expect(result.breadcrumbs[2].message).toBe("User clicked button");
   });
 
-  it("returns events without exception or breadcrumbs unchanged", () => {
+  it("returns events without sensitive text with the same data", () => {
     const event = { message: "simple message" };
 
-    expect(beforeSend(event)).toBe(event);
+    expect(beforeSend(event)).toEqual(event);
+  });
+
+  it("recursively scrubs sensitive text from every event field", () => {
+    const event = {
+      contexts: {
+        app: {
+          configPath:
+            "C:\\Users\\ContextUser\\AppData\\Roaming\\Hinekora\\config.json",
+        },
+      },
+      extra: {
+        recentFiles: [
+          "/home/extra-user/projects/hinekora/main.js",
+          { owner: "username=extra-user" },
+        ],
+      },
+      message:
+        "Failed C:\\Users\\MessageUser\\AppData\\Local\\Hinekora\\main.js username=seb",
+      request: {
+        url: "file:///Users/request-user/Library/Application Support/Hinekora/index.html",
+      },
+    };
+
+    expect(beforeSend(event)).toEqual({
+      contexts: {
+        app: { configPath: "C:\\**\\Hinekora\\config.json" },
+      },
+      extra: {
+        recentFiles: ["/**/hinekora/main.js", { owner: "username=[redacted]" }],
+      },
+      message: "Failed C:\\**\\Hinekora\\main.js username=[redacted]",
+      request: {
+        url: "file:///**/Hinekora/index.html",
+      },
+    });
   });
 
   it("scrubs breadcrumb messages, username parameters, and data", () => {

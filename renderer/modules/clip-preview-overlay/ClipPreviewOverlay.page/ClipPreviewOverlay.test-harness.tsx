@@ -224,8 +224,6 @@ function setupClipPreviewOverlayTestHarness(
         clipPreviewInfoAlertDismissed: true,
         telemetryCrashReporting:
           storeMocks.settingsValue.telemetryCrashReporting,
-        telemetryUsageAnalytics:
-          storeMocks.settingsValue.telemetryUsageAnalytics,
       });
     });
     storeMocks.updateClip.mockResolvedValue({

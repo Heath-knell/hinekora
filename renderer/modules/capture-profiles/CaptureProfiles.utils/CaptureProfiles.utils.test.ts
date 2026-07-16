@@ -120,6 +120,7 @@ describe("CaptureProfiles utils", () => {
           poe1SelectedLeague: "Mirage",
           poe2SelectedLeague: "Runes of Aldur",
         },
+        { activeLeagues: ["Mirage", "Standard"] },
       ),
     ).toMatchObject({
       activeGame: "poe1",
@@ -128,6 +129,26 @@ describe("CaptureProfiles utils", () => {
       selectedCaptureProfileIdsByGame: {
         poe1: "poe1",
       },
+    });
+  });
+
+  it("omits the active league while the target catalog is fetching", () => {
+    const update = createSettingsUpdateFromCaptureProfile(
+      createProfile({ game: "poe2", id: "poe2" }),
+      {
+        ...createDefaultSettings(),
+        poe2SelectedLeague: "Standard",
+      },
+      {
+        activeLeagues: ["Runes of Aldur", "Standard"],
+        includeActiveLeague: false,
+      },
+    );
+
+    expect(update).not.toHaveProperty("activeLeague");
+    expect(update).toMatchObject({
+      activeGame: "poe2",
+      selectedCaptureProfileId: "poe2",
     });
   });
 });

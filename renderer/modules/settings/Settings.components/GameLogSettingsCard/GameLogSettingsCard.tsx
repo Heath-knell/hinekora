@@ -8,38 +8,13 @@ import {
 
 import { useClientLogShallow, useSettingsShallow } from "~/renderer/store";
 
-import type { GameId } from "~/types";
+import { type GameId, maskPath } from "~/types";
 
 const clientLogFields: Array<{ game: GameId; label: string }> = [
   { game: "poe1", label: "Path of Exile 1 Client.txt" },
   { game: "poe2", label: "Path of Exile 2 Client.txt" },
 ];
-
-function maskClientPath(fullPath: string): string {
-  if (!fullPath) {
-    return "";
-  }
-
-  const normalized = fullPath.replace(/\\/g, "/");
-  const parts = normalized.split("/");
-  const separator = fullPath.includes("\\") ? "\\" : "/";
-  const root = parts[0];
-  const anchors = new Set(["path of exile", "path of exile 2"]);
-
-  const anchorIndex = parts.findIndex(
-    (part, index) => index > 0 && anchors.has(part.toLowerCase()),
-  );
-
-  if (anchorIndex > 1) {
-    return [root, "**", ...parts.slice(anchorIndex)].join(separator);
-  }
-
-  if (parts.length > 3) {
-    return [root, "**", ...parts.slice(-3)].join(separator);
-  }
-
-  return fullPath;
-}
+const clientLogPathAnchors = ["Path of Exile", "Path of Exile 2"] as const;
 
 function GameLogSettingsCard() {
   const { saveGamePath, status } = useClientLogShallow((clientLog) => ({
@@ -106,7 +81,9 @@ function GameLogSettingsCard() {
       {clientLogFields.map((field) => {
         const path = paths[field.game];
         const isRevealed = revealedPaths[field.game] === true;
-        const displayPath = isRevealed ? path : maskClientPath(path);
+        const displayPath = isRevealed
+          ? path
+          : maskPath(path, clientLogPathAnchors);
 
         return (
           <div className="space-y-2" key={field.game}>
@@ -124,7 +101,7 @@ function GameLogSettingsCard() {
                   className="min-w-0 flex-1 bg-transparent outline-none"
                   placeholder="No file selected"
                   readOnly
-                  title={path || undefined}
+                  title={displayPath || undefined}
                   type="text"
                   value={displayPath}
                 />

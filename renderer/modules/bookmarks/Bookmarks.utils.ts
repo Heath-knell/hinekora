@@ -83,16 +83,18 @@ const bookmarkCategoryIconClassNames: Record<BookmarkCategory, string> = {
   town: "text-zinc-300",
 };
 
+const bookmarkCategoryRowBaseClassName =
+  "relative isolate bg-transparent before:pointer-events-none before:absolute before:inset-0 before:z-0 before:bg-gradient-to-r before:content-[''] [&>td]:relative [&>td]:z-10";
+
 const bookmarkCategoryRowClassNames: Record<BookmarkCategory, string> = {
-  boss: "bg-gradient-to-r from-orange-500/15 via-orange-500/5 to-transparent",
-  death: "bg-gradient-to-r from-red-600/15 via-red-600/5 to-transparent",
-  hideout: "bg-gradient-to-r from-sky-500/15 via-sky-500/5 to-transparent",
-  manual: "bg-gradient-to-r from-purple-400/15 via-purple-400/5 to-transparent",
-  map: "bg-gradient-to-r from-emerald-500/15 via-emerald-500/5 to-transparent",
-  pinnacle: "bg-gradient-to-r from-amber-400/15 via-amber-400/5 to-transparent",
-  "rewind-manual-replay":
-    "bg-gradient-to-r from-purple-400/15 via-purple-400/5 to-transparent",
-  town: "bg-gradient-to-r from-zinc-400/15 via-zinc-400/5 to-transparent",
+  boss: `${bookmarkCategoryRowBaseClassName} before:from-orange-500/15 before:via-orange-500/5 before:to-transparent`,
+  death: `${bookmarkCategoryRowBaseClassName} before:from-red-600/15 before:via-red-600/5 before:to-transparent`,
+  hideout: `${bookmarkCategoryRowBaseClassName} before:from-sky-500/15 before:via-sky-500/5 before:to-transparent`,
+  manual: `${bookmarkCategoryRowBaseClassName} before:from-purple-400/15 before:via-purple-400/5 before:to-transparent`,
+  map: `${bookmarkCategoryRowBaseClassName} before:from-emerald-500/15 before:via-emerald-500/5 before:to-transparent`,
+  pinnacle: `${bookmarkCategoryRowBaseClassName} before:from-amber-400/15 before:via-amber-400/5 before:to-transparent`,
+  "rewind-manual-replay": `${bookmarkCategoryRowBaseClassName} before:from-purple-400/15 before:via-purple-400/5 before:to-transparent`,
+  town: `${bookmarkCategoryRowBaseClassName} before:from-zinc-400/15 before:via-zinc-400/5 before:to-transparent`,
 };
 
 const bookmarkCategoryChipClassNames: Record<

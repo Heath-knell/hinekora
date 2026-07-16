@@ -1,13 +1,19 @@
 import type { DatabaseService } from "~/main/modules/database";
+import { PoeLeaguesRepository } from "~/main/modules/poe-leagues/PoeLeagues.repository";
 
 import {
   type AppSettings,
   AppSettingsSchema,
   createDefaultSettings,
+  getLeagueSettingKey,
 } from "~/types";
 
 class SettingsStoreRepository {
-  constructor(private readonly database: DatabaseService) {}
+  private readonly poeLeagues: PoeLeaguesRepository;
+
+  constructor(private readonly database: DatabaseService) {
+    this.poeLeagues = new PoeLeaguesRepository(database);
+  }
 
   get(): AppSettings {
     const rows = this.database.queryAll(
@@ -19,10 +25,30 @@ class SettingsStoreRepository {
       values[row.key] = JSON.parse(row.value_json);
     }
 
-    return AppSettingsSchema.parse({
-      ...createDefaultSettings(),
-      ...values,
-    });
+    const defaults = createDefaultSettings();
+    const poe1CurrentLeague =
+      this.poeLeagues.getCurrent("poe1")?.name ?? defaults.poe1SelectedLeague;
+    const poe2CurrentLeague =
+      this.poeLeagues.getCurrent("poe2")?.name ?? defaults.poe2SelectedLeague;
+
+    if (!Object.hasOwn(values, "poe1SelectedLeague")) {
+      defaults.poe1SelectedLeague = poe1CurrentLeague;
+    }
+    if (!Object.hasOwn(values, "poe2SelectedLeague")) {
+      defaults.poe2SelectedLeague = poe2CurrentLeague;
+    }
+    const activeGame = values.activeGame === "poe2" ? "poe2" : "poe1";
+    const selectedLeague = values[getLeagueSettingKey(activeGame)];
+    const currentLeague =
+      activeGame === "poe2" ? poe2CurrentLeague : poe1CurrentLeague;
+
+    // activeLeague remains in the public settings shape for backwards
+    // compatibility, but the per-game selection is the source of truth.
+    // Deriving it on every read also repairs legacy/stale persisted values.
+    values.activeLeague =
+      typeof selectedLeague === "string" ? selectedLeague : currentLeague;
+
+    return AppSettingsSchema.parse({ ...defaults, ...values });
   }
 
   setMany(values: Partial<AppSettings>): AppSettings {

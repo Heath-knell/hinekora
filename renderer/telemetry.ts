@@ -1,4 +1,3 @@
-import { initUmami } from "./modules/umami";
 import { initSentry } from "./sentry";
 
 async function initTelemetry(): Promise<void> {
@@ -9,7 +8,6 @@ async function initTelemetry(): Promise<void> {
   try {
     const settings = await window.electron.settings.get();
     initSentry(settings.telemetryCrashReporting === true);
-    initUmami(settings.telemetryUsageAnalytics === true);
   } catch (error) {
     console.warn(
       "[Renderer] Could not load telemetry settings, skipping telemetry init:",

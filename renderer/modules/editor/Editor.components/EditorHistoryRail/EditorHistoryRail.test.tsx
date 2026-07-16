@@ -32,6 +32,7 @@ function configureEditorState(
       historyPast,
       historyPastLabels,
       historyPastSubtitles,
+      closeSidePanel: closeHistory,
       project,
     }),
   );
@@ -39,7 +40,7 @@ function configureEditorState(
 
 async function renderHistoryRail() {
   await act(async () => {
-    root.render(<EditorHistoryRail onClose={closeHistory} />);
+    root.render(<EditorHistoryRail />);
   });
 }
 

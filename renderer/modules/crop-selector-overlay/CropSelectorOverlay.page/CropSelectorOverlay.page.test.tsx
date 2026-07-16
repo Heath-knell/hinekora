@@ -7,10 +7,6 @@ const overlayWindowsMocks = vi.hoisted(() => ({
   completeCropRegionSelection: vi.fn(),
 }));
 
-vi.mock("~/renderer/modules/umami", () => ({
-  trackEvent: vi.fn(),
-}));
-
 import { CropSelectorOverlayPage } from "./CropSelectorOverlay.page";
 
 function setCropSelectorShape(shape: "arc" | "points" | "rect"): void {

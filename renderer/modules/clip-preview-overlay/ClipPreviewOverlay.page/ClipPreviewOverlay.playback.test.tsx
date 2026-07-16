@@ -28,14 +28,9 @@ const storeMocks = vi.hoisted(() => ({
   revealClip: vi.fn(),
   requestFullscreen: vi.fn(),
   settingsValue: null as AppSettings | null,
-  trackEvent: vi.fn(),
   updateClip: vi.fn(),
   useSettingsShallow: vi.fn(),
   writeClipPreviewEvent: vi.fn(),
-}));
-
-vi.mock("~/renderer/modules/umami", () => ({
-  trackEvent: storeMocks.trackEvent,
 }));
 
 vi.mock("~/renderer/store", async (importOriginal) => {

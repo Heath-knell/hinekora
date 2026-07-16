@@ -3,7 +3,7 @@ import { SETUP_STEPS } from "~/main/modules/app-setup/AppSetup.types";
 const steps = [
   { step: SETUP_STEPS.SELECT_GAME, label: "Select Game" },
   { step: SETUP_STEPS.SELECT_CLIENT_PATH, label: "Client.txt Path" },
-  { step: SETUP_STEPS.TELEMETRY_CONSENT, label: "Privacy & Telemetry" },
+  { step: SETUP_STEPS.PRIVACY_INFO, label: "Privacy & Telemetry" },
 ];
 
 interface AppSetupProgressBarProps {

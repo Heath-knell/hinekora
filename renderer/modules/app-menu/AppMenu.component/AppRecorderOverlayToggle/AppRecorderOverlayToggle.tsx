@@ -68,7 +68,7 @@ function AppRecorderOverlayToggle() {
         type="button"
         className={clsx(
           appbarButtonClass,
-          "disabled:cursor-not-allowed disabled:opacity-40",
+          "disabled:cursor-not-allowed disabled:opacity-60",
         )}
         data-onboarding="overlay-icon"
         aria-label={overlayLabel}

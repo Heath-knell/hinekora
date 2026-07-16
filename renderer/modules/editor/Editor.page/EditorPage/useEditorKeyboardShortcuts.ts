@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 
-import { useEditorShallow } from "~/renderer/store";
+import { useBookmarksShallow, useEditorShallow } from "~/renderer/store";
 
 import { editorShortcutEventNames } from "../../Editor.utils/EditorShortcuts.utils";
 import {
@@ -9,19 +9,7 @@ import {
   isEditorTimelineShortcutTarget,
 } from "./EditorPage.utils";
 
-interface UseEditorKeyboardShortcutsInput {
-  hasSelectedBookmark: boolean;
-  onClearSelectedBookmark: () => void;
-  onToggleBookmarks: () => void;
-  onToggleHistory: () => void;
-}
-
-function useEditorKeyboardShortcuts({
-  hasSelectedBookmark,
-  onClearSelectedBookmark,
-  onToggleBookmarks,
-  onToggleHistory,
-}: UseEditorKeyboardShortcutsInput): void {
+function useEditorKeyboardShortcuts(): void {
   const {
     activeClipId,
     clipboardStatus,
@@ -39,6 +27,7 @@ function useEditorKeyboardShortcuts({
     setHoveredTimelineGap,
     splitTimelineClipAt,
     toggleProjectAudioMuted,
+    toggleSidePanel,
     undoProjectChange,
   } = useEditorShallow((editor) => ({
     activeClipId: editor.selectedClipId ?? editor.project?.activeClipId ?? null,
@@ -57,8 +46,16 @@ function useEditorKeyboardShortcuts({
     setHoveredTimelineGap: editor.setHoveredTimelineGap,
     splitTimelineClipAt: editor.splitTimelineClipAt,
     toggleProjectAudioMuted: editor.toggleProjectAudioMuted,
+    toggleSidePanel: editor.toggleSidePanel,
     undoProjectChange: editor.undoProjectChange,
   }));
+  const { hasSelectedBookmark, setSelectedBookmarkId } = useBookmarksShallow(
+    (bookmarks) => ({
+      hasSelectedBookmark:
+        bookmarks.editorRecording.selectedBookmarkId !== null,
+      setSelectedBookmarkId: bookmarks.setEditorRecordingSelectedBookmarkId,
+    }),
+  );
   const isProcessing =
     clipboardStatus === "copying" || exportStatus === "exporting";
 
@@ -72,7 +69,7 @@ function useEditorKeyboardShortcuts({
 
       if (event.key === "Escape" && hasSelectedBookmark) {
         event.preventDefault();
-        onClearSelectedBookmark();
+        setSelectedBookmarkId(null);
         return;
       }
 
@@ -81,13 +78,13 @@ function useEditorKeyboardShortcuts({
         const key = event.key.toLowerCase();
         if (key === "h") {
           event.preventDefault();
-          onToggleHistory();
+          toggleSidePanel("history");
           return;
         }
 
         if (key === "b") {
           event.preventDefault();
-          onToggleBookmarks();
+          toggleSidePanel("bookmarks");
           return;
         }
 
@@ -228,9 +225,6 @@ function useEditorKeyboardShortcuts({
     hoveredTimelineGap,
     hasProject,
     isProcessing,
-    onClearSelectedBookmark,
-    onToggleBookmarks,
-    onToggleHistory,
     playbackSeconds,
     previewHasAudio,
     redoProjectChange,
@@ -238,8 +232,10 @@ function useEditorKeyboardShortcuts({
     removeTimelineClip,
     removeTimelineGap,
     setHoveredTimelineGap,
+    setSelectedBookmarkId,
     splitTimelineClipAt,
     toggleProjectAudioMuted,
+    toggleSidePanel,
     undoProjectChange,
   ]);
 }
