@@ -341,7 +341,10 @@ describe("probeEditorAudioStream", () => {
     vi.resetModules();
     const directory = mkdtempSync(join(tmpdir(), "hinekora-editor-ffmpeg-"));
     const ffmpegPath = join(directory, "ffmpeg.exe");
-    const ffprobePath = join(directory, "ffprobe.exe");
+    const ffprobePath = join(
+      directory,
+      process.platform === "win32" ? "ffprobe.exe" : "ffprobe",
+    );
     const sourcePath = join(directory, "source.mp4");
     const previousFfmpegPath = process.env.HINEKORA_FFMPEG_PATH;
     const spawn = vi.fn(() => {

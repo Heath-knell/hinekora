@@ -53,11 +53,11 @@ jobs:
           # VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
           VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
         run: |
           missing=0
 
-          for secret_name in SENTRY_AUTH_TOKEN VITE_SENTRY_DSN VITE_SUPABASE_PUBLISHABLE_KEY; do
+          for secret_name in SENTRY_AUTH_TOKEN VITE_SENTRY_DSN VITE_SUPABASE_PUBLISHABLE_KEY VITE_SUPABASE_URL; do
             secret_value="${!secret_name}"
             if [ -z "${secret_value//[[:space:]]/}" ]; then
               echo "::error::${secret_name} repository secret is not set or is empty"
@@ -65,7 +65,7 @@ jobs:
             fi
           done
 
-          for var_name in SENTRY_ORG SENTRY_PROJECT VITE_SUPABASE_URL; do
+          for var_name in SENTRY_ORG SENTRY_PROJECT; do
             var_value="${!var_name}"
             if [ -z "${var_value//[[:space:]]/}" ]; then
               echo "::error::${var_name} repository variable is not set or is empty"
