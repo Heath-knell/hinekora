@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { type TabItem, Tabs } from "~/renderer/components/Tabs/Tabs";
 import { CaptureProfileLockToggle } from "~/renderer/modules/capture-profiles/CaptureProfiles.components/CaptureProfileLockToggle/CaptureProfileLockToggle";
+import { CaptureTemplatesBanner } from "~/renderer/modules/managed-recorder/ManagedRecorder.components/CaptureTemplatesBanner/CaptureTemplatesBanner";
 import { ManagedRecorderAudioSettingsCard } from "~/renderer/modules/managed-recorder/ManagedRecorder.components/ManagedRecorderAudioSettingsCard/ManagedRecorderAudioSettingsCard";
 import { ManagedRecorderRecordingSettingsFields } from "~/renderer/modules/managed-recorder/ManagedRecorder.components/ManagedRecorderRecordingSettingsFields/ManagedRecorderRecordingSettingsFields";
 import { ManagedRecorderRewindSettingsFields } from "~/renderer/modules/managed-recorder/ManagedRecorder.components/ManagedRecorderRewindSettingsFields/ManagedRecorderRewindSettingsFields";
@@ -104,11 +105,17 @@ function ManagedRecorderPanel() {
               <h3 className="m-0 font-bold text-primary text-sm">
                 Capture Settings
               </h3>
-              <ManagedRecorderSettingsFields />
+              <CaptureTemplatesBanner />
+              <div className="relative grid content-start gap-3">
+                <ManagedRecorderSettingsFields />
+                <ManagedRecorderSettingsLockedOverlay />
+              </div>
             </>
           )}
           {selectedTab === "audio" && <ManagedRecorderAudioSettingsCard />}
-          <ManagedRecorderSettingsLockedOverlay />
+          {selectedTab !== "capture" && (
+            <ManagedRecorderSettingsLockedOverlay />
+          )}
         </div>
       </section>
     </div>

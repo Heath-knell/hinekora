@@ -12,6 +12,7 @@ import {
   AuraPointPlacementSettings,
   appSettingsKeys,
   CapturePreviewSourceSchema,
+  CaptureProfileCreateInputSchema,
   CaptureProfileSchema,
   CaptureProfileSettingsSchema,
   CaptureProfileUpdateInputSchema,
@@ -19,11 +20,13 @@ import {
   createCoordinateReferenceDimensions,
   createDefaultCaptureProfile,
   createDefaultSettings,
+  normalizePersistedRecordingOutputResolution,
   normalizeRecordingEncoderChoice,
   ProfileCreateInputSchema,
   ProfileSchema,
   ProfileUpdateInputSchema,
   RecorderOverlayBoundsSchema,
+  RecordingOutputResolutionSchema,
   StateBundleSchema,
 } from "./schemas";
 
@@ -68,6 +71,7 @@ describe("shared schemas", () => {
       clipPreviewInfoAlertDismissed: false,
       groupPlayDeathAlertDismissed: false,
       recorderSettingsInfoAlertDismissed: false,
+      captureTemplatesBannerDismissed: false,
       activeGame: "poe1",
       activeLeague: getCurrentLeague("poe1"),
       poe1SelectedLeague: getCurrentLeague("poe1"),
@@ -122,6 +126,30 @@ describe("shared schemas", () => {
     ).toThrow();
   });
 
+  it("normalizes legacy recording resolutions and rejects unsupported sizes", () => {
+    expect(RecordingOutputResolutionSchema.parse("1080p")).toBe("1920x1080");
+    expect(RecordingOutputResolutionSchema.parse("4K")).toBe("3840x2160");
+    expect(RecordingOutputResolutionSchema.parse("3440x1440")).toBe(
+      "3440x1440",
+    );
+
+    for (const resolution of ["854x480", "999999x999999", "", 1080]) {
+      expect(
+        RecordingOutputResolutionSchema.safeParse(resolution).success,
+      ).toBe(false);
+    }
+  });
+
+  it("falls back safely when a persisted recording resolution is unsupported", () => {
+    expect(normalizePersistedRecordingOutputResolution("1080p")).toBe(
+      "1920x1080",
+    );
+    expect(normalizePersistedRecordingOutputResolution("854x480")).toBe(
+      "native",
+    );
+    expect(normalizePersistedRecordingOutputResolution(null)).toBe("native");
+  });
+
   it("tracks capture profile setting keys from the profile settings schema", () => {
     expect(new Set(captureProfileSettingKeys)).toEqual(
       new Set(Object.keys(CaptureProfileSettingsSchema.shape)),
@@ -155,6 +183,38 @@ describe("shared schemas", () => {
     });
   });
 
+  it("accepts capture settings when creating a capture profile", () => {
+    expect(
+      CaptureProfileCreateInputSchema.parse({
+        captureTarget: {
+          game: "poe2",
+          id: "window:poe2:1",
+          kind: "window",
+          label: "Path of Exile 2",
+        },
+        game: "poe2",
+        name: "Balanced 1080p60",
+        recordingEncoder: "hardware_h264",
+        recordingFps: 60,
+        recordingOutputResolution: "1920x1080",
+        recordingRunQuality: "moderate",
+      }),
+    ).toEqual({
+      captureTarget: {
+        game: "poe2",
+        id: "window:poe2:1",
+        kind: "window",
+        label: "Path of Exile 2",
+      },
+      game: "poe2",
+      name: "Balanced 1080p60",
+      recordingEncoder: "hardware_h264",
+      recordingFps: 60,
+      recordingOutputResolution: "1920x1080",
+      recordingRunQuality: "moderate",
+    });
+  });
+
   it("defaults and creates capture profile identity fields", () => {
     expect(
       CaptureProfileSchema.parse({
@@ -171,12 +231,31 @@ describe("shared schemas", () => {
     });
     expect(
       createDefaultCaptureProfile(
-        { name: "Default PoE Capture", game: "poe1" },
+        {
+          captureTarget: {
+            id: "display-1",
+            kind: "display",
+            label: "Primary display",
+          },
+          name: "Default PoE Capture",
+          game: "poe1",
+          recordingEncoder: "hardware_h265",
+          recordingFps: 60,
+          recordingOutputResolution: "1280x720",
+        },
         { id: "default-capture-poe1", isDefault: true },
       ),
     ).toMatchObject({
       id: "default-capture-poe1",
       isDefault: true,
+      captureTarget: {
+        id: "display-1",
+        kind: "display",
+        label: "Primary display",
+      },
+      recordingEncoder: "hardware_h265",
+      recordingFps: 60,
+      recordingOutputResolution: "1280x720",
     });
   });
 

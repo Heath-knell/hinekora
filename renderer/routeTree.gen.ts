@@ -18,6 +18,7 @@ import { Route as EditorRouteImport } from './routes/editor'
 import { Route as CropOverlayRouteImport } from './routes/crop-overlay'
 import { Route as ClipsRouteImport } from './routes/clips'
 import { Route as ChangelogRouteImport } from './routes/changelog'
+import { Route as CaptureGuideRouteImport } from './routes/capture-guide'
 import { Route as BookmarksRouteImport } from './routes/bookmarks'
 import { Route as AttributionsRouteImport } from './routes/attributions'
 import { Route as IndexRouteImport } from './routes/index'
@@ -70,6 +71,11 @@ const ChangelogRoute = ChangelogRouteImport.update({
   path: '/changelog',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CaptureGuideRoute = CaptureGuideRouteImport.update({
+  id: '/capture-guide',
+  path: '/capture-guide',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BookmarksRoute = BookmarksRouteImport.update({
   id: '/bookmarks',
   path: '/bookmarks',
@@ -105,6 +111,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/attributions': typeof AttributionsRoute
   '/bookmarks': typeof BookmarksRoute
+  '/capture-guide': typeof CaptureGuideRoute
   '/changelog': typeof ChangelogRoute
   '/clips': typeof ClipsRoute
   '/crop-overlay': typeof CropOverlayRoute
@@ -122,6 +129,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/attributions': typeof AttributionsRoute
   '/bookmarks': typeof BookmarksRoute
+  '/capture-guide': typeof CaptureGuideRoute
   '/changelog': typeof ChangelogRoute
   '/clips': typeof ClipsRoute
   '/crop-overlay': typeof CropOverlayRoute
@@ -140,6 +148,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/attributions': typeof AttributionsRoute
   '/bookmarks': typeof BookmarksRoute
+  '/capture-guide': typeof CaptureGuideRoute
   '/changelog': typeof ChangelogRoute
   '/clips': typeof ClipsRoute
   '/crop-overlay': typeof CropOverlayRoute
@@ -159,6 +168,7 @@ export interface FileRouteTypes {
     | '/'
     | '/attributions'
     | '/bookmarks'
+    | '/capture-guide'
     | '/changelog'
     | '/clips'
     | '/crop-overlay'
@@ -176,6 +186,7 @@ export interface FileRouteTypes {
     | '/'
     | '/attributions'
     | '/bookmarks'
+    | '/capture-guide'
     | '/changelog'
     | '/clips'
     | '/crop-overlay'
@@ -193,6 +204,7 @@ export interface FileRouteTypes {
     | '/'
     | '/attributions'
     | '/bookmarks'
+    | '/capture-guide'
     | '/changelog'
     | '/clips'
     | '/crop-overlay'
@@ -211,6 +223,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AttributionsRoute: typeof AttributionsRoute
   BookmarksRoute: typeof BookmarksRoute
+  CaptureGuideRoute: typeof CaptureGuideRoute
   ChangelogRoute: typeof ChangelogRoute
   ClipsRoute: typeof ClipsRoute
   CropOverlayRoute: typeof CropOverlayRoute
@@ -290,6 +303,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChangelogRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/capture-guide': {
+      id: '/capture-guide'
+      path: '/capture-guide'
+      fullPath: '/capture-guide'
+      preLoaderRoute: typeof CaptureGuideRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/bookmarks': {
       id: '/bookmarks'
       path: '/bookmarks'
@@ -339,6 +359,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AttributionsRoute: AttributionsRoute,
   BookmarksRoute: BookmarksRoute,
+  CaptureGuideRoute: CaptureGuideRoute,
   ChangelogRoute: ChangelogRoute,
   ClipsRoute: ClipsRoute,
   CropOverlayRoute: CropOverlayRoute,

@@ -15,10 +15,11 @@ import type {
   RecordingBookmarksPage,
   RecordingBookmarksQuery,
 } from "../../main/modules/bookmarks";
-import type {
-  ManagedRecorderAudioDevices,
-  ManagedRecorderCaptureMode,
-  ManagedRecorderListAudioDevicesOptions,
+import {
+  type ManagedRecorderAudioDevices,
+  type ManagedRecorderCaptureMode,
+  type ManagedRecorderListAudioDevicesOptions,
+  managedRecordingStorageEstimateDurations,
 } from "../../main/modules/managed-recorder/ManagedRecorder.dto";
 import type {
   PoeProcessSnapshot,
@@ -42,13 +43,16 @@ import {
   type AppSettingsUpdate,
   type CapturePreviewSource,
   type CaptureProfile,
+  type CaptureProfileCreateInput,
   type CaptureProfileUpdateInput,
   type ClientLogStatus,
   createDefaultSettings,
+  type ExplicitRecordingOutputResolution,
   type GameId,
   type ManagedRecorderStatus,
   type Profile,
   type ProfileUpdateInput,
+  recordingOutputResolutionDimensions,
 } from "../../types";
 import { createPoeLeagueFixtureCatalog as createE2EPoeLeagueCatalog } from "../../types/test-fixtures/poe-leagues";
 import { resolveE2EAppUrl } from "./app-url";
@@ -74,7 +78,7 @@ interface DashboardE2ECalls {
   bookmarkLibraryQueries: BookmarkLibraryQuery[];
   bookmarkUpdates: BookmarkManualUpdateInput[];
   captureModeChanges: ManagedRecorderCaptureMode[];
-  captureProfileCreates: Array<{ game: GameId; id: string; name: string }>;
+  captureProfileCreates: Array<CaptureProfileCreateInput & { id: string }>;
   captureProfileDeletes: string[];
   captureProfileUpdates: CaptureProfileUpdateInput[];
   captureSourceRequests: boolean[];
@@ -144,6 +148,14 @@ interface DashboardE2EFixture {
   captureProfile: CaptureProfile;
   profile: Profile;
   recordingStorageUsage: RecordingStorageUsage;
+  recordingStorageEstimateDelayMs: number;
+  recordingStorageEstimateError: string | null;
+  recordingStorageEstimateDurations: number[];
+  recordingStorageEstimateResolutions: Array<{
+    height: number;
+    resolution: ExplicitRecordingOutputResolution;
+    width: number;
+  }>;
   recorderStatus: ManagedRecorderStatus;
   replayClipDetails: Record<string, ReplayClipDetail>;
   replayClipOperationDelayMs: number;
@@ -166,6 +178,8 @@ interface DashboardE2EOptions {
   bookmarks?: BookmarkLibraryItem[];
   recordingMaxStorageGb?: number;
   recordingStorageUsage?: Partial<RecordingStorageUsage>;
+  recordingStorageEstimateDelayMs?: number;
+  recordingStorageEstimateError?: string;
   recorderOverlayVisible?: boolean;
   replayClipDetails?: Record<string, ReplayClipDetail>;
   replayClipOperationDelayMs?: number;
@@ -353,6 +367,20 @@ function createDashboardE2EFixture(
       recordingsSizeBytes: 0,
       ...options.recordingStorageUsage,
     },
+    recordingStorageEstimateDelayMs:
+      options.recordingStorageEstimateDelayMs ?? 0,
+    recordingStorageEstimateError:
+      options.recordingStorageEstimateError ?? null,
+    recordingStorageEstimateDurations:
+      managedRecordingStorageEstimateDurations.map(
+        (duration) => duration.minutes,
+      ),
+    recordingStorageEstimateResolutions: Object.entries(
+      recordingOutputResolutionDimensions,
+    ).map(([resolution, dimensions]) => ({
+      ...dimensions,
+      resolution: resolution as ExplicitRecordingOutputResolution,
+    })),
     recorderStatus,
     replayClipDetails: options.replayClipDetails ?? {},
     replayClipOperationDelayMs: options.replayClipOperationDelayMs ?? 0,
@@ -569,6 +597,15 @@ async function setupDashboardE2E(
 
         await new Promise<void>((resolve) => {
           window.setTimeout(resolve, fixture.replayClipOperationDelayMs);
+        });
+      };
+      const waitForRecordingStorageEstimate = async () => {
+        if (fixture.recordingStorageEstimateDelayMs <= 0) {
+          return;
+        }
+
+        await new Promise<void>((resolve) => {
+          window.setTimeout(resolve, fixture.recordingStorageEstimateDelayMs);
         });
       };
       const createBridgeDomain = <TBridge extends object>(
@@ -876,20 +913,23 @@ async function setupDashboardE2E(
           DashboardE2EElectron["captureProfiles"]
         >("captureProfiles", {
           create: async (input) => {
-            const createdProfile: CaptureProfile = {
-              ...fixture.captureProfile,
-              id: `capture-profile-${captureProfilesById.size + 1}`,
-              isDefault: false,
-              name: input.name,
-              game: input.game,
-              createdAt: fixture.now,
-              updatedAt: fixture.now,
-            };
+            const createdProfileId = `capture-profile-${captureProfilesById.size + 1}`;
+            const createdProfile = applyCaptureProfileUpdate(
+              {
+                ...fixture.captureProfile,
+                id: createdProfileId,
+                isDefault: false,
+                name: input.name,
+                game: input.game,
+                createdAt: fixture.now,
+                updatedAt: fixture.now,
+              },
+              { ...input, id: createdProfileId },
+            );
             calls.captureProfileCreates.push(
               clone({
-                game: input.game,
+                ...input,
                 id: createdProfile.id,
-                name: input.name,
               }),
             );
             captureProfilesById.set(createdProfile.id, createdProfile);
@@ -992,6 +1032,43 @@ async function setupDashboardE2E(
           DashboardE2EElectron["managedRecorder"]
         >("managedRecorder", {
           getCaptureMode: async () => captureMode,
+          getRecordingStorageEstimates: async ({ configurations }) => {
+            await waitForRecordingStorageEstimate();
+            if (fixture.recordingStorageEstimateError) {
+              throw new Error(fixture.recordingStorageEstimateError);
+            }
+
+            return {
+              configurations: configurations.map((configuration) => ({
+                fps: configuration.fps,
+                key: configuration.key,
+                quality: configuration.quality,
+                requestedEncoder: configuration.encoder,
+                rows: fixture.recordingStorageEstimateResolutions
+                  .filter(
+                    ({ resolution }) =>
+                      configuration.resolution === undefined ||
+                      resolution === configuration.resolution,
+                  )
+                  .map(({ height, resolution, width }, resolutionIndex) => ({
+                    estimates: fixture.recordingStorageEstimateDurations
+                      .filter(
+                        (durationMinutes) =>
+                          configuration.durationMinutes === undefined ||
+                          durationMinutes === configuration.durationMinutes,
+                      )
+                      .map((durationMinutes) => ({
+                        durationMinutes,
+                        estimatedBytes:
+                          durationMinutes * (resolutionIndex + 1) * 100_000_000,
+                      })),
+                    height,
+                    resolution,
+                    width,
+                  })),
+              })),
+            };
+          },
           getStatus: async () => clone(recorderStatus),
           listAudioDevices: async (
             options?: ManagedRecorderListAudioDevicesOptions,

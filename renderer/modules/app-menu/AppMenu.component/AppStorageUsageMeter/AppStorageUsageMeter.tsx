@@ -160,7 +160,7 @@ function AppStorageUsageMeter() {
           onClick={handleOpenStorageSettings}
         >
           <span className="inline-grid w-max gap-1">
-            <span className="text-center leading-none tabular-nums">
+            <span className="text-center font-mono leading-none tabular-nums">
               {usedLabel} / {limitLabel}
             </span>
             <span

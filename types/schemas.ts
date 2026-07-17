@@ -285,6 +285,57 @@ export const RecordingQualitySchema = z.enum([
 ]);
 export type RecordingQuality = z.infer<typeof RecordingQualitySchema>;
 
+export const recordingOutputResolutionDimensions = {
+  "1280x720": { height: 720, width: 1280 },
+  "1920x1080": { height: 1080, width: 1920 },
+  "2560x1440": { height: 1440, width: 2560 },
+  "3440x1440": { height: 1440, width: 3440 },
+  "3840x2160": { height: 2160, width: 3840 },
+} as const;
+export type ExplicitRecordingOutputResolution =
+  keyof typeof recordingOutputResolutionDimensions;
+const explicitRecordingOutputResolutionValues = Object.keys(
+  recordingOutputResolutionDimensions,
+) as [
+  ExplicitRecordingOutputResolution,
+  ...ExplicitRecordingOutputResolution[],
+];
+export const ExplicitRecordingOutputResolutionSchema = z.enum(
+  explicitRecordingOutputResolutionValues,
+);
+const recordingOutputResolutionValues = [
+  "native",
+  ...explicitRecordingOutputResolutionValues,
+] as const;
+const legacyRecordingOutputResolutionValues: Record<
+  string,
+  ExplicitRecordingOutputResolution
+> = {
+  "4k": "3840x2160",
+  "720p": "1280x720",
+  "1080p": "1920x1080",
+  "1440p": "2560x1440",
+};
+
+export const RecordingOutputResolutionSchema = z.preprocess(
+  (value) =>
+    typeof value === "string"
+      ? (legacyRecordingOutputResolutionValues[value.toLowerCase()] ?? value)
+      : value,
+  z.enum(recordingOutputResolutionValues),
+);
+export type RecordingOutputResolution = z.infer<
+  typeof RecordingOutputResolutionSchema
+>;
+
+export function normalizePersistedRecordingOutputResolution(
+  value: unknown,
+): RecordingOutputResolution {
+  const result = RecordingOutputResolutionSchema.safeParse(value);
+
+  return result.success ? result.data : "native";
+}
+
 export const RecordingEncoderChoiceSchema = z.enum([
   "hardware_h264",
   "hardware_h265",
@@ -294,6 +345,15 @@ export const RecordingEncoderChoiceSchema = z.enum([
 export type RecordingEncoderChoice = z.infer<
   typeof RecordingEncoderChoiceSchema
 >;
+export const recordingEncoderStorageFactors: Record<
+  RecordingEncoderChoice,
+  number
+> = {
+  hardware_av1: 0.55,
+  hardware_h264: 1,
+  hardware_h265: 0.7,
+  obs_x264: 1,
+};
 
 const LegacyRecordingEncoderSchema = z.enum([
   "auto",
@@ -405,7 +465,7 @@ export type CaptureProfileSelectionMemory = z.infer<
 >;
 
 const captureProfileSettingsShape = {
-  recordingOutputResolution: z.string().min(1).max(32),
+  recordingOutputResolution: RecordingOutputResolutionSchema,
   recordingFps: z.number().int().min(1).max(240),
   recordingEncoder: RecordingEncoderSchema,
   recordingClipQuality: RecordingQualitySchema,
@@ -460,6 +520,9 @@ export const CaptureProfileSettingsUpdateSchema = z
 export type CaptureProfileSettings = z.infer<
   typeof CaptureProfileSettingsSchema
 >;
+export type CaptureProfileSettingsUpdate = z.infer<
+  typeof CaptureProfileSettingsUpdateSchema
+>;
 export const captureProfileSettingKeys = Object.keys(
   captureProfileSettingsShape,
 ) as Array<keyof CaptureProfileSettings>;
@@ -479,10 +542,13 @@ export const CaptureProfileSchema = z
   });
 export type CaptureProfile = z.infer<typeof CaptureProfileSchema>;
 
-export const CaptureProfileCreateInputSchema = z.object({
-  name: z.string().min(1).max(80),
-  game: GameIdSchema.default("poe1"),
-});
+export const CaptureProfileCreateInputSchema = z
+  .object({
+    captureTarget: CaptureTargetSchema.nullable().optional(),
+    name: z.string().min(1).max(80),
+    game: GameIdSchema.default("poe1"),
+  })
+  .merge(CaptureProfileSettingsUpdateSchema);
 export type CaptureProfileCreateInput = z.infer<
   typeof CaptureProfileCreateInputSchema
 >;
@@ -556,6 +622,7 @@ export const AppSettingsSchema = z.object({
   clipPreviewInfoAlertDismissed: z.boolean().default(false),
   groupPlayDeathAlertDismissed: z.boolean().default(false),
   recorderSettingsInfoAlertDismissed: z.boolean().default(false),
+  captureTemplatesBannerDismissed: z.boolean().default(false),
   activeGame: GameIdSchema.default("poe1"),
   activeLeague: z.string().min(1).max(80).default(getCurrentLeague("poe1")),
   poe1SelectedLeague: z
@@ -728,11 +795,12 @@ export function createDefaultCaptureProfile(
   const now = new Date().toISOString();
 
   return CaptureProfileSchema.parse({
+    ...input,
     id: options.id ?? crypto.randomUUID(),
     name: input.name,
     game: input.game,
     isDefault: options.isDefault ?? false,
-    captureTarget: null,
+    captureTarget: input.captureTarget ?? null,
     createdAt: now,
     updatedAt: now,
   });

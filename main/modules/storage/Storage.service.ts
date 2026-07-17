@@ -7,6 +7,7 @@ import { BookmarksService } from "~/main/modules/bookmarks";
 import { DatabaseService } from "~/main/modules/database";
 import { WindowName } from "~/main/modules/main-window/MainWindow.types";
 import { ManagedRecorderService } from "~/main/modules/managed-recorder";
+import { recordingQualityBaseBitrates } from "~/main/modules/managed-recorder/ManagedRecorder.utils";
 import { RecordingStorageService } from "~/main/modules/recording-storage";
 import { RecordingStorageRepository } from "~/main/modules/recording-storage/RecordingStorage.repository";
 import {
@@ -26,11 +27,7 @@ import { registerGuardedIpcHandler } from "~/main/utils/ipc-window-roles";
 import { maskPath } from "~/main/utils/mask-path";
 import { isPathInsideOrEqual } from "~/main/utils/storage-files";
 
-import {
-  type GameId,
-  type RecordingQuality,
-  rewindBufferSeconds,
-} from "~/types";
+import { type GameId, rewindBufferSeconds } from "~/types";
 import { StorageChannel } from "./Storage.channels";
 import { deleteGameLeagueStorage } from "./Storage.deletion";
 import type {
@@ -59,12 +56,6 @@ import { StorageFileDeletionService } from "./StorageFileDeletion.service";
 const STORAGE_LOG_SCOPE = "storage";
 const STORAGE_PATH_ANCHORS = ["Hinekora Recordings", "Hinekora"];
 const FALLBACK_REWIND_BUFFER_RESOLUTION = { width: 1920, height: 1080 };
-const REWIND_BUFFER_BASE_BITRATES: Record<RecordingQuality, number> = {
-  low: 4_000_000,
-  moderate: 6_000_000,
-  high: 8_000_000,
-  ultra: 12_000_000,
-};
 
 interface UsageBucket {
   game: GameId;
@@ -506,7 +497,7 @@ class StorageService {
       (FALLBACK_REWIND_BUFFER_RESOLUTION.width *
         FALLBACK_REWIND_BUFFER_RESOLUTION.height);
     const bitrate =
-      REWIND_BUFFER_BASE_BITRATES[settings.recordingClipQuality] *
+      recordingQualityBaseBitrates[settings.recordingClipQuality] *
       fpsFactor *
       pixelFactor;
 

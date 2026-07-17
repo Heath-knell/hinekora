@@ -18,12 +18,14 @@ function CaptureProfilesPanel() {
   const {
     createProfile,
     deleteProfile,
+    error,
     items,
     selectedProfileId,
     selectProfileWithPreviewSource,
   } = useCaptureProfilesShallow((captureProfiles) => ({
     createProfile: captureProfiles.create,
     deleteProfile: captureProfiles.delete,
+    error: captureProfiles.error,
     items: captureProfiles.items,
     selectedProfileId: captureProfiles.selectedProfileId,
     selectProfileWithPreviewSource: captureProfiles.selectWithPreviewSource,
@@ -48,8 +50,8 @@ function CaptureProfilesPanel() {
       };
     });
 
-  const handleCreateProfile = (name: string) => {
-    void createProfile(name);
+  const handleCreateProfile = async (name: string) => {
+    await createProfile(name);
   };
   const handleSelectProfile = (profileId: string) => {
     selectProfileWithPreviewSource(profileId);
@@ -64,6 +66,7 @@ function CaptureProfilesPanel() {
       disabled={isRecorderActive}
       disabledTitle={lockedProfileControlsTitle}
       emptyMessage="Default profile will be recreated automatically."
+      error={error}
       initialName="Default Capture"
       inputLabel="Capture profile name"
       items={panelItems}

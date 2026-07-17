@@ -180,4 +180,27 @@ describe("SettingsStoreRepository", () => {
 
     database.close();
   });
+
+  it("falls back to native for an unsupported persisted recording resolution", () => {
+    const database = new DatabaseService(":memory:");
+    const repository = new SettingsStoreRepository(database);
+    database.db
+      .prepare(
+        "UPDATE settings SET value_json = ?, updated_at = ? WHERE key = ?",
+      )
+      .run(
+        JSON.stringify("854x480"),
+        "2026-07-17T00:00:00.000Z",
+        "recordingOutputResolution",
+      );
+
+    expect(repository.get().recordingOutputResolution).toBe("native");
+
+    database.db
+      .prepare("DELETE FROM settings WHERE key = ?")
+      .run("recordingOutputResolution");
+    expect(repository.get().recordingOutputResolution).toBe("native");
+
+    database.close();
+  });
 });

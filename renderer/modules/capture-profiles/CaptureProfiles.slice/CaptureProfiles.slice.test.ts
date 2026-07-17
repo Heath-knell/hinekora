@@ -468,6 +468,20 @@ describe("CaptureProfiles slice", () => {
     );
   });
 
+  it("reports capture profile creation failures without rejecting", async () => {
+    createCaptureProfile.mockRejectedValueOnce(new Error("create failed"));
+    const store = createTestStore();
+
+    await expect(
+      store.getState().captureProfiles.create("Failed profile"),
+    ).resolves.toEqual({
+      message: "create failed",
+      status: "failed",
+    });
+    expect(store.getState().captureProfiles.error).toBe("create failed");
+    expect(listCaptureProfiles).not.toHaveBeenCalled();
+  });
+
   it("hydrates with no selected profile when no profiles exist", async () => {
     listCaptureProfiles.mockResolvedValueOnce([]);
     const store = createTestStore();
@@ -482,6 +496,9 @@ describe("CaptureProfiles slice", () => {
       game: "poe2",
       id: "poe2-created",
       name: "Bossing",
+      recordingEncoder: "hardware_h265",
+      recordingFps: 60,
+      recordingOutputResolution: "2560x1440",
     });
     createCaptureProfile.mockResolvedValueOnce(createdProfile);
     listCaptureProfiles.mockResolvedValueOnce([
@@ -501,11 +518,26 @@ describe("CaptureProfiles slice", () => {
       },
     }));
 
-    await store.getState().captureProfiles.create("Bossing");
+    const result = await store.getState().captureProfiles.create("Bossing", {
+      recordingEncoder: "hardware_h265",
+      recordingFps: 60,
+      recordingOutputResolution: "2560x1440",
+    });
 
     expect(createCaptureProfile).toHaveBeenCalledWith({
+      captureTarget: {
+        game: null,
+        height: 1080,
+        id: "display-poe1",
+        kind: "display",
+        label: "PoE 1 Screen",
+        width: 1920,
+      },
       game: "poe2",
       name: "Bossing",
+      recordingEncoder: "hardware_h265",
+      recordingFps: 60,
+      recordingOutputResolution: "2560x1440",
     });
     expect(store.getState().captureProfiles.selectedProfileId).toBe(
       "poe2-created",
@@ -516,6 +548,7 @@ describe("CaptureProfiles slice", () => {
         selectedCaptureProfileId: "poe2-created",
       }),
     );
+    expect(result).toEqual({ profile: createdProfile, status: "applied" });
   });
 
   it("creates a profile with the default game when settings are not loaded", async () => {
@@ -530,9 +563,138 @@ describe("CaptureProfiles slice", () => {
     await store.getState().captureProfiles.create("Leveling");
 
     expect(createCaptureProfile).toHaveBeenCalledWith({
+      captureTarget: {
+        game: null,
+        height: 1080,
+        id: "display-poe1",
+        kind: "display",
+        label: "PoE 1 Screen",
+        width: 1920,
+      },
       game: "poe1",
       name: "Leveling",
     });
+  });
+
+  it("preserves the selected profile target when preview sources are unavailable", async () => {
+    const createdProfile = createProfile({
+      id: "poe1-created",
+      name: "Mapping",
+    });
+    createCaptureProfile.mockResolvedValueOnce(createdProfile);
+    listCaptureProfiles.mockResolvedValueOnce([poe1Profile, createdProfile]);
+    const store = createTestStore();
+    store.setState((state) => ({
+      capturePreview: {
+        ...state.capturePreview,
+        selectedSourceId: "missing-window:poe1",
+        sources: [
+          {
+            available: false,
+            displayId: null,
+            game: "poe1",
+            height: null,
+            id: "missing-window:poe1",
+            kind: "window",
+            name: "Path of Exile 1 (not running)",
+            thumbnailDataUrl: null,
+            width: null,
+          },
+        ],
+      },
+      captureProfiles: {
+        ...state.captureProfiles,
+        items: [poe1Profile],
+        selectedProfileId: poe1Profile.id,
+      },
+    }));
+
+    await store.getState().captureProfiles.create("Mapping");
+
+    expect(createCaptureProfile).toHaveBeenCalledWith(
+      expect.objectContaining({ captureTarget: poe1Profile.captureTarget }),
+    );
+  });
+
+  it("reports a durable profile when selecting its settings fails", async () => {
+    const createdProfile = createProfile({
+      id: "created-with-failed-settings",
+      name: "Created with failed settings",
+      recordingFps: 60,
+    });
+    createCaptureProfile.mockResolvedValueOnce(createdProfile);
+    listCaptureProfiles.mockResolvedValueOnce([poe1Profile, createdProfile]);
+    updateSettings.mockRejectedValueOnce(new Error("settings failed"));
+    const store = createTestStore();
+
+    const result = await store
+      .getState()
+      .captureProfiles.create("Created with failed settings", {
+        recordingFps: 60,
+      });
+
+    expect(result).toMatchObject({
+      message: "settings failed",
+      profile: createdProfile,
+      status: "created-not-applied",
+    });
+    expect(store.getState().captureProfiles.selectedProfileId).toBe(
+      poe1Profile.id,
+    );
+    expect(store.getState().captureProfiles.error).toBe("settings failed");
+  });
+
+  it("reports a durable profile when the profile list cannot refresh", async () => {
+    const createdProfile = createProfile({
+      id: "created-with-failed-refresh",
+      name: "Created with failed refresh",
+    });
+    createCaptureProfile.mockResolvedValueOnce(createdProfile);
+    listCaptureProfiles.mockRejectedValueOnce(new Error("refresh failed"));
+    const store = createTestStore();
+
+    const result = await store
+      .getState()
+      .captureProfiles.create("Created with failed refresh");
+
+    expect(result).toMatchObject({
+      message: expect.stringContaining("refresh failed"),
+      profile: createdProfile,
+      status: "created-not-applied",
+    });
+    expect(store.getState().captureProfiles.selectedProfileId).toBe(
+      poe1Profile.id,
+    );
+    expect(store.getState().captureProfiles.error).toContain("refresh failed");
+  });
+
+  it("does not apply a newly created profile if recording starts meanwhile", async () => {
+    const createdProfile = createProfile({
+      id: "created-during-recording-start",
+      name: "Created during recording start",
+    });
+    const createDeferredProfile = createDeferred<CaptureProfile>();
+    createCaptureProfile.mockReturnValueOnce(createDeferredProfile.promise);
+    const store = createTestStore();
+    const createRequest = store
+      .getState()
+      .captureProfiles.create("Created during recording start");
+
+    store.setState((state) => ({
+      managedRecorder: {
+        ...state.managedRecorder,
+        status: createManagedRecorderStatus({ runRecordingActive: true }),
+      },
+    }));
+    createDeferredProfile.resolve(createdProfile);
+    const result = await createRequest;
+
+    expect(result).toMatchObject({
+      profile: createdProfile,
+      status: "created-not-applied",
+    });
+    expect(listCaptureProfiles).not.toHaveBeenCalled();
+    expect(updateSettings).not.toHaveBeenCalled();
   });
 
   it("updates the selected profile and reapplies its settings", async () => {

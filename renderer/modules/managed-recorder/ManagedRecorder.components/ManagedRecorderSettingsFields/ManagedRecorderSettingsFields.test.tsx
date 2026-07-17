@@ -111,6 +111,24 @@ describe("ManagedRecorderSettingsFields", () => {
     });
   });
 
+  it("offers named capture resolutions starting at 720p", async () => {
+    await renderFields();
+    const resolutionOptions = Array.from(getSelects()[0]?.options ?? []).map(
+      (option) => ({ label: option.textContent, value: option.value }),
+    );
+
+    expect(resolutionOptions).toEqual(
+      expect.arrayContaining([
+        { label: "1280 x 720 (720p)", value: "1280x720" },
+        { label: "1920 x 1080 (1080p)", value: "1920x1080" },
+      ]),
+    );
+    expect(resolutionOptions).not.toContainEqual({
+      label: "854 x 480 (480p)",
+      value: "854x480",
+    });
+  });
+
   it("keeps capture settings enabled when no capture profile is selected", async () => {
     storeMocks.isProfileUnlocked = false;
     storeMocks.selectedProfileId = null;

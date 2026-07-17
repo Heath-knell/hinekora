@@ -1,11 +1,15 @@
 import { ipcRenderer } from "electron";
 
+import { unwrapIpcResult } from "~/main/utils/ipc-api";
+
 import type { ManagedRecorderStatus } from "~/types";
 import { ManagedRecorderChannel } from "./ManagedRecorder.channels";
 import type {
   ManagedRecorderAudioDevices,
   ManagedRecorderCaptureMode,
   ManagedRecorderListAudioDevicesOptions,
+  ManagedRecordingStorageEstimateRequest,
+  ManagedRecordingStorageEstimateResponse,
   ManagedReplaySaveResult,
 } from "./ManagedRecorder.dto";
 
@@ -14,6 +18,12 @@ const ManagedRecorderAPI = {
     ipcRenderer.invoke(ManagedRecorderChannel.GetCaptureMode),
   getStatus: (): Promise<ManagedRecorderStatus> =>
     ipcRenderer.invoke(ManagedRecorderChannel.GetStatus),
+  getRecordingStorageEstimates: (
+    input: ManagedRecordingStorageEstimateRequest,
+  ): Promise<ManagedRecordingStorageEstimateResponse> =>
+    ipcRenderer
+      .invoke(ManagedRecorderChannel.GetRecordingStorageEstimates, input)
+      .then(unwrapIpcResult),
   listAudioDevices: (
     options: ManagedRecorderListAudioDevicesOptions = {},
   ): Promise<ManagedRecorderAudioDevices> =>

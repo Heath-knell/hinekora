@@ -11,6 +11,7 @@ import { CaptureProfilesPanel } from "./CaptureProfilesPanel";
 const storeMocks = vi.hoisted(() => ({
   createProfile: vi.fn(),
   deleteProfile: vi.fn(),
+  error: null as string | null,
   isRecorderActive: false,
   items: [] as CaptureProfile[],
   selectedProfileId: "poe1" as string | null,
@@ -24,6 +25,7 @@ vi.mock("~/renderer/store", () => ({
     selector({
       create: storeMocks.createProfile,
       delete: storeMocks.deleteProfile,
+      error: storeMocks.error,
       items: storeMocks.items,
       selectedProfileId: storeMocks.selectedProfileId,
       selectWithPreviewSource: storeMocks.selectProfileWithPreviewSource,
@@ -77,6 +79,7 @@ describe("CaptureProfilesPanel", () => {
     root = createRoot(container);
     storeMocks.createProfile.mockResolvedValue(undefined);
     storeMocks.deleteProfile.mockResolvedValue(undefined);
+    storeMocks.error = null;
     storeMocks.items = [
       createProfile({
         id: "default-capture-poe1",
@@ -210,6 +213,16 @@ describe("CaptureProfilesPanel", () => {
 
     expect(container.textContent).toContain(
       "Default profile will be recreated automatically.",
+    );
+  });
+
+  it("shows profile creation outcomes from the workflow", async () => {
+    storeMocks.error =
+      "The profile was saved, but profiles could not refresh: offline";
+    await renderPanel();
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "profiles could not refresh",
     );
   });
 });

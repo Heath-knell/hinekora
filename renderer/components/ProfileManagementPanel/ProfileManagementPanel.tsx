@@ -17,6 +17,7 @@ interface ProfileManagementPanelProps {
   disabled?: boolean;
   disabledTitle?: string;
   emptyMessage: string;
+  error?: string | null;
   initialName: string;
   inputLabel: string;
   items: ProfileManagementPanelItem[];
@@ -32,6 +33,7 @@ function ProfileManagementPanel({
   disabled = false,
   disabledTitle,
   emptyMessage,
+  error,
   initialName,
   inputLabel,
   items,
@@ -107,6 +109,11 @@ function ProfileManagementPanel({
           Add
         </button>
       </div>
+      {error && (
+        <p className="m-0 text-error text-sm" role="alert">
+          {error}
+        </p>
+      )}
       <div className="grid gap-1.5">
         {items.map((item) => (
           <div

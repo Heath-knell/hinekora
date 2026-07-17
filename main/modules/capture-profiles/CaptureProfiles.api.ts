@@ -1,5 +1,7 @@
 import { ipcRenderer } from "electron";
 
+import { unwrapIpcResult } from "~/main/utils/ipc-api";
+
 import type {
   CaptureProfile,
   CaptureProfileCreateInput,
@@ -11,11 +13,15 @@ const CaptureProfilesAPI = {
   list: (): Promise<CaptureProfile[]> =>
     ipcRenderer.invoke(CaptureProfilesChannel.List),
   create: (input: CaptureProfileCreateInput): Promise<CaptureProfile> =>
-    ipcRenderer.invoke(CaptureProfilesChannel.Create, input),
+    ipcRenderer
+      .invoke(CaptureProfilesChannel.Create, input)
+      .then(unwrapIpcResult),
   update: (input: CaptureProfileUpdateInput): Promise<CaptureProfile> =>
-    ipcRenderer.invoke(CaptureProfilesChannel.Update, input),
+    ipcRenderer
+      .invoke(CaptureProfilesChannel.Update, input)
+      .then(unwrapIpcResult),
   delete: (id: string): Promise<void> =>
-    ipcRenderer.invoke(CaptureProfilesChannel.Delete, id),
+    ipcRenderer.invoke(CaptureProfilesChannel.Delete, id).then(unwrapIpcResult),
   onChanged: (callback: (profiles: CaptureProfile[]) => void): (() => void) => {
     const listener = (
       _event: Electron.IpcRendererEvent,

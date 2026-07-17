@@ -6,6 +6,7 @@ import {
   AppSettingsSchema,
   createDefaultSettings,
   getLeagueSettingKey,
+  normalizePersistedRecordingOutputResolution,
 } from "~/types";
 
 class SettingsStoreRepository {
@@ -23,6 +24,12 @@ class SettingsStoreRepository {
 
     for (const row of rows) {
       values[row.key] = JSON.parse(row.value_json);
+    }
+    if (Object.hasOwn(values, "recordingOutputResolution")) {
+      values.recordingOutputResolution =
+        normalizePersistedRecordingOutputResolution(
+          values.recordingOutputResolution,
+        );
     }
 
     const defaults = createDefaultSettings();

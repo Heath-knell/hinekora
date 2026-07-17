@@ -13,7 +13,11 @@ import type {
   BookmarkLibraryPage,
   BookmarkLibraryQuery,
 } from "~/main/modules/bookmarks";
-import type { ManagedRecorderCaptureMode } from "~/main/modules/managed-recorder/ManagedRecorder.dto";
+import type {
+  ManagedRecorderCaptureMode,
+  ManagedRecordingStorageEstimate,
+  ManagedRecordingStorageEstimateConfiguration,
+} from "~/main/modules/managed-recorder/ManagedRecorder.dto";
 import type {
   PoeProcessState,
   PoeProcessStatesByGame,
@@ -51,6 +55,7 @@ import type {
   AppSetupStep,
   CapturePreviewSource,
   CaptureProfile,
+  CaptureProfileSettingsUpdate,
   CaptureProfileUpdateInput,
   ClientLogStatus,
   GameId,
@@ -109,7 +114,10 @@ export interface CaptureProfilesSlice {
     selectedProfileId: string | null;
     isProfileUnlocked: boolean;
     hydrate: () => Promise<void>;
-    create: (name: string) => Promise<void>;
+    create: (
+      name: string,
+      settings?: CaptureProfileSettingsUpdate,
+    ) => Promise<CaptureProfileCreateResult>;
     update: (input: CaptureProfileUpdateInput) => Promise<void>;
     delete: (id: string) => Promise<void>;
     select: (id: string) => void;
@@ -118,6 +126,28 @@ export interface CaptureProfilesSlice {
     setProfileUnlocked: (isUnlocked: boolean) => void;
     toggleProfileLock: () => void;
     startListening: () => () => void;
+  };
+}
+
+export type CaptureProfileCreateResult =
+  | { profile: CaptureProfile; status: "applied" }
+  | { message: string; profile: CaptureProfile; status: "created-not-applied" }
+  | { message: string; status: "failed" }
+  | { status: "blocked" };
+
+export interface CaptureGuideSlice {
+  captureGuide: {
+    applyingTemplateId: string | null;
+    applicationError: string | null;
+    applicationMessage: string | null;
+    errorsByKey: Record<string, string | undefined>;
+    estimatesByKey: Record<string, ManagedRecordingStorageEstimate | undefined>;
+    pendingKeys: Record<string, boolean | undefined>;
+    loadEstimates: (
+      configurations: ManagedRecordingStorageEstimateConfiguration[],
+    ) => Promise<void>;
+    applyTemplate: (templateId: string) => Promise<void>;
+    resetApplicationStatus: () => void;
   };
 }
 
@@ -357,6 +387,7 @@ export type BoundStore = AppMenuSlice &
   AppSetupSlice &
   ProfilesSlice &
   CaptureProfilesSlice &
+  CaptureGuideSlice &
   CropEditorSlice &
   OnboardingSlice &
   EditorSlice &

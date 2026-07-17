@@ -3565,6 +3565,85 @@ describe("ManagedRecorderService", () => {
     expect(
       await handlers.get(ManagedRecorderChannel.GetCaptureMode)?.({}),
     ).toBe("rewind");
+    expect(
+      await handlers.get(ManagedRecorderChannel.GetRecordingStorageEstimates)?.(
+        {},
+        {
+          configurations: [
+            {
+              durationMinutes: 60,
+              encoder: "hardware_h265",
+              fps: 60,
+              key: "planner",
+              quality: "moderate",
+              resolution: "1920x1080",
+            },
+          ],
+        },
+      ),
+    ).toMatchObject({
+      configurations: [
+        {
+          key: "planner",
+          requestedEncoder: "hardware_h265",
+          rows: [
+            expect.objectContaining({
+              estimates: [expect.objectContaining({ durationMinutes: 60 })],
+              resolution: "1920x1080",
+            }),
+          ],
+        },
+      ],
+    });
+    expect(
+      await handlers.get(ManagedRecorderChannel.GetRecordingStorageEstimates)?.(
+        {},
+        {
+          configurations: [
+            {
+              encoder: "hardware_h265",
+              fps: 120,
+              key: "planner",
+              quality: "moderate",
+            },
+          ],
+        },
+      ),
+    ).toMatchObject({ ok: false });
+    expect(
+      await handlers.get(ManagedRecorderChannel.GetRecordingStorageEstimates)?.(
+        {},
+        {
+          configurations: [
+            {
+              durationMinutes: 60,
+              encoder: "hardware_h265",
+              fps: 60,
+              key: "planner",
+              quality: "moderate",
+              resolution: "native",
+            },
+          ],
+        },
+      ),
+    ).toMatchObject({ ok: false });
+    expect(
+      await handlers.get(ManagedRecorderChannel.GetRecordingStorageEstimates)?.(
+        {},
+        {
+          configurations: [
+            {
+              durationMinutes: 1_441,
+              encoder: "hardware_h265",
+              fps: 60,
+              key: "planner",
+              quality: "moderate",
+              resolution: "1920x1080",
+            },
+          ],
+        },
+      ),
+    ).toMatchObject({ ok: false });
     await expect(
       handlers.get(ManagedRecorderChannel.ListAudioDevices)?.({}),
     ).resolves.toEqual({
@@ -4020,6 +4099,10 @@ describe("ManagedRecorderService", () => {
       width: 1280,
       height: 720,
     });
+    expect(internals.resolveRecordingResolution("854x480")).toEqual({
+      width: 1280,
+      height: 720,
+    });
     expect(internals.resolveRecordingResolution("native")).toEqual({
       width: 1920,
       height: 1080,
@@ -4060,8 +4143,8 @@ describe("ManagedRecorderService", () => {
     electronMocks.getAllDisplays.mockReturnValue([]);
     internals.captureSourceResolution = { width: 1024, height: 768 };
     expect(internals.resolveRecordingResolution("native")).toEqual({
-      width: 1024,
-      height: 768,
+      width: 1280,
+      height: 720,
     });
 
     internals.captureSourceResolution = null;

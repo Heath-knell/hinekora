@@ -10,9 +10,11 @@ import { join } from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 
+import { managedRecordingStorageEstimateDurations } from "../ManagedRecorder.dto";
 import {
   collectRecordingFilePaths,
   createFittedSceneItemPosition,
+  createManagedRecordingStorageEstimate,
   findNewestRecordingFile,
   formatRecordingResolution,
   formatRecordingTimestamp,
@@ -288,6 +290,102 @@ describe("ManagedRecorder utils", () => {
     ).toBe("obs_qsv11_v2");
     expect(resolveManagedVideoEncoder("hardware_h264", ["obs_x264"])).toBe(
       "obs_x264",
+    );
+  });
+
+  it("estimates storage for the selected planning configuration", () => {
+    const configuration = {
+      encoder: "hardware_h265" as const,
+      fps: 60 as const,
+      key: "planner",
+      quality: "moderate" as const,
+    };
+    const estimate = createManagedRecordingStorageEstimate(configuration);
+
+    expect(estimate).toMatchObject({
+      fps: 60,
+      key: "planner",
+      quality: "moderate",
+      requestedEncoder: "hardware_h265",
+    });
+    expect(estimate.rows).toHaveLength(5);
+    expect(
+      estimate.rows[0]?.estimates.map((item) => item.durationMinutes),
+    ).toEqual(
+      managedRecordingStorageEstimateDurations.map(
+        (duration) => duration.minutes,
+      ),
+    );
+    expect(estimate.rows[0]?.estimates[0]?.estimatedBytes).toBeGreaterThan(0);
+  });
+
+  it("limits template estimates to the requested resolution and duration", () => {
+    const estimate = createManagedRecordingStorageEstimate({
+      durationMinutes: 60,
+      encoder: "hardware_h264",
+      fps: 60,
+      key: "template",
+      quality: "moderate",
+      resolution: "1920x1080",
+    });
+
+    expect(estimate.rows).toEqual([
+      expect.objectContaining({
+        estimates: [
+          {
+            durationMinutes: 60,
+            estimatedBytes: 5_486_400_000,
+          },
+        ],
+        resolution: "1920x1080",
+      }),
+    ]);
+  });
+
+  it("keeps the planning model anchored and monotonic", () => {
+    const createEstimate = (
+      encoder: "hardware_av1" | "hardware_h264" | "hardware_h265",
+      fps: 30 | 60,
+      quality: "low" | "moderate" | "ultra",
+    ) =>
+      createManagedRecordingStorageEstimate({
+        encoder,
+        fps,
+        key: "calibration",
+        quality,
+      });
+    const findOneHour1080pEstimate = (
+      estimate: ReturnType<typeof createEstimate>,
+    ) =>
+      estimate.rows
+        .find((row) => row.resolution === "1920x1080")
+        ?.estimates.find((duration) => duration.durationMinutes === 60)
+        ?.estimatedBytes ?? 0;
+    const h264 = createEstimate("hardware_h264", 60, "moderate");
+    const h265 = createEstimate("hardware_h265", 60, "moderate");
+    const av1 = createEstimate("hardware_av1", 60, "moderate");
+
+    expect(
+      h264.rows
+        .find((row) => row.resolution === "1920x1080")
+        ?.estimates.find((duration) => duration.durationMinutes === 60),
+    ).toEqual({
+      durationMinutes: 60,
+      estimatedBytes: 5_486_400_000,
+    });
+    expect(findOneHour1080pEstimate(av1)).toBeLessThan(
+      findOneHour1080pEstimate(h265),
+    );
+    expect(findOneHour1080pEstimate(h265)).toBeLessThan(
+      findOneHour1080pEstimate(h264),
+    );
+    expect(
+      findOneHour1080pEstimate(createEstimate("hardware_h264", 30, "moderate")),
+    ).toBeLessThan(findOneHour1080pEstimate(h264));
+    expect(
+      findOneHour1080pEstimate(createEstimate("hardware_h264", 60, "low")),
+    ).toBeLessThan(
+      findOneHour1080pEstimate(createEstimate("hardware_h264", 60, "ultra")),
     );
   });
 

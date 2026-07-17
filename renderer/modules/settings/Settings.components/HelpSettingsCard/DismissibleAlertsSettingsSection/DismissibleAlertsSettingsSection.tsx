@@ -30,6 +30,12 @@ const dismissibleAlertRows: ReadonlyArray<{
   },
   {
     description:
+      "Links from dashboard capture settings to the capture template guide.",
+    settingKey: "captureTemplatesBannerDismissed",
+    title: "Capture templates banner",
+  },
+  {
+    description:
       "Reminds you that Manual Replays and Death Clips are available on the Clips page.",
     settingKey: "clipPreviewInfoAlertDismissed",
     title: "Clip preview info alert",

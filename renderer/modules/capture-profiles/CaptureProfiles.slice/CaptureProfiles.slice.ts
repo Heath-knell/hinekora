@@ -1,5 +1,6 @@
 import {
   createCaptureTargetFromPreviewSource,
+  isCapturePreviewSourceAvailable,
   resolveCapturePreviewSourceId,
 } from "~/renderer/modules/capture-preview/CapturePreview.utils/CapturePreview.utils";
 import {
@@ -24,6 +25,7 @@ import type {
 import type {
   AppSettings,
   CaptureProfile,
+  CaptureProfileSettingsUpdate,
   CaptureProfileUpdateInput,
   CaptureTarget,
   GameId,
@@ -124,30 +126,93 @@ export const createCaptureProfilesSlice: BoundStoreStateCreator<
           });
         }
       },
-      create: async (name: string) => {
+      create: async (
+        name: string,
+        settings: CaptureProfileSettingsUpdate = {},
+      ) => {
         if (isCaptureProfileMutationBlocked(get)) {
-          return;
+          set((state) => {
+            state.captureProfiles.error =
+              "Stop recording or rewind before creating a capture profile.";
+          });
+          return { status: "blocked" };
         }
 
         const activeGame = get().settings.value?.activeGame ?? "poe1";
-        const created = await window.electron.captureProfiles.create({
-          name,
-          game: activeGame,
+        const captureTarget = resolveCaptureTargetForNewProfile(
+          get,
+          activeGame,
+        );
+        set((state) => {
+          state.captureProfiles.error = null;
         });
-        if (isCaptureProfileMutationBlocked(get)) {
-          return;
+        let created: CaptureProfile;
+        try {
+          created = await window.electron.captureProfiles.create({
+            ...(captureTarget ? { captureTarget } : {}),
+            name,
+            game: activeGame,
+            ...settings,
+          });
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : "Unable to create profile";
+          set((state) => {
+            state.captureProfiles.error = message;
+          });
+          return { message, status: "failed" };
         }
-        const items = await window.electron.captureProfiles.list();
+        const reportCreatedNotApplied = (message: string) => {
+          set((state) => {
+            state.captureProfiles.error = message;
+          });
+
+          return {
+            message,
+            profile: created,
+            status: "created-not-applied" as const,
+          };
+        };
         if (isCaptureProfileMutationBlocked(get)) {
-          return;
+          return reportCreatedNotApplied(
+            "The profile was saved, but recording started before it could be selected.",
+          );
         }
+        let items: CaptureProfile[];
+        try {
+          items = await window.electron.captureProfiles.list();
+        } catch (error) {
+          return reportCreatedNotApplied(
+            error instanceof Error
+              ? `The profile was saved, but profiles could not refresh: ${error.message}`
+              : "The profile was saved, but profiles could not refresh.",
+          );
+        }
+        if (isCaptureProfileMutationBlocked(get)) {
+          return reportCreatedNotApplied(
+            "The profile was saved, but recording started before it could be selected.",
+          );
+        }
+        const previousSelectedProfileId =
+          get().captureProfiles.selectedProfileId;
         set((state) => {
           state.captureProfiles.items = items;
           state.captureProfiles.selectedProfileId = created.id;
           state.captureProfiles.error = null;
         });
+        const wasApplied = await applySelectedProfileSettings(created);
+        if (!wasApplied) {
+          set((state) => {
+            state.captureProfiles.selectedProfileId = previousSelectedProfileId;
+          });
+          return reportCreatedNotApplied(
+            get().captureProfiles.error ??
+              "The profile was saved, but its settings could not be selected.",
+          );
+        }
+
         rememberProfileSelection(created);
-        void applySelectedProfileSettings(created);
+        return { profile: created, status: "applied" };
       },
       update: async (input: CaptureProfileUpdateInput) => {
         if (isCaptureProfileMutationBlocked(get)) {
@@ -417,6 +482,32 @@ async function persistCurrentSettingsToSelectedCaptureProfile(
   }
 }
 
+function resolveCaptureTargetForNewProfile(
+  get: () => BoundStore,
+  game: GameId,
+): CaptureTarget | undefined {
+  const state = get();
+  const selectedSource =
+    state.capturePreview.sources.find(
+      (source) => source.id === state.capturePreview.selectedSourceId,
+    ) ?? null;
+  if (
+    selectedSource &&
+    isCapturePreviewSourceAvailable(selectedSource) &&
+    (!selectedSource.game || selectedSource.game === game)
+  ) {
+    return createCaptureTargetFromPreviewSource(selectedSource);
+  }
+
+  const selectedProfile = resolveCaptureProfileForGame(
+    state.captureProfiles.items,
+    state.captureProfiles.selectedProfileId,
+    game,
+  );
+
+  return selectedProfile?.captureTarget ?? undefined;
+}
+
 function selectCapturePreviewSourceForGame(
   set: Parameters<BoundStoreStateCreator<CaptureProfilesSlice>>[0],
   get: () => BoundStore,
@@ -492,7 +583,7 @@ function createSelectedProfileSettingsApplier(
   getSelectedProfileIdsByGame: () => Partial<Record<GameId, string>>,
 ): (
   profile: Parameters<typeof createSettingsUpdateFromCaptureProfile>[0],
-) => Promise<void> {
+) => Promise<boolean> {
   let requestVersion = 0;
 
   return async (profile) => {
@@ -517,28 +608,31 @@ function createSelectedProfileSettingsApplier(
         includeActiveLeague: canNormalizeLeagueSelection(get, profile.game),
       },
     );
+    if (isCaptureProfileMutationBlocked(get)) {
+      return false;
+    }
     if (
-      isCaptureProfileMutationBlocked(get) ||
-      (currentSettings &&
-        !shouldApplyCaptureProfileSettings(currentSettings, settingsUpdate))
+      currentSettings &&
+      !shouldApplyCaptureProfileSettings(currentSettings, settingsUpdate)
     ) {
-      return;
+      return true;
     }
 
     requestVersion += 1;
     const currentRequestVersion = requestVersion;
     try {
       if (isCaptureProfileMutationBlocked(get)) {
-        return;
+        return false;
       }
 
       await settings.update(settingsUpdate);
+      return true;
     } catch (error) {
       if (
         requestVersion !== currentRequestVersion ||
         isCaptureProfileMutationBlocked(get)
       ) {
-        return;
+        return false;
       }
 
       set((state) => {
@@ -547,6 +641,7 @@ function createSelectedProfileSettingsApplier(
             ? error.message
             : "Unable to persist selected capture profile";
       });
+      return false;
     }
   };
 }

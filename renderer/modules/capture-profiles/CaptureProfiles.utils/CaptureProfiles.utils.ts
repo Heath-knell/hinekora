@@ -6,15 +6,10 @@ import {
 import type {
   AppSettings,
   CaptureProfile,
-  CaptureProfileUpdateInput,
+  CaptureProfileSettingsUpdate,
   GameId,
 } from "~/types";
 import { captureProfileSettingKeys } from "~/types";
-
-type CaptureProfileSettingKey = (typeof captureProfileSettingKeys)[number];
-type CaptureProfileSettingsUpdate = Partial<
-  Pick<CaptureProfileUpdateInput, CaptureProfileSettingKey>
->;
 
 const captureProfileGameOrder: Record<GameId, number> = {
   poe1: 0,
@@ -157,7 +152,6 @@ function pickCaptureProfileSettingsUpdate(
   return Object.keys(update).length > 0 ? update : null;
 }
 
-export type { CaptureProfileSettingKey, CaptureProfileSettingsUpdate };
 export {
   captureProfileSettingKeys,
   createSettingsUpdateFromCaptureProfile,

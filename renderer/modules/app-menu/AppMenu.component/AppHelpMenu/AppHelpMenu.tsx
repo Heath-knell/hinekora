@@ -1,6 +1,12 @@
 import { Link } from "@tanstack/react-router";
 import { type MouseEvent, useRef } from "react";
-import { FiGithub, FiHeart, FiHelpCircle, FiSettings } from "react-icons/fi";
+import {
+  FiBookOpen,
+  FiGithub,
+  FiHeart,
+  FiHelpCircle,
+  FiSettings,
+} from "react-icons/fi";
 import { IoNewspaperOutline } from "react-icons/io5";
 import { MdOutlineNewReleases } from "react-icons/md";
 import { RiDiscordLine } from "react-icons/ri";
@@ -47,6 +53,15 @@ function AppHelpMenu() {
           >
             <span className="text-sm">Settings</span>
             <FiSettings size={14} className="text-base-content/60" />
+          </Link>
+        </li>
+        <li>
+          <Link
+            to="/capture-guide"
+            className="flex items-center justify-between gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-base-300 no-drag"
+          >
+            <span className="text-sm">Capture Guide</span>
+            <FiBookOpen size={14} className="text-base-content/60" />
           </Link>
         </li>
 

@@ -46,6 +46,9 @@ describe("AppHelpMenu", () => {
     });
     const details = container.querySelector("details");
     const separators = container.querySelectorAll('[role="separator"]');
+    const captureGuideLink = container.querySelector<HTMLAnchorElement>(
+      'a[href="/capture-guide"]',
+    );
     const whatsNewButton = Array.from(
       container.querySelectorAll("button"),
     ).find((button) => button.textContent?.includes("What's New"));
@@ -55,6 +58,7 @@ describe("AppHelpMenu", () => {
     details.setAttribute("open", "");
 
     expect(separators).toHaveLength(3);
+    expect(captureGuideLink?.textContent).toContain("Capture Guide");
     for (const separator of separators) {
       expect(separator.className).toContain("divider");
       expect(separator.className).toContain("h-px");

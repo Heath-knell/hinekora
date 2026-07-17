@@ -47,6 +47,19 @@ describe("CaptureProfilesRepository", () => {
       recordingAutoStartMode: "off",
       isDefault: false,
     });
+
+    expect(
+      mapCaptureProfileRow({
+        id: "capture-profile-unsupported-resolution",
+        name: "Older imported profile",
+        game: "poe1",
+        data_json: JSON.stringify({
+          recordingOutputResolution: "854x480",
+        }),
+        created_at: "2026-07-01T12:00:00.000Z",
+        updated_at: "2026-07-01T12:00:00.000Z",
+      }).recordingOutputResolution,
+    ).toBe("native");
   });
 
   it("creates, updates, lists, upserts, and deletes capture profiles", () => {
@@ -54,21 +67,38 @@ describe("CaptureProfilesRepository", () => {
     const repository = new CaptureProfilesRepository(database);
 
     const created = repository.create({
+      captureTarget: {
+        id: "display-2",
+        kind: "display",
+        label: "Display 2",
+      },
       name: "Recording setup",
       game: "poe2",
+      recordingEncoder: "hardware_h265",
+      recordingFps: 60,
+      recordingOutputResolution: "1280x720",
+      recordingRunQuality: "low",
     });
 
     expect(repository.list()).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: created.id })]),
     );
     expect(created).toMatchObject({
-      captureTarget: null,
+      captureTarget: {
+        id: "display-2",
+        kind: "display",
+        label: "Display 2",
+      },
       deathClipSeconds: 10,
       game: "poe2",
       isDefault: false,
       recordingAutoStartMode: "off",
       recordingHideOverlaysFromRecording: true,
       recordingHideOverlaysFromRewind: true,
+      recordingEncoder: "hardware_h265",
+      recordingFps: 60,
+      recordingOutputResolution: "1280x720",
+      recordingRunQuality: "low",
     });
 
     const updated = repository.update({
@@ -109,7 +139,7 @@ describe("CaptureProfilesRepository", () => {
         recordingFps: 120,
         recordingHideOverlaysFromRecording: false,
         recordingHideOverlaysFromRewind: false,
-        recordingOutputResolution: "1080p",
+        recordingOutputResolution: "1920x1080",
         recordingRunQuality: "high",
       }),
     ).toMatchObject({
@@ -122,7 +152,7 @@ describe("CaptureProfilesRepository", () => {
       recordingFps: 120,
       recordingHideOverlaysFromRecording: false,
       recordingHideOverlaysFromRewind: false,
-      recordingOutputResolution: "1080p",
+      recordingOutputResolution: "1920x1080",
       recordingRunQuality: "high",
     });
 

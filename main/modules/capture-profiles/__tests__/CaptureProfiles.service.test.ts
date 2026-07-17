@@ -111,11 +111,19 @@ describe("CaptureProfilesService", () => {
     const created = service.create({
       name: "Bossing capture",
       game: "poe2",
+      recordingEncoder: "hardware_h265",
+      recordingFps: 60,
+      recordingOutputResolution: "2560x1440",
     });
     const updated = service.update({
       id: created.id,
       deathClipSeconds: 30,
       recordingAutoStartMode: "rewind",
+    });
+    expect(created).toMatchObject({
+      recordingEncoder: "hardware_h265",
+      recordingFps: 60,
+      recordingOutputResolution: "2560x1440",
     });
     service.replaceAll([]);
     expect(service.list()).toEqual(
@@ -252,9 +260,17 @@ describe("CaptureProfilesService", () => {
 
     const created = await handlers.get(CaptureProfilesChannel.Create)?.(
       {},
-      { name: "IPC Capture", game: "poe1" },
+      {
+        name: "IPC Capture",
+        game: "poe1",
+        recordingOutputResolution: "1080p",
+      },
     );
-    expect(created).toMatchObject({ name: "IPC Capture", game: "poe1" });
+    expect(created).toMatchObject({
+      name: "IPC Capture",
+      game: "poe1",
+      recordingOutputResolution: "1920x1080",
+    });
 
     expect(await handlers.get(CaptureProfilesChannel.List)?.({})).toEqual(
       expect.arrayContaining([
@@ -301,6 +317,16 @@ describe("CaptureProfilesService", () => {
       ok: false,
       error: "capture profile must be an object",
     });
+    expect(
+      await handlers.get(CaptureProfilesChannel.Create)?.(
+        {},
+        {
+          name: "Unsupported resolution",
+          game: "poe1",
+          recordingOutputResolution: "854x480",
+        },
+      ),
+    ).toMatchObject({ ok: false });
     expect(
       await handlers.get(CaptureProfilesChannel.Update)?.({}, null),
     ).toEqual({

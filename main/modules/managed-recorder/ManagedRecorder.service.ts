@@ -45,9 +45,11 @@ import type {
   ManagedRecorderAudioDevices,
   ManagedRecorderCaptureMode,
   ManagedRecorderListAudioDevicesOptions,
+  ManagedRecordingStorageEstimateResponse,
   ManagedReplayKind,
   ManagedReplaySaveResult,
 } from "./ManagedRecorder.dto";
+import { ManagedRecordingStorageEstimateRequestSchema } from "./ManagedRecorder.dto";
 import {
   importNoobsModule,
   loadNoobsApi,
@@ -62,6 +64,7 @@ import {
   resolveReplaySaveWaitMs as calculateReplaySaveWaitMs,
   collectRecordingFilePaths,
   createFittedSceneItemPosition,
+  createManagedRecordingStorageEstimate,
   findNewestRecordingFile,
   formatRecordingResolution,
   type ManagedRecorderResolution,
@@ -119,6 +122,10 @@ const WINDOWS_PATH_DELIMITER = ";";
 const FALLBACK_RECORDING_RESOLUTION: ManagedRecorderResolution = {
   width: 1920,
   height: 1080,
+};
+const MINIMUM_RECORDING_RESOLUTION: ManagedRecorderResolution = {
+  width: 1280,
+  height: 720,
 };
 const REPLAY_CLIP_OUTPUT_RESOLUTION: ManagedRecorderResolution = {
   width: 1920,
@@ -251,6 +258,18 @@ class ManagedRecorderService {
     this.refreshRuntimeAvailability();
 
     return this.status;
+  }
+
+  getRecordingStorageEstimates(
+    input: unknown,
+  ): ManagedRecordingStorageEstimateResponse {
+    const parsed = ManagedRecordingStorageEstimateRequestSchema.parse(input);
+
+    return {
+      configurations: parsed.configurations.map((configuration) =>
+        createManagedRecordingStorageEstimate(configuration),
+      ),
+    };
   }
 
   getCaptureMode(): ManagedRecorderCaptureMode {
@@ -1276,7 +1295,6 @@ class ManagedRecorderService {
           encoderCount: encoders.length,
         },
       );
-
       return encoders;
     } catch (error) {
       logWarn(MANAGED_RECORDER_LOG_SCOPE, "Failed to list video encoders", {
@@ -2188,18 +2206,26 @@ class ManagedRecorderService {
         : sourceResolution
           ? "source"
           : "fallback";
-    const resolution = resolveManagedRecordingResolution(
+    const resolvedResolution = resolveManagedRecordingResolution(
       value,
       nativeResolution,
       sourceResolution,
       FALLBACK_RECORDING_RESOLUTION,
     );
+    const resolution =
+      resolvedResolution.width < MINIMUM_RECORDING_RESOLUTION.width ||
+      resolvedResolution.height < MINIMUM_RECORDING_RESOLUTION.height
+        ? MINIMUM_RECORDING_RESOLUTION
+        : resolvedResolution;
 
     logInfo(MANAGED_RECORDER_LOG_SCOPE, "Resolved recording resolution", {
       requested: value,
       source: resolutionSource,
       targetKind: target.kind,
       targetId: target.id,
+      clampedToMinimum:
+        resolution.height !== resolvedResolution.height ||
+        resolution.width !== resolvedResolution.width,
       width: resolution.width,
       height: resolution.height,
     });
@@ -2460,6 +2486,17 @@ class ManagedRecorderService {
       ManagedRecorderChannel.GetStatus,
       [WindowName.Main, WindowName.RecorderOverlay],
       () => this.getStatus(),
+    );
+    registerGuardedIpcHandler(
+      ManagedRecorderChannel.GetRecordingStorageEstimates,
+      [WindowName.Main],
+      async (_event, input) => {
+        try {
+          return await this.getRecordingStorageEstimates(input);
+        } catch (error) {
+          return handleValidationError(error);
+        }
+      },
     );
     registerGuardedIpcHandler(
       ManagedRecorderChannel.ListAudioDevices,

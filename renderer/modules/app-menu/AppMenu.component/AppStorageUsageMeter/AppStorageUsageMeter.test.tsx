@@ -106,6 +106,9 @@ describe("AppStorageUsageMeter", () => {
     expect(button.getAttribute("aria-label")).toBe(
       "0.3 GB used of 48 GB. Open data and storage settings",
     );
+    expect(button.querySelector(".font-mono")?.className).toContain(
+      "tabular-nums",
+    );
     expect(Number(progress?.getAttribute("aria-valuenow"))).toBeCloseTo(0.625);
     expect(storeMocks.refreshUsage).not.toHaveBeenCalled();
   });

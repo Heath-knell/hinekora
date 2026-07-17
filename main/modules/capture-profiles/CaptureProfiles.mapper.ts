@@ -3,6 +3,7 @@ import {
   CaptureProfileSchema,
   createDefaultCaptureProfile,
   type GameId,
+  normalizePersistedRecordingOutputResolution,
 } from "~/types";
 
 interface CaptureProfileRow {
@@ -24,10 +25,19 @@ function mapCaptureProfileRow(row: CaptureProfileRow): CaptureProfile {
     },
     { id: row.id, isDefault: false },
   );
+  const recordingOutputResolution = Object.hasOwn(
+    parsedData,
+    "recordingOutputResolution",
+  )
+    ? normalizePersistedRecordingOutputResolution(
+        Reflect.get(parsedData, "recordingOutputResolution"),
+      )
+    : defaults.recordingOutputResolution;
 
   return CaptureProfileSchema.parse({
     ...defaults,
     ...parsedData,
+    recordingOutputResolution,
     id: row.id,
     name: row.name,
     game: row.game as GameId,

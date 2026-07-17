@@ -132,7 +132,7 @@ describe("HelpSettingsCard", () => {
     );
 
     expect(container.textContent).toContain("Dismissible alerts");
-    expect(container.textContent).toContain("1 / 4 dismissed");
+    expect(container.textContent).toContain("1 / 5 dismissed");
     expect(container.textContent).toContain("Clip preview info alert");
     expect(container.textContent).toContain("Dismissed");
     expect(showGroupPlayDeathAlert?.checked).toBe(false);
@@ -143,6 +143,27 @@ describe("HelpSettingsCard", () => {
 
     expect(storeMocks.updateSettings).toHaveBeenCalledWith({
       groupPlayDeathAlertDismissed: false,
+    });
+  });
+
+  it("restores the capture templates banner from help settings", async () => {
+    storeMocks.settingsValue = {
+      ...createDefaultSettings(),
+      captureTemplatesBannerDismissed: true,
+    };
+
+    await renderHelpSettings();
+    const showCaptureTemplatesBanner =
+      container.querySelector<HTMLInputElement>(
+        'input[aria-label="Show Capture templates banner"]',
+      );
+
+    expect(showCaptureTemplatesBanner?.checked).toBe(false);
+    await act(async () => {
+      showCaptureTemplatesBanner?.click();
+    });
+    expect(storeMocks.updateSettings).toHaveBeenCalledWith({
+      captureTemplatesBannerDismissed: false,
     });
   });
 

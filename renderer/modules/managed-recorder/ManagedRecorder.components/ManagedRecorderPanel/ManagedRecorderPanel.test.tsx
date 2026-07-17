@@ -5,6 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ManagedRecorderPanel } from "./ManagedRecorderPanel";
 
 vi.mock(
+  "~/renderer/modules/managed-recorder/ManagedRecorder.components/CaptureTemplatesBanner/CaptureTemplatesBanner",
+  () => ({
+    CaptureTemplatesBanner: () => <div>Capture templates banner</div>,
+  }),
+);
+vi.mock(
   "~/renderer/modules/managed-recorder/ManagedRecorder.components/ManagedRecorderAudioSettingsCard/ManagedRecorderAudioSettingsCard",
   () => ({
     ManagedRecorderAudioSettingsCard: () => <div>Audio fields</div>,
@@ -76,6 +82,7 @@ describe("ManagedRecorderPanel", () => {
     expect(panel?.getAttribute("aria-labelledby")).toBe(
       "recorder-settings-tab-capture",
     );
+    expect(panel?.textContent).toContain("Capture templates banner");
 
     const rewindTab = Array.from(container.querySelectorAll("button")).find(
       (button) => button.textContent === "Rewind",

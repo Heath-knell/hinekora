@@ -5,12 +5,20 @@ import { detectPathOfExileWindowTitle } from "~/main/utils/path-of-exile-window-
 
 import {
   type CaptureTarget,
+  type ExplicitRecordingOutputResolution,
   normalizeRecordingEncoderChoice,
   type RecordingEncoder,
   type RecordingEncoderChoice,
   type RecordingQuality,
+  recordingEncoderStorageFactors,
+  recordingOutputResolutionDimensions,
 } from "~/types";
-import type { ManagedRecorderAudioDevice } from "./ManagedRecorder.dto";
+import {
+  type ManagedRecorderAudioDevice,
+  type ManagedRecordingStorageEstimate,
+  type ManagedRecordingStorageEstimateConfiguration,
+  managedRecordingStorageEstimateDurations,
+} from "./ManagedRecorder.dto";
 
 const recordingExtensions = new Set([".flv", ".mkv", ".mov", ".mp4"]);
 const invalidObsDisplay = "DUMMY";
@@ -51,6 +59,15 @@ const hardwareAv1Encoders = [
   "av1_fallback_amf",
   "obs_qsv11_av1_soft",
 ];
+const recordingQualityBaseBitrates: Record<RecordingQuality, number> = {
+  high: 8_000_000,
+  low: 4_000_000,
+  moderate: 6_000_000,
+  ultra: 12_000_000,
+};
+const recordingStorageEstimateExpectedContentFactor = 1;
+const recordingStorageEstimateExpectedAudioBitrate = 192_000;
+const recordingStorageEstimateReferencePixels = 1920 * 1080;
 
 interface ManagedRecorderListItem {
   name: string;
@@ -324,6 +341,54 @@ export function resolveManagedVideoEncoder(
   );
 }
 
+export function createManagedRecordingStorageEstimate(
+  configuration: ManagedRecordingStorageEstimateConfiguration,
+): ManagedRecordingStorageEstimate {
+  const resolutionEntries = (
+    Object.entries(recordingOutputResolutionDimensions) as Array<
+      [ExplicitRecordingOutputResolution, { height: number; width: number }]
+    >
+  ).filter(
+    ([resolution]) =>
+      configuration.resolution === undefined ||
+      resolution === configuration.resolution,
+  );
+  const durations = configuration.durationMinutes
+    ? [{ minutes: configuration.durationMinutes }]
+    : managedRecordingStorageEstimateDurations;
+
+  return {
+    fps: configuration.fps,
+    key: configuration.key,
+    quality: configuration.quality,
+    requestedEncoder: configuration.encoder,
+    rows: resolutionEntries.map(([resolution, dimensions]) => {
+      const pixelFactor =
+        (dimensions.width * dimensions.height) /
+        recordingStorageEstimateReferencePixels;
+      const fpsFactor = configuration.fps / 30;
+      const videoBitrate =
+        recordingQualityBaseBitrates[configuration.quality] *
+        recordingEncoderStorageFactors[configuration.encoder] *
+        pixelFactor *
+        fpsFactor;
+
+      return {
+        estimates: durations.map((duration) => ({
+          durationMinutes: duration.minutes,
+          estimatedBytes: estimateRecordingStorageBytes(
+            videoBitrate * recordingStorageEstimateExpectedContentFactor +
+              recordingStorageEstimateExpectedAudioBitrate,
+            duration.minutes,
+          ),
+        })),
+        ...dimensions,
+        resolution,
+      };
+    }),
+  };
+}
+
 function resolveManagedEncoderCandidates(
   encoder: Exclude<RecordingEncoderChoice, "obs_x264">,
 ): string[] {
@@ -381,6 +446,13 @@ function resolveManagedVideoQualityValue(
 
 function isManagedSoftwareEncoder(encoder: string): boolean {
   return encoder === "obs_x264";
+}
+
+function estimateRecordingStorageBytes(
+  bitrateBitsPerSecond: number,
+  durationMinutes: number,
+): number {
+  return Math.round((bitrateBitsPerSecond * durationMinutes * 60) / 8);
 }
 
 export function createFittedSceneItemPosition(
@@ -556,3 +628,4 @@ export type {
   ManagedVideoEncoderSettings,
   ReplaySaveWaitInput,
 };
+export { recordingQualityBaseBitrates };

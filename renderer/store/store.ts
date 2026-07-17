@@ -7,6 +7,7 @@ import { createAppMenuSlice } from "~/renderer/modules/app-menu/AppMenu.slice/Ap
 import { createAppSetupSlice } from "~/renderer/modules/app-setup";
 import { createAuraOverlaySlice } from "~/renderer/modules/aura-overlay/AuraOverlay.slice/AuraOverlay.slice";
 import { createBookmarksSlice } from "~/renderer/modules/bookmarks/Bookmarks.slice/Bookmarks.slice";
+import { createCaptureGuideSlice } from "~/renderer/modules/capture-guide/CaptureGuide.slice/CaptureGuide.slice";
 import { createCapturePreviewSlice } from "~/renderer/modules/capture-preview/CapturePreview.slice/CapturePreview.slice";
 import { createCaptureProfilesSlice } from "~/renderer/modules/capture-profiles/CaptureProfiles.slice/CaptureProfiles.slice";
 import { createChangelogSlice } from "~/renderer/modules/changelog/Changelog.slice/Changelog.slice";
@@ -49,6 +50,7 @@ export const useBoundStore = create<BoundStore>()(
       const bookmarksSlice = createBookmarksSlice(...args);
       const appSetupSlice = createAppSetupSlice(...args);
       const profilesSlice = createProfilesSlice(...args);
+      const captureGuideSlice = createCaptureGuideSlice(...args);
       const captureProfilesSlice = createCaptureProfilesSlice(...args);
       const cropEditorSlice = createCropEditorSlice(...args);
       const onboardingSlice = createOnboardingSlice(...args);
@@ -75,6 +77,7 @@ export const useBoundStore = create<BoundStore>()(
         ...bookmarksSlice,
         ...appSetupSlice,
         ...profilesSlice,
+        ...captureGuideSlice,
         ...captureProfilesSlice,
         ...cropEditorSlice,
         ...onboardingSlice,

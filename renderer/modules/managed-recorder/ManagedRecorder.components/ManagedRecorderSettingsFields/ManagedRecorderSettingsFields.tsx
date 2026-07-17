@@ -8,24 +8,16 @@ import {
   normalizeRecordingEncoderChoice,
   type RecordingEncoderChoice,
   RecordingEncoderOptions,
+  type RecordingOutputResolution,
   type RecordingQuality,
 } from "~/types";
 import { useManagedRecorderSettingsDisabled } from "../../ManagedRecorder.hooks/useManagedRecorderSettingsDisabled/useManagedRecorderSettingsDisabled";
+import {
+  recordingFpsOptions,
+  recordingQualityOptions,
+  recordingResolutionOptions,
+} from "../../ManagedRecorder.utils/ManagedRecorder.utils";
 
-const recordingResolutionOptions = [
-  { value: "native", label: "Native source" },
-  { value: "1920x1080", label: "1920 x 1080" },
-  { value: "2560x1440", label: "2560 x 1440" },
-  { value: "3440x1440", label: "3440 x 1440" },
-  { value: "3840x2160", label: "3840 x 2160" },
-];
-const recordingFpsOptions = [30, 60];
-const recordingQualityOptions = [
-  { value: "low", label: "Low" },
-  { value: "moderate", label: "Moderate" },
-  { value: "high", label: "High" },
-  { value: "ultra", label: "Ultra" },
-] as const;
 const recordingFieldHelp = {
   resolution: "Sets video size. Native keeps the captured source resolution.",
   fps: "Sets capture frame rate. 60 FPS is smoother and uses more disk space and GPU/CPU than 30 FPS.",
@@ -63,7 +55,10 @@ function ManagedRecorderSettingsFields() {
       return;
     }
 
-    void updateSettings({ recordingOutputResolution: event.target.value });
+    void updateSettings({
+      recordingOutputResolution: event.target
+        .value as RecordingOutputResolution,
+    });
   };
   const handleFpsSelect = (event: MouseEvent<HTMLButtonElement>) => {
     if (disabled) {
@@ -71,7 +66,7 @@ function ManagedRecorderSettingsFields() {
     }
 
     const fps = Number(event.currentTarget.dataset.fps);
-    if (recordingFpsOptions.includes(fps)) {
+    if (recordingFpsOptions.some((option) => option === fps)) {
       void updateSettings({ recordingFps: fps });
     }
   };
