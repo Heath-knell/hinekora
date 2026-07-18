@@ -99,6 +99,21 @@ function hasAnyRunningPoeProcess(snapshot: PoeProcessSnapshot): boolean {
   );
 }
 
+function resolveRunningPoeGame(snapshot: PoeProcessSnapshot): GameId | null {
+  return resolveRunningPoeGameFromStates(snapshot.activeState, snapshot.states);
+}
+
+function resolveRunningPoeGameFromStates(
+  activeState: PoeProcessState | null,
+  states: Partial<PoeProcessStatesByGame> | null | undefined,
+): GameId | null {
+  if (activeState?.isRunning) {
+    return activeState.game;
+  }
+
+  return POE_PROCESS_GAMES.find((game) => states?.[game]?.isRunning) ?? null;
+}
+
 export type {
   PoeProcessError,
   PoeProcessRunningState,
@@ -115,4 +130,6 @@ export {
   hasAnyRunningPoeProcess,
   isPoeProcessSnapshotRunningForGame,
   POE_PROCESS_GAMES,
+  resolveRunningPoeGame,
+  resolveRunningPoeGameFromStates,
 };

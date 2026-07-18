@@ -45,8 +45,9 @@ class GridLinesOverlayService implements GameOverlayParticipant {
     private readonly coordinator: GameOverlayCoordinator,
     private readonly getContentProtectionEnabled = () => false,
     private readonly onOverlayFocusRelease = () => {},
+    ignorePoeFocus = () => false,
   ) {
-    this.coordinator.register(this);
+    this.coordinator.register(this, { ignorePoeFocus });
   }
 
   async selectCropRegion(
@@ -113,8 +114,9 @@ class GridLinesOverlayService implements GameOverlayParticipant {
     }
 
     const shouldFocus = !this.cropSelectorOverlayFocusActive;
-    this.coordinator.showGameOverlayWindow(this.cropSelectorWindow);
-    if (shouldFocus) {
+    const canShow = this.coordinator.canShowGameOverlays(this);
+    this.coordinator.showOrHideGameOverlayWindow(this.cropSelectorWindow, this);
+    if (canShow && shouldFocus) {
       this.cropSelectorWindow?.focus();
     }
   }

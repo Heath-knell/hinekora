@@ -27,6 +27,7 @@ const storeMocks = vi.hoisted(() => ({
   useAuraOverlayShallow: vi.fn(),
   updateProfile: vi.fn(),
   useCapturePreviewShallow: vi.fn(),
+  usePoeProcessSelector: vi.fn(),
   useProfilesShallow: vi.fn(),
   useSettingsSelector: vi.fn(),
 }));
@@ -35,14 +36,25 @@ const electronMocks = vi.hoisted(() => ({
   isAuraLocked: vi.fn(),
   onAuraAddRequested: vi.fn(),
   onAuraLockChanged: vi.fn(),
+  reportCaptureFailure: vi.fn(),
   selectCropRegion: vi.fn(),
   setAuraLocked: vi.fn(),
   showAura: vi.fn(),
 }));
 
+const captureStreamMocks = vi.hoisted(() => ({
+  useDesktopCaptureStream: vi.fn(() => ({
+    error: null as string | null,
+    isStarting: false,
+    stop: vi.fn(),
+    stream: null as MediaStream | null,
+  })),
+}));
+
 vi.mock("~/renderer/store", () => ({
   useAuraOverlayShallow: storeMocks.useAuraOverlayShallow,
   useCapturePreviewShallow: storeMocks.useCapturePreviewShallow,
+  usePoeProcessSelector: storeMocks.usePoeProcessSelector,
   useProfilesShallow: storeMocks.useProfilesShallow,
   useSettingsSelector: storeMocks.useSettingsSelector,
 }));
@@ -50,12 +62,7 @@ vi.mock("~/renderer/store", () => ({
 vi.mock(
   "~/renderer/modules/capture-preview/CapturePreview.hooks/useDesktopCaptureStream/useDesktopCaptureStream",
   () => ({
-    useDesktopCaptureStream: () => ({
-      error: null,
-      isStarting: false,
-      stop: vi.fn(),
-      stream: null,
-    }),
+    useDesktopCaptureStream: captureStreamMocks.useDesktopCaptureStream,
   }),
 );
 
@@ -136,6 +143,13 @@ describe("AuraOverlayPage", () => {
     vi.clearAllMocks();
     storeMocks.addAuraRequest = null;
     storeMocks.addingAuraShape = null;
+    captureStreamMocks.useDesktopCaptureStream.mockClear();
+    captureStreamMocks.useDesktopCaptureStream.mockReturnValue({
+      error: null,
+      isStarting: false,
+      stop: vi.fn(),
+      stream: null,
+    });
     storeMocks.setAddAuraRequest.mockClear();
     storeMocks.setAddAuraRequest.mockImplementation((request) => {
       storeMocks.addAuraRequest = request;
@@ -168,6 +182,9 @@ describe("AuraOverlayPage", () => {
     storeMocks.useSettingsSelector.mockImplementation((selector) =>
       selector({ value: { activeGame: "poe1" } }),
     );
+    storeMocks.usePoeProcessSelector.mockImplementation((selector) =>
+      selector({ state: { isRunning: false, processName: "" } }),
+    );
     storeMocks.useAuraOverlayShallow.mockImplementation((selector) =>
       selector({
         addAuraRequest: storeMocks.addAuraRequest,
@@ -179,6 +196,9 @@ describe("AuraOverlayPage", () => {
     Object.defineProperty(window, "electron", {
       configurable: true,
       value: {
+        capturePreview: {
+          reportFailure: electronMocks.reportCaptureFailure,
+        },
         overlayWindows: {
           isAuraLocked: electronMocks.isAuraLocked,
           onAuraAddRequested: electronMocks.onAuraAddRequested,
@@ -237,6 +257,106 @@ describe("AuraOverlayPage", () => {
     expect(html).not.toContain("Life");
     expect(html).not.toContain("data-corner");
     expect(html).not.toContain("Aura controls");
+  });
+
+  it("starts bounded recovery for an unavailable game window", () => {
+    storeMocks.useCapturePreviewShallow.mockImplementation((selector) =>
+      selector({
+        selectedSourceId: "missing-window:poe1",
+        sources: [
+          {
+            available: false,
+            displayId: null,
+            game: "poe1",
+            height: null,
+            id: "missing-window:poe1",
+            kind: "window",
+            name: "Path of Exile 1 (not running)",
+            thumbnailDataUrl: null,
+            width: null,
+          },
+        ],
+      }),
+    );
+
+    renderToStaticMarkup(<AuraOverlayPage />);
+
+    expect(captureStreamMocks.useDesktopCaptureStream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        enabled: true,
+        sourceId: "missing-window:poe1",
+      }),
+    );
+  });
+
+  it("captures the detected running game when the selected app tab differs", () => {
+    storeMocks.usePoeProcessSelector.mockImplementation((selector) =>
+      selector({
+        state: { isRunning: false, processName: "" },
+        states: {
+          poe1: { game: "poe1", isRunning: false, processName: "" },
+          poe2: {
+            game: "poe2",
+            isRunning: true,
+            pid: 42,
+            processName: "PathOfExileSteam.exe",
+            windowTitle: "Path of Exile 2",
+          },
+        },
+      }),
+    );
+    storeMocks.useCapturePreviewShallow.mockImplementation((selector) =>
+      selector({
+        recoverSources: vi.fn(),
+        selectedSourceId: "window:poe1",
+        sources: [
+          {
+            game: "poe1",
+            id: "window:poe1",
+            kind: "window",
+            name: "Path of Exile",
+          },
+          {
+            game: "poe2",
+            id: "window:poe2",
+            kind: "window",
+            name: "Path of Exile 2",
+          },
+        ],
+      }),
+    );
+
+    renderToStaticMarkup(<AuraOverlayPage />);
+
+    expect(captureStreamMocks.useDesktopCaptureStream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        enabled: true,
+        sourceId: "window:poe2",
+      }),
+    );
+  });
+
+  it("reports a terminal aura capture failure once", async () => {
+    captureStreamMocks.useDesktopCaptureStream.mockReturnValue({
+      error: "Could not start video source",
+      isStarting: false,
+      stop: vi.fn(),
+      stream: null,
+    });
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createTestRoot(container);
+
+    await act(async () => {
+      root.render(<AuraOverlayPage />);
+      await flushPromises();
+    });
+
+    expect(electronMocks.reportCaptureFailure).toHaveBeenCalledOnce();
+    expect(electronMocks.reportCaptureFailure).toHaveBeenCalledWith(
+      "screen:1",
+      "Could not start video source",
+    );
   });
 
   it("shows the aura controls reference while editing", async () => {

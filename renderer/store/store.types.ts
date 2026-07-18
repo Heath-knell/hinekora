@@ -160,6 +160,7 @@ export interface CapturePreviewSlice {
     error: string | null;
     hydrate: () => Promise<void>;
     getThumbnail: (sourceId: string) => Promise<string | null>;
+    recoverSources: () => Promise<void>;
     refresh: (options?: { force?: boolean }) => Promise<void>;
     select: (id: string) => void;
     startListening: (options?: { refreshOnStart?: boolean }) => () => void;
@@ -183,7 +184,6 @@ export interface ManagedRecorderSlice {
 
 export interface SettingsSlice {
   settings: {
-    pendingPreferences: Partial<Record<AppSettingsKey, boolean>>;
     preferenceErrors: Partial<Record<AppSettingsKey, string>>;
     value: Partial<AppSettings> | null;
     hydrate: () => Promise<void>;

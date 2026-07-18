@@ -67,8 +67,9 @@ class RecordingControlsOverlayService {
     private readonly coordinator: GameOverlayCoordinator,
     private readonly getContentProtectionEnabled = () => false,
     private readonly canShowRecorderOverlay = () => true,
+    ignorePoeFocus = () => false,
   ) {
-    this.coordinator.register(this);
+    this.coordinator.register(this, { ignorePoeFocus });
   }
 
   async show(): Promise<void> {
@@ -350,7 +351,7 @@ class RecordingControlsOverlayService {
     reason: RecorderOverlayShownReason,
   ): void {
     const recorderAllowed = this.canShowRecorderOverlay();
-    if (!recorderAllowed || !this.coordinator.canShowGameOverlays()) {
+    if (!recorderAllowed || !this.coordinator.canShowGameOverlays(this)) {
       const wasVisible = window.isVisible();
       this.coordinator.suspendGameOverlayWindow(window);
       if (wasVisible && !this.recorderOverlaySuspended) {

@@ -239,6 +239,30 @@ test("switches game and controls the recorder overlay and window", async ({
     .toEqual(["minimize", "maximize", "unmaximize", "close"]);
 });
 
+test("allows the persistent recorder overlay while another game is running", async ({
+  page,
+}) => {
+  await setupAppBarE2E(page, {
+    activeGame: "poe1",
+    activeGameFocused: false,
+    poeProcessState: createPoeProcessState({
+      game: "poe2",
+      processName: "PathOfExileSteam.exe",
+    }),
+    recorderGameRunning: false,
+    recorderOverlayIgnoreGameFocus: true,
+    recorderOverlayRequested: true,
+    recorderOverlayVisible: false,
+  });
+
+  const overlayButton = page.getByTitle("Show Overlay");
+  await expect(overlayButton).toBeEnabled();
+  await overlayButton.click();
+  await expect
+    .poll(async () => (await getAppBarE2ECalls(page)).recorderOverlayToggles)
+    .toBe(1);
+});
+
 test("reflects recorder overlay visibility events", async ({ page }) => {
   await setupAppBarE2E(page, { recorderOverlayVisible: true });
 

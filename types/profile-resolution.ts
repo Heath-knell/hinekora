@@ -16,15 +16,6 @@ function hasRenderableAuraPlacements(profile: Profile): boolean {
   );
 }
 
-function resolveRenderableProfileForGame(
-  profiles: Profile[],
-  game: GameId,
-): Profile | null {
-  return (
-    getProfilesForGame(profiles, game).find(hasRenderableAuraPlacements) ?? null
-  );
-}
-
 function resolveActiveGameProfile(
   profiles: Profile[],
   selectedProfileId: string | null | undefined,
@@ -47,5 +38,4 @@ export {
   hasRenderableAuraPlacements,
   isProfileAvailableForGame,
   resolveActiveGameProfile,
-  resolveRenderableProfileForGame,
 };

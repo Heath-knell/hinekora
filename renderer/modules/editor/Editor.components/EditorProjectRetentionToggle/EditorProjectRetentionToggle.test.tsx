@@ -59,7 +59,6 @@ describe("EditorProjectRetentionToggle", () => {
     );
     storeMocks.useSettingsShallow.mockImplementation((selector) =>
       selector({
-        pendingPreferences: {},
         preferenceErrors: {
           ...(storeMocks.preferenceError
             ? { editorAutoPruneProjects: storeMocks.preferenceError }

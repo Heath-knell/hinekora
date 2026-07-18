@@ -23,7 +23,7 @@ import {
   unregisterIpcWindowRole,
 } from "~/main/utils/ipc-window-roles";
 
-import type { Profile } from "~/types";
+import type { GameId, Profile } from "~/types";
 
 const AURA_OVERLAY_SCOPE = "aura-manager-overlays";
 const AURA_OVERLAY_FOCUS_ID = "aura-overlay";
@@ -48,12 +48,14 @@ function isNavigationAbortedError(error: unknown): boolean {
 class AuraManagerOverlaysService {
   private auraWindow: BrowserWindow | null = null;
   private auraWindowProfileId: string | undefined;
+  private auraWindowSync: Promise<void> = Promise.resolve();
+  private auraWindowSyncGeneration = 0;
   private auraOverlayRequested = false;
   private auraOverlayProfileId: string | undefined;
   private auraOverlayLocked = true;
   private gameRunningActive = false;
+  private runningGame: GameId | null = null;
   private addAuraRequestId = 0;
-  private inputPassthroughActive = false;
   private auraOverlayFocused = false;
   private clipPreviewSuspended = false;
 
@@ -61,14 +63,18 @@ class AuraManagerOverlaysService {
     private readonly coordinator: GameOverlayCoordinator,
     private readonly getContentProtectionEnabled = () => false,
     private readonly onEditingActiveChange = (_active: boolean) => {},
+    ignorePoeFocus = () => false,
   ) {
-    this.coordinator.register(this);
+    this.coordinator.register(this, { ignorePoeFocus });
   }
 
   async show(
     profileId?: string,
     options: ShowAuraOverlayOptions = {},
   ): Promise<void> {
+    if (!this.auraOverlayRequested || this.auraOverlayProfileId !== profileId) {
+      this.auraWindowSyncGeneration += 1;
+    }
     this.auraOverlayRequested = true;
     this.auraOverlayProfileId = profileId;
 
@@ -98,14 +104,19 @@ class AuraManagerOverlaysService {
 
     this.gameRunningActive = active;
     if (!active) {
+      this.runningGame = null;
+      this.auraWindowSyncGeneration += 1;
       this.closeWindow("game-stopped");
-      return;
     }
+  }
 
-    void this.restoreRequestedOverlay();
+  setRunningGame(game: GameId | null): void {
+    this.runningGame = game;
+    this.setGameRunningActive(game !== null);
   }
 
   hide(): void {
+    this.auraWindowSyncGeneration += 1;
     this.auraOverlayRequested = false;
     this.auraOverlayProfileId = undefined;
     this.closeWindow("hide-requested");
@@ -128,15 +139,6 @@ class AuraManagerOverlaysService {
 
   isLocked(): boolean {
     return this.auraOverlayLocked;
-  }
-
-  setInputPassthrough(active: boolean): void {
-    if (this.inputPassthroughActive === active) {
-      return;
-    }
-
-    this.inputPassthroughActive = active;
-    this.applyWindowInteractivity();
   }
 
   suspendRequestedOverlay(): void {
@@ -164,6 +166,7 @@ class AuraManagerOverlaysService {
 
   suspendForSystem(): void {
     if (this.auraOverlayRequested) {
+      this.auraWindowSyncGeneration += 1;
       this.closeWindow("system-suspend");
     }
   }
@@ -175,11 +178,13 @@ class AuraManagerOverlaysService {
 
     this.clipPreviewSuspended = suspended;
     if (suspended) {
+      this.auraWindowSyncGeneration += 1;
       this.closeWindow("clip-preview");
     }
   }
 
   destroy(): void {
+    this.auraWindowSyncGeneration += 1;
     this.auraOverlayRequested = false;
     this.auraOverlayProfileId = undefined;
     this.closeWindow("destroy");
@@ -189,10 +194,28 @@ class AuraManagerOverlaysService {
     applyGameOverlayContentProtection(this.auraWindow, enabled);
   }
 
-  private async syncWindow(
+  private syncWindow(
     profile: Profile,
     options: ShowAuraOverlayOptions = {},
   ): Promise<void> {
+    const generation = this.auraWindowSyncGeneration;
+    const sync = this.auraWindowSync.then(() =>
+      this.performWindowSync(profile, options, generation),
+    );
+    this.auraWindowSync = sync.catch(() => undefined);
+
+    return sync;
+  }
+
+  private async performWindowSync(
+    profile: Profile,
+    options: ShowAuraOverlayOptions,
+    generation: number,
+  ): Promise<void> {
+    if (!this.isWindowSyncCurrent(profile.id, generation)) {
+      return;
+    }
+
     const startAddingAura = options.startAddingAura === true;
     const addAuraShape = options.addAuraShape ?? "rect";
     if (
@@ -219,10 +242,22 @@ class AuraManagerOverlaysService {
       return;
     }
 
+    if (!this.isWindowSyncCurrent(profile.id, generation)) {
+      return;
+    }
+
     this.showOrSuspendWindow(window);
     if (canDispatchAddAuraRequest) {
       this.sendAddAuraRequest(window, addAuraShape);
     }
+  }
+
+  private isWindowSyncCurrent(profileId: string, generation: number): boolean {
+    if (generation !== this.auraWindowSyncGeneration) {
+      return false;
+    }
+
+    return this.resolveProfile(this.auraOverlayProfileId)?.id === profileId;
   }
 
   private createWindow(): BrowserWindow {
@@ -356,7 +391,7 @@ class AuraManagerOverlaysService {
   }
 
   private showOrSuspendWindow(window: BrowserWindow): void {
-    if (!this.coordinator.canShowGameOverlays()) {
+    if (!this.coordinator.canShowGameOverlays(this)) {
       this.coordinator.suspendGameOverlayWindow(window);
       return;
     }
@@ -376,7 +411,7 @@ class AuraManagerOverlaysService {
       return;
     }
 
-    if (this.auraOverlayLocked || this.inputPassthroughActive) {
+    if (this.auraOverlayLocked) {
       window.setIgnoreMouseEvents(true);
       window.setFocusable(false);
       this.updateOverlayFocusState();
@@ -389,7 +424,7 @@ class AuraManagerOverlaysService {
   }
 
   private canOwnOverlayFocus(): boolean {
-    return !this.auraOverlayLocked && !this.inputPassthroughActive;
+    return !this.auraOverlayLocked;
   }
 
   private updateOverlayFocusState(): void {
@@ -423,10 +458,7 @@ class AuraManagerOverlaysService {
   }
 
   private closeWindow(reason: AuraOverlayCloseReason): void {
-    const wasUnlocked = this.lockClosedOverlay();
-    if (reason === "game-stopped" && wasUnlocked) {
-      this.forgetRequestedOverlay();
-    }
+    this.lockClosedOverlay();
 
     const window = this.auraWindow;
     this.auraWindow = null;
@@ -466,7 +498,7 @@ class AuraManagerOverlaysService {
     return resolveProfileForGame(
       ProfilesService.getInstance().list(),
       profileId,
-      SettingsStoreService.getInstance().get().activeGame,
+      this.runningGame ?? SettingsStoreService.getInstance().get().activeGame,
     );
   }
 }

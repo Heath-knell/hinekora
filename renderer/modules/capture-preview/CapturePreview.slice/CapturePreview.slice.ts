@@ -1,10 +1,5 @@
 import {
-  POE_PROCESS_GAMES,
-  type PoeProcessStatesByGame,
-} from "~/main/modules/poe-process/PoeProcess.dto";
-import {
   createCapturePreviewSourcesWithGameFallback,
-  isCapturePreviewSourceAvailable,
   resolveCapturePreviewSourceId,
 } from "~/renderer/modules/capture-preview/CapturePreview.utils/CapturePreview.utils";
 import { resolveActiveGameCaptureProfile } from "~/renderer/modules/capture-profiles/CaptureProfiles.utils/CaptureProfiles.utils";
@@ -13,11 +8,7 @@ import type {
   CapturePreviewSlice,
 } from "~/renderer/store/store.types";
 
-import type { CapturePreviewSource, GameId } from "~/types";
-
 const MAX_CAPTURE_PREVIEW_THUMBNAILS = 16;
-const CAPTURE_SOURCE_REFRESH_RETRY_DELAY_MS = 2_500;
-const CAPTURE_SOURCE_REFRESH_MAX_RETRIES = 8;
 
 function pruneCapturePreviewThumbnails(
   thumbnailsBySourceId: Record<string, string | null | undefined>,
@@ -43,198 +34,125 @@ function pruneCapturePreviewThumbnails(
   }
 }
 
-function shouldRetryCaptureSourceRefresh(
-  poeProcessStates: PoeProcessStatesByGame,
-  sources: CapturePreviewSource[],
-): boolean {
-  return POE_PROCESS_GAMES.some((game) => {
-    const state = poeProcessStates[game];
-
-    return (
-      state.isRunning &&
-      !sources.some((source) => isCaptureSourceForGame(source, game))
-    );
-  });
-}
-
-function isCaptureSourceForGame(
-  source: CapturePreviewSource,
-  game: GameId,
-): boolean {
-  if (source.kind !== "window") {
-    return false;
-  }
-
-  return source.game === game && isCapturePreviewSourceAvailable(source);
-}
-
 export const createCapturePreviewSlice: BoundStoreStateCreator<
   CapturePreviewSlice
-> = (set, get) => ({
-  capturePreview: {
-    sources: [],
-    thumbnailsBySourceId: {},
-    selectedSourceId: null,
-    isLoading: false,
-    error: null,
-    hydrate: async () => {
-      await get().capturePreview.refresh();
-    },
-    startListening: (options = {}) => {
-      let retryTimer: number | null = null;
-      let requestVersion = 0;
-      const clearRetryTimer = () => {
-        if (retryTimer === null) {
-          return;
-        }
+> = (set, get) => {
+  let recoveryRequest: Promise<void> | null = null;
+  const recoverSources = (): Promise<void> => {
+    if (recoveryRequest) {
+      return recoveryRequest;
+    }
 
-        window.clearTimeout(retryTimer);
-        retryTimer = null;
-      };
-      const scheduleRetry = (version: number, retriesRemaining: number) => {
-        if (retriesRemaining <= 0) {
-          return;
-        }
-
-        retryTimer = window.setTimeout(() => {
-          retryTimer = null;
-          const nextStore = get();
-          if (
-            version !== requestVersion ||
-            !shouldRetryCaptureSourceRefresh(
-              nextStore.poeProcess.states,
-              nextStore.capturePreview.sources,
-            )
-          ) {
-            return;
-          }
-
-          void get()
-            .capturePreview.refresh({ force: true })
-            .then(() => {
-              if (version !== requestVersion) {
-                return;
-              }
-
-              const refreshedStore = get();
-              if (
-                shouldRetryCaptureSourceRefresh(
-                  refreshedStore.poeProcess.states,
-                  refreshedStore.capturePreview.sources,
-                )
-              ) {
-                scheduleRetry(version, retriesRemaining - 1);
-              }
-            });
-        }, CAPTURE_SOURCE_REFRESH_RETRY_DELAY_MS);
-      };
-      const refreshAfterRequest = async (version: number) => {
-        await get().capturePreview.refresh({ force: true });
-        if (version !== requestVersion) {
-          return;
-        }
-
-        const store = get();
-        if (
-          !shouldRetryCaptureSourceRefresh(
-            store.poeProcess.states,
-            store.capturePreview.sources,
-          )
-        ) {
-          return;
-        }
-
-        scheduleRetry(version, CAPTURE_SOURCE_REFRESH_MAX_RETRIES);
-      };
-      const unsubscribe = window.electron.capturePreview.onRefreshRequested(
-        () => {
-          requestVersion += 1;
-          clearRetryTimer();
-          void refreshAfterRequest(requestVersion);
-        },
-      );
-      if (options.refreshOnStart === true) {
-        requestVersion += 1;
-        void refreshAfterRequest(requestVersion);
+    const request = get().capturePreview.refresh({ force: true });
+    recoveryRequest = request;
+    const releaseRequest = () => {
+      if (recoveryRequest === request) {
+        recoveryRequest = null;
       }
+    };
+    void request.then(releaseRequest, releaseRequest);
 
-      return () => {
-        requestVersion += 1;
-        clearRetryTimer();
-        unsubscribe();
-      };
-    },
-    refresh: async (options = {}) => {
-      set((state) => {
-        state.capturePreview.isLoading = true;
-        state.capturePreview.error = null;
-      });
+    return request;
+  };
 
-      try {
-        const liveSources = await window.electron.capturePreview.listSources(
-          options.force === true,
+  return {
+    capturePreview: {
+      sources: [],
+      thumbnailsBySourceId: {},
+      selectedSourceId: null,
+      isLoading: false,
+      error: null,
+      hydrate: async () => {
+        await get().capturePreview.refresh();
+      },
+      recoverSources,
+      startListening: (options = {}) => {
+        const unsubscribe = window.electron.capturePreview.onRefreshRequested(
+          () => {
+            void recoverSources();
+          },
         );
-        const profiles = get().captureProfiles;
-        const activeGame = get().settings.value?.activeGame ?? "poe1";
-        const sources =
-          createCapturePreviewSourcesWithGameFallback(liveSources);
-        const selectedProfile = resolveActiveGameCaptureProfile(
-          profiles.items,
-          profiles.selectedProfileId,
-          activeGame,
-        );
-        const selectedSourceId = resolveCapturePreviewSourceId(
-          selectedProfile?.captureTarget ?? null,
-          sources,
-          get().capturePreview.selectedSourceId,
-          activeGame,
-        );
+        if (options.refreshOnStart === true) {
+          void recoverSources();
+        }
 
+        return () => {
+          unsubscribe();
+        };
+      },
+      refresh: async (options = {}) => {
         set((state) => {
-          state.capturePreview.sources = sources;
-          state.capturePreview.selectedSourceId = selectedSourceId;
-          if (options.force === true) {
-            state.capturePreview.thumbnailsBySourceId = {};
-          } else {
-            pruneCapturePreviewThumbnails(
-              state.capturePreview.thumbnailsBySourceId,
-              new Set(sources.map((source) => source.id)),
-            );
-          }
-          state.capturePreview.isLoading = false;
+          state.capturePreview.isLoading = true;
           state.capturePreview.error = null;
         });
-      } catch (error) {
+
+        try {
+          const liveSources = await window.electron.capturePreview.listSources(
+            options.force === true,
+          );
+          const profiles = get().captureProfiles;
+          const activeGame = get().settings.value?.activeGame ?? "poe1";
+          const sources =
+            createCapturePreviewSourcesWithGameFallback(liveSources);
+          const selectedProfile = resolveActiveGameCaptureProfile(
+            profiles.items,
+            profiles.selectedProfileId,
+            activeGame,
+          );
+          const selectedSourceId = resolveCapturePreviewSourceId(
+            selectedProfile?.captureTarget ?? null,
+            sources,
+            get().capturePreview.selectedSourceId,
+            activeGame,
+          );
+
+          set((state) => {
+            state.capturePreview.sources = sources;
+            state.capturePreview.selectedSourceId = selectedSourceId;
+            if (options.force === true) {
+              state.capturePreview.thumbnailsBySourceId = {};
+            } else {
+              pruneCapturePreviewThumbnails(
+                state.capturePreview.thumbnailsBySourceId,
+                new Set(sources.map((source) => source.id)),
+              );
+            }
+            state.capturePreview.isLoading = false;
+            state.capturePreview.error = null;
+          });
+        } catch (error) {
+          set((state) => {
+            state.capturePreview.isLoading = false;
+            state.capturePreview.error =
+              error instanceof Error
+                ? error.message
+                : "Unable to list capture sources";
+          });
+        }
+      },
+      getThumbnail: async (sourceId) => {
+        const cached = get().capturePreview.thumbnailsBySourceId[sourceId];
+        if (cached !== undefined) {
+          return cached;
+        }
+
+        const thumbnailDataUrl =
+          await window.electron.capturePreview.getSourceThumbnail(sourceId);
         set((state) => {
-          state.capturePreview.isLoading = false;
-          state.capturePreview.error =
-            error instanceof Error
-              ? error.message
-              : "Unable to list capture sources";
+          state.capturePreview.thumbnailsBySourceId[sourceId] =
+            thumbnailDataUrl;
+          pruneCapturePreviewThumbnails(
+            state.capturePreview.thumbnailsBySourceId,
+          );
         });
-      }
-    },
-    getThumbnail: async (sourceId) => {
-      const cached = get().capturePreview.thumbnailsBySourceId[sourceId];
-      if (cached !== undefined) {
-        return cached;
-      }
 
-      const thumbnailDataUrl =
-        await window.electron.capturePreview.getSourceThumbnail(sourceId);
-      set((state) => {
-        state.capturePreview.thumbnailsBySourceId[sourceId] = thumbnailDataUrl;
-        pruneCapturePreviewThumbnails(
-          state.capturePreview.thumbnailsBySourceId,
-        );
-      });
-
-      return thumbnailDataUrl;
+        return thumbnailDataUrl;
+      },
+      select: (id: string) => {
+        set((state) => {
+          state.capturePreview.selectedSourceId = id;
+        });
+      },
     },
-    select: (id: string) => {
-      set((state) => {
-        state.capturePreview.selectedSourceId = id;
-      });
-    },
-  },
-});
+  };
+};

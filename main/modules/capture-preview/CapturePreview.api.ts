@@ -8,6 +8,16 @@ const CapturePreviewAPI = {
     ipcRenderer.invoke(CapturePreviewChannel.GetSourceThumbnail, sourceId),
   listSources: (forceRefresh?: boolean): Promise<CapturePreviewSource[]> =>
     ipcRenderer.invoke(CapturePreviewChannel.ListSources, forceRefresh),
+  prepareDisplayMediaSource: (sourceId: string): Promise<boolean> =>
+    ipcRenderer.invoke(
+      CapturePreviewChannel.PrepareDisplayMediaSource,
+      sourceId,
+    ),
+  reportFailure: (sourceId: string, error: string): void => {
+    void ipcRenderer
+      .invoke(CapturePreviewChannel.ReportFailure, sourceId, error)
+      .catch(() => undefined);
+  },
   onRefreshRequested: (callback: () => void) => {
     const listener = () => {
       callback();
@@ -20,8 +30,6 @@ const CapturePreviewAPI = {
         listener,
       );
   },
-  sourceExists: (sourceId: string): Promise<boolean> =>
-    ipcRenderer.invoke(CapturePreviewChannel.SourceExists, sourceId),
 };
 
 export { CapturePreviewAPI };

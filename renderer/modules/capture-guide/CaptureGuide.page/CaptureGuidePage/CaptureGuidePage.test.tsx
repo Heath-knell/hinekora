@@ -84,6 +84,11 @@ describe("CaptureGuidePage", () => {
 
     expect(container.textContent).toContain("Capture Guide");
     expect(container.textContent).toContain("Templates view");
+    expect(
+      container
+        .querySelector('[aria-label="Capture guide sections"]')
+        ?.classList.contains("tabs-xs"),
+    ).toBe(true);
     expect(templatesTab?.getAttribute("aria-selected")).toBe("true");
     expect(templatesTab?.getAttribute("aria-controls")).toBe(
       "capture-guide-panel-templates",

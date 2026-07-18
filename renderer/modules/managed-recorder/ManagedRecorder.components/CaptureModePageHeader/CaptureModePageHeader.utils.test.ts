@@ -117,6 +117,12 @@ describe("CaptureModePageHeader utils", () => {
       "Start the selected Path of Exile game before opening the recorder overlay.",
     );
     expect(
+      createRecorderOverlayDisabledReason(
+        createStatus({ gameRunning: false }),
+        true,
+      ),
+    ).toBeNull();
+    expect(
       createRecorderOverlayDisabledReason(createStatus({ bufferActive: true })),
     ).toBeNull();
     expect(

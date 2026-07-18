@@ -1,4 +1,4 @@
-import { desktopCapturer, screen } from "electron";
+import { app, desktopCapturer, screen } from "electron";
 
 import { WindowName } from "~/main/modules/main-window/MainWindow.types";
 import { PoeProcessService } from "~/main/modules/poe-process";
@@ -27,14 +27,18 @@ import {
 } from "~/types";
 import { CapturePreviewChannel } from "./CapturePreview.channels";
 import {
+  CapturePreviewDisplayMediaAuthorizer,
+  registerCapturePreviewDisplayMediaHandler,
+} from "./CapturePreview.display-media";
+import {
   detectPathOfExileWindowTitle,
   normalizeCapturePreviewSources,
 } from "./CapturePreview.sources";
 
-const SOURCE_ID_CACHE_MS = 1_500;
 const SOURCE_THUMBNAIL_CACHE_MS = 10_000;
 const SOURCE_THUMBNAIL_CACHE_MAX_ENTRIES = 16;
 const SLOW_SOURCE_LIST_MS = 250;
+const CAPTURE_FAILURE_LOG_INTERVAL_MS = 30_000;
 
 interface CapturePreviewListSourcesOptions {
   forceRefresh?: boolean;
@@ -44,14 +48,15 @@ class CapturePreviewService {
   private static instance: CapturePreviewService | null = null;
   private sourceListCache: CapturePreviewSource[] | null = null;
   private sourceListRequest: Promise<CapturePreviewSource[]> | null = null;
-  private sourceIdCache: { checkedAtMs: number; ids: Set<string> } | null =
-    null;
-  private sourceIdRequest: Promise<Set<string>> | null = null;
+  private sourceListRequestForceRefresh = false;
   private sourceThumbnailCache = new Map<
     string,
     { checkedAtMs: number; dataUrl: string | null }
   >();
   private sourceThumbnailRequests = new Map<string, Promise<string | null>>();
+  private readonly displayMediaAuthorizer =
+    new CapturePreviewDisplayMediaAuthorizer();
+  private nextCaptureFailureLogAtMs = 0;
 
   static getInstance(): CapturePreviewService {
     if (!CapturePreviewService.instance) {
@@ -63,30 +68,43 @@ class CapturePreviewService {
 
   constructor() {
     this.setupHandlers();
+    this.setupDisplayMediaRequestHandlerWhenReady();
   }
 
   async listSources(
     options: CapturePreviewListSourcesOptions = {},
   ): Promise<CapturePreviewSource[]> {
-    if (!options.forceRefresh && this.sourceListCache) {
-      return this.sourceListCache;
-    }
-
-    if (options.forceRefresh) {
-      this.sourceThumbnailCache.clear();
-    }
-
+    const forceRefresh = options.forceRefresh === true;
     if (this.sourceListRequest) {
+      if (forceRefresh && !this.sourceListRequestForceRefresh) {
+        const refreshAfterCurrentRequest = () =>
+          this.listSources({ forceRefresh: true });
+
+        return this.sourceListRequest.then(
+          refreshAfterCurrentRequest,
+          refreshAfterCurrentRequest,
+        );
+      }
+
       return this.sourceListRequest;
     }
 
-    this.sourceListRequest = this.collectSources(
-      options.forceRefresh === true,
-    ).finally(() => {
-      this.sourceListRequest = null;
-    });
+    if (!forceRefresh && this.sourceListCache) {
+      return this.sourceListCache;
+    }
 
-    return this.sourceListRequest;
+    if (forceRefresh) {
+      this.sourceThumbnailCache.clear();
+    }
+
+    const request = this.collectSources(forceRefresh).finally(() => {
+      this.sourceListRequest = null;
+      this.sourceListRequestForceRefresh = false;
+    });
+    this.sourceListRequest = request;
+    this.sourceListRequestForceRefresh = forceRefresh;
+
+    return request;
   }
 
   private async collectSources(
@@ -154,6 +172,14 @@ class CapturePreviewService {
     const normalizedSources = normalizeCapturePreviewSources(
       filteredSourceInputs,
     ).map((source) => CapturePreviewSourceSchema.parse(source));
+    const normalizedSourceIds = new Set(
+      normalizedSources.map((source) => source.id),
+    );
+    this.displayMediaAuthorizer.replaceAvailableSources(
+      sources
+        .filter((source) => normalizedSourceIds.has(source.id))
+        .map((source) => ({ id: source.id, name: source.name })),
+    );
     const completedAtMs = Date.now();
 
     this.pruneSourceThumbnailCache({
@@ -226,41 +252,42 @@ class CapturePreviewService {
     this.pruneSourceThumbnailCache();
   }
 
-  async sourceExists(sourceId: string): Promise<boolean> {
-    const ids = await this.listSourceIds();
+  private prepareDisplayMediaSource(
+    event: Electron.IpcMainInvokeEvent,
+    sourceId: string,
+  ): boolean {
+    const processId = event.senderFrame?.processId ?? event.processId;
+    const frameId = event.senderFrame?.routingId ?? event.frameId;
 
-    return ids.has(sourceId);
+    return this.displayMediaAuthorizer.prepare(processId, frameId, sourceId);
   }
 
-  private async listSourceIds(): Promise<Set<string>> {
+  private setupDisplayMediaRequestHandler(): void {
+    registerCapturePreviewDisplayMediaHandler(this.displayMediaAuthorizer);
+  }
+
+  private reportCaptureFailure(sourceId: string, error: string): void {
     const now = Date.now();
-    if (
-      this.sourceIdCache &&
-      now - this.sourceIdCache.checkedAtMs < SOURCE_ID_CACHE_MS
-    ) {
-      return this.sourceIdCache.ids;
+    if (now < this.nextCaptureFailureLogAtMs) {
+      return;
     }
 
-    if (this.sourceIdRequest) {
-      return this.sourceIdRequest;
+    this.nextCaptureFailureLogAtMs = now + CAPTURE_FAILURE_LOG_INTERVAL_MS;
+    logWarn("capture-preview", "Renderer capture stream stopped", {
+      error,
+      sourceId,
+    });
+  }
+
+  private setupDisplayMediaRequestHandlerWhenReady(): void {
+    if (app.isReady()) {
+      this.setupDisplayMediaRequestHandler();
+      return;
     }
 
-    this.sourceIdRequest = desktopCapturer
-      .getSources({
-        types: ["screen", "window"],
-        thumbnailSize: { width: 0, height: 0 },
-      })
-      .then((sources) => {
-        const ids = new Set(sources.map((source) => source.id));
-        this.sourceIdCache = { checkedAtMs: Date.now(), ids };
-
-        return ids;
-      })
-      .finally(() => {
-        this.sourceIdRequest = null;
-      });
-
-    return this.sourceIdRequest;
+    void app.whenReady().then(() => {
+      this.setupDisplayMediaRequestHandler();
+    });
   }
 
   private createDisplayLabelLookup(
@@ -340,23 +367,44 @@ class CapturePreviewService {
       },
     );
     registerGuardedIpcHandler(
-      CapturePreviewChannel.SourceExists,
+      CapturePreviewChannel.PrepareDisplayMediaSource,
       [WindowName.Main, WindowName.AuraOverlay],
-      (_event, sourceId) => {
+      (event, sourceId) => {
         try {
           assertString(
             sourceId,
             "sourceId",
-            CapturePreviewChannel.SourceExists,
+            CapturePreviewChannel.PrepareDisplayMediaSource,
             {
               min: 1,
               max: 512,
             },
           );
 
-          return this.sourceExists(sourceId);
+          return this.prepareDisplayMediaSource(event, sourceId);
         } catch (error) {
           return handleValidationError(error);
+        }
+      },
+    );
+    registerGuardedIpcHandler(
+      CapturePreviewChannel.ReportFailure,
+      [WindowName.AuraOverlay],
+      (_event, sourceId, error) => {
+        try {
+          assertString(
+            sourceId,
+            "sourceId",
+            CapturePreviewChannel.ReportFailure,
+            { min: 1, max: 512 },
+          );
+          assertString(error, "error", CapturePreviewChannel.ReportFailure, {
+            min: 1,
+            max: 512,
+          });
+          this.reportCaptureFailure(sourceId, error);
+        } catch (validationError) {
+          return handleValidationError(validationError);
         }
       },
     );

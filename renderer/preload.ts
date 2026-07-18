@@ -87,6 +87,7 @@ function createScopedApi(hash: string) {
       },
       replayClips: {
         saveManualReplay: ReplayClipsAPI.saveManualReplay,
+        onDeleted: ReplayClipsAPI.onDeleted,
         onStatusChanged: ReplayClipsAPI.onStatusChanged,
       },
     };
@@ -128,7 +129,8 @@ function createScopedApi(hash: string) {
       capturePreview: {
         listSources: CapturePreviewAPI.listSources,
         onRefreshRequested: CapturePreviewAPI.onRefreshRequested,
-        sourceExists: CapturePreviewAPI.sourceExists,
+        prepareDisplayMediaSource: CapturePreviewAPI.prepareDisplayMediaSource,
+        reportFailure: CapturePreviewAPI.reportFailure,
       },
       overlayWindows: {
         isAuraLocked: OverlayWindowsAPI.isAuraLocked,

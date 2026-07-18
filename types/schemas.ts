@@ -593,7 +593,11 @@ export const AppSettingsSchema = z.object({
   mainWindowBounds: MainWindowBoundsSchema.nullable().default(null),
   recorderOverlayBounds: RecorderOverlayBoundsSchema.nullable().default(null),
   recorderOverlayShowOnStartup: z.boolean().default(true),
+  recorderOverlayIgnoreGameFocus: z.boolean().default(false),
+  auraOverlayIgnoreGameFocus: z.boolean().default(false),
   auraOverlayShowEditingFrame: z.boolean().default(true),
+  clipPreviewOverlayIgnoreGameFocus: z.boolean().default(false),
+  gridLinesOverlayIgnoreGameFocus: z.boolean().default(false),
   installedGames: z.array(GameIdSchema).min(1).max(2).default(["poe1"]),
   recordingStoragePath: z.string().max(2_048).nullable().default(null),
   keybindManualBookmark: OptionalKeybindAcceleratorSchema.default(

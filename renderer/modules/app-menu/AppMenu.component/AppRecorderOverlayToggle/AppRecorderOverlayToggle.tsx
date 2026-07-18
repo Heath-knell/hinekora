@@ -9,6 +9,8 @@ import {
   useAppMenuShallow,
   useClientLogSelector,
   useManagedRecorderSelector,
+  usePoeProcessSelector,
+  useSettingsSelector,
 } from "~/renderer/store";
 
 import { appbarButtonClass } from "../AppMenu.utils";
@@ -22,6 +24,13 @@ function AppRecorderOverlayToggle() {
   const isActiveGameFocused = useClientLogSelector(
     (clientLog) => clientLog.status?.activeGameFocused ?? null,
   );
+  const isAnyGameRunning = usePoeProcessSelector(
+    (poeProcess) =>
+      poeProcess.states.poe1.isRunning || poeProcess.states.poe2.isRunning,
+  );
+  const ignoreGameFocus = useSettingsSelector(
+    (settings) => settings.value?.recorderOverlayIgnoreGameFocus ?? false,
+  );
   const {
     isRecorderOverlayRequested,
     isRecorderOverlayVisible,
@@ -31,9 +40,15 @@ function AppRecorderOverlayToggle() {
     isRecorderOverlayVisible: appMenu.isRecorderOverlayVisible,
     toggleRecorderOverlay: appMenu.toggleRecorderOverlay,
   }));
-  const recorderOverlayDisabledReason =
-    createRecorderOverlayDisabledReason(recorderStatus);
+  const recorderOverlayGameRunning = ignoreGameFocus
+    ? isAnyGameRunning || recorderStatus?.gameRunning === true
+    : recorderStatus?.gameRunning === true;
+  const recorderOverlayDisabledReason = createRecorderOverlayDisabledReason(
+    recorderStatus,
+    recorderOverlayGameRunning,
+  );
   const isShowRecordingOverlayBlockedByFocus =
+    !ignoreGameFocus &&
     isRecorderOverlayRequested &&
     !isRecorderOverlayVisible &&
     isActiveGameFocused === false;

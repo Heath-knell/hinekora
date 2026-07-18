@@ -4,6 +4,7 @@ import { useCapturePreviewSourcePersistence } from "~/renderer/modules/capture-p
 import { useCapturePreviewVideoElement } from "~/renderer/modules/capture-preview/CapturePreview.hooks/useCapturePreviewVideoElement/useCapturePreviewVideoElement";
 import { useDesktopCaptureStream } from "~/renderer/modules/capture-preview/CapturePreview.hooks/useDesktopCaptureStream/useDesktopCaptureStream";
 import { isCapturePreviewSourceAvailable } from "~/renderer/modules/capture-preview/CapturePreview.utils/CapturePreview.utils";
+import { useManagedRecorderActive } from "~/renderer/modules/managed-recorder/ManagedRecorder.hooks/useManagedRecorderActive/useManagedRecorderActive";
 import { useCapturePreviewShallow } from "~/renderer/store";
 
 import { CaptureAutoStartSourceWarning } from "../CaptureAutoStartSourceWarning/CaptureAutoStartSourceWarning";
@@ -11,14 +12,16 @@ import { CapturePreviewSourceControls } from "../CapturePreviewSourceControls/Ca
 import { CapturePreviewViewport } from "../CapturePreviewViewport/CapturePreviewViewport";
 import {
   canPreviewCaptureSource,
-  createDesktopPreviewConstraints,
+  createDesktopPreviewVideoConstraints,
 } from "./CapturePreviewPanel.utils";
 
 function CapturePreviewPanel() {
+  const isRecorderActive = useManagedRecorderActive();
   const {
     captureError,
     getThumbnail,
     isLoading,
+    recoverSources,
     refresh,
     select,
     selectedThumbnailState,
@@ -28,6 +31,7 @@ function CapturePreviewPanel() {
     captureError: capturePreview.error,
     getThumbnail: capturePreview.getThumbnail,
     isLoading: capturePreview.isLoading,
+    recoverSources: capturePreview.recoverSources,
     refresh: capturePreview.refresh,
     select: capturePreview.select,
     selectedThumbnailState:
@@ -45,6 +49,10 @@ function CapturePreviewPanel() {
     () => sources.find((source) => source.id === selectedSourceId) ?? null,
     [selectedSourceId, sources],
   );
+  const isPreviewSourceReady =
+    previewSourceId !== null &&
+    previewSourceId === selectedSource?.id &&
+    isCapturePreviewSourceAvailable(selectedSource);
 
   const {
     persistCaptureTarget,
@@ -58,8 +66,9 @@ function CapturePreviewPanel() {
     stop: stopPreviewStream,
   } = useDesktopCaptureStream({
     sourceId: previewSourceId,
-    enabled: previewSourceId !== null,
-    createConstraints: createDesktopPreviewConstraints,
+    enabled: isPreviewSourceReady && !isRecorderActive,
+    createVideoConstraints: createDesktopPreviewVideoConstraints,
+    recoverSources,
   });
   const { clearPreviewVideo, videoRef } = useCapturePreviewVideoElement({
     onPlaybackError: setPreviewError,
@@ -86,6 +95,26 @@ function CapturePreviewPanel() {
     setPreviewSourceId(null);
     clearPreviewVideo();
   }, [clearPreviewVideo, stopPreviewStream]);
+
+  useEffect(() => {
+    if (isRecorderActive) {
+      stopPreview();
+    }
+  }, [isRecorderActive, stopPreview]);
+
+  useEffect(() => {
+    if (
+      previewSourceId === null ||
+      selectedSource === null ||
+      !isCapturePreviewSourceAvailable(selectedSource) ||
+      previewSourceId === selectedSource.id
+    ) {
+      return;
+    }
+
+    setPreviewError(null);
+    setPreviewSourceId(selectedSource.id);
+  }, [previewSourceId, selectedSource]);
 
   const handleSourceChange = (
     sourceId: string,

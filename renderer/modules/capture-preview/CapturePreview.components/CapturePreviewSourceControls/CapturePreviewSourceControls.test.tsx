@@ -34,6 +34,7 @@ const poe2Source: CapturePreviewSource = {
 const storeMocks = vi.hoisted(() => ({
   activeGame: "poe2" as GameId,
   isLoading: false,
+  isRecorderActive: false,
   isSettingsDisabled: false,
   selectedSourceId: "window:poe2" as string | null,
   sources: [] as CapturePreviewSource[],
@@ -45,6 +46,13 @@ vi.mock(
     CaptureProfileLockToggle: () => (
       <button type="button" aria-label="Unlock capture profile" />
     ),
+  }),
+);
+
+vi.mock(
+  "~/renderer/modules/managed-recorder/ManagedRecorder.hooks/useManagedRecorderActive/useManagedRecorderActive",
+  () => ({
+    useManagedRecorderActive: () => storeMocks.isRecorderActive,
   }),
 );
 
@@ -112,6 +120,7 @@ describe("CapturePreviewSourceControls", () => {
     root = createRoot(container);
     storeMocks.activeGame = "poe2";
     storeMocks.isLoading = false;
+    storeMocks.isRecorderActive = false;
     storeMocks.isSettingsDisabled = false;
     storeMocks.selectedSourceId = poe2Source.id;
     storeMocks.sources = [screenSource, poe1Source, poe2Source];
@@ -160,5 +169,17 @@ describe("CapturePreviewSourceControls", () => {
     });
 
     expect(controls.onSourceChange).not.toHaveBeenCalled();
+  });
+
+  it("disables live preview while recording or rewind is active", async () => {
+    storeMocks.isRecorderActive = true;
+
+    await renderControls();
+
+    const previewButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>("button"),
+    ).find((button) => button.textContent?.includes("Show Preview"));
+
+    expect(previewButton?.disabled).toBe(true);
   });
 });

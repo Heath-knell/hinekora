@@ -27,7 +27,7 @@ import {
 } from "./poe-process-fixture";
 
 interface AuraOverlayE2ECalls {
-  captureConstraintSourceIds: string[];
+  preparedDisplayMediaSourceIds: string[];
   profileUpdates: ProfileUpdateInput[];
   selectCropRegionCalls: SelectCropRegionOptions[];
   unexpectedBridgeCalls: string[];
@@ -214,7 +214,7 @@ async function setupAuraOverlayE2E(
       let profile = clone(fixture.profile);
       const settings = clone(fixture.settings);
       const calls: AuraOverlayE2ECalls = {
-        captureConstraintSourceIds: [],
+        preparedDisplayMediaSourceIds: [],
         profileUpdates: [],
         selectCropRegionCalls: [],
         unexpectedBridgeCalls: [],
@@ -242,14 +242,7 @@ async function setupAuraOverlayE2E(
       Object.defineProperty(navigator, "mediaDevices", {
         configurable: true,
         value: {
-          getUserMedia: async (constraints: MediaStreamConstraints) => {
-            const sourceId = (
-              constraints.video as {
-                mandatory?: { chromeMediaSourceId?: string };
-              }
-            )?.mandatory?.chromeMediaSourceId;
-            calls.captureConstraintSourceIds.push(sourceId ?? "");
-
+          getDisplayMedia: async () => {
             return new MediaStream();
           },
         },
@@ -272,7 +265,10 @@ async function setupAuraOverlayE2E(
           getSourceThumbnail: async () => null,
           listSources: async () => clone(fixture.captureSources),
           onRefreshRequested: () => unsubscribe,
-          sourceExists: async () => true,
+          prepareDisplayMediaSource: async (sourceId) => {
+            calls.preparedDisplayMediaSourceIds.push(sourceId);
+            return true;
+          },
         }),
         overlayWindows: createBridgeDomain<
           AuraOverlayE2EElectron["overlayWindows"]

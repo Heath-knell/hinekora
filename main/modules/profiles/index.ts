@@ -12,5 +12,4 @@ export {
   isProfileAvailableForGame,
   ProfilesService,
   resolveProfileForGame,
-  resolveRenderableProfileForGame,
 } from "./Profiles.service";

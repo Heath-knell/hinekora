@@ -35,8 +35,14 @@ function createCapturePrimaryDisabledReason({
 
 function createRecorderOverlayDisabledReason(
   status: ManagedRecorderStatus | null,
+  gameRunning = status?.gameRunning ?? false,
 ): string | null {
-  return createRecorderReadinessDisabledReason(status, "overlay");
+  return createRecorderReadinessDisabledReason(
+    status && status.gameRunning !== gameRunning
+      ? { ...status, gameRunning }
+      : status,
+    "overlay",
+  );
 }
 
 function createRecorderReadinessDisabledReason(

@@ -6,14 +6,22 @@ import {
 } from "~/main/modules/poe-process/PoeProcess.dto";
 import { mockIpcMainHandlers } from "~/main/test/ipc";
 import { createPoeProcessSnapshotFromState } from "~/main/test/poe-process";
+import {
+  clearIpcWindowRolesForTests,
+  registerIpcWindowRole,
+} from "~/main/utils/ipc-window-roles";
 
+import { WindowName } from "../../main-window/MainWindow.types";
 import { CapturePreviewChannel } from "../CapturePreview.channels";
 import { CapturePreviewService } from "../CapturePreview.service";
 
 const electronMocks = vi.hoisted(() => ({
+  appIsReady: true,
+  appWhenReady: vi.fn(),
   getAllDisplays: vi.fn(),
   getPrimaryDisplay: vi.fn(),
   getSources: vi.fn(),
+  setDisplayMediaRequestHandler: vi.fn(),
 }));
 
 const poeProcessMocks = vi.hoisted(() => ({
@@ -27,12 +35,22 @@ const settingsStoreMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("electron", () => ({
+  app: {
+    isReady: () => electronMocks.appIsReady,
+    whenReady: electronMocks.appWhenReady,
+  },
   desktopCapturer: {
     getSources: electronMocks.getSources,
   },
   screen: {
     getAllDisplays: electronMocks.getAllDisplays,
     getPrimaryDisplay: electronMocks.getPrimaryDisplay,
+  },
+  session: {
+    defaultSession: {
+      setDisplayMediaRequestHandler:
+        electronMocks.setDisplayMediaRequestHandler,
+    },
   },
 }));
 
@@ -99,11 +117,15 @@ function createCapturePreviewSnapshotFromState(
 }
 
 beforeEach(() => {
+  clearIpcWindowRolesForTests();
+  electronMocks.appIsReady = true;
+  electronMocks.appWhenReady.mockResolvedValue(undefined);
   settingsStoreMocks.activeGame = "poe2";
   settingsStoreMocks.get.mockImplementation(() => ({
     activeGame: settingsStoreMocks.activeGame,
   }));
   electronMocks.getPrimaryDisplay.mockReturnValue(createDisplay(1, 1920, 1080));
+  electronMocks.setDisplayMediaRequestHandler.mockReset();
   poeProcessMocks.getSnapshot.mockImplementation(() =>
     createCapturePreviewSnapshotFromState({
       game: settingsStoreMocks.activeGame,
@@ -120,9 +142,12 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  clearIpcWindowRolesForTests();
+  electronMocks.appWhenReady.mockReset();
   electronMocks.getAllDisplays.mockReset();
   electronMocks.getPrimaryDisplay.mockReset();
   electronMocks.getSources.mockReset();
+  electronMocks.setDisplayMediaRequestHandler.mockReset();
   poeProcessMocks.getSnapshot.mockReset();
   poeProcessMocks.refreshSnapshot.mockReset();
   settingsStoreMocks.get.mockReset();
@@ -130,6 +155,26 @@ afterEach(() => {
 });
 
 describe("CapturePreviewService", () => {
+  it("defers display-media registration until Electron is ready", async () => {
+    let resolveReady!: () => void;
+    electronMocks.appIsReady = false;
+    electronMocks.appWhenReady.mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveReady = resolve;
+      }),
+    );
+
+    new CapturePreviewService();
+
+    expect(electronMocks.setDisplayMediaRequestHandler).not.toHaveBeenCalled();
+    resolveReady();
+    await vi.waitFor(() => {
+      expect(
+        electronMocks.setDisplayMediaRequestHandler,
+      ).toHaveBeenCalledOnce();
+    });
+  });
+
   it("creates and reuses the singleton instance", () => {
     const singletonAccess = CapturePreviewService as unknown as {
       instance: CapturePreviewService | null;
@@ -533,21 +578,49 @@ describe("CapturePreviewService", () => {
     expect(internals.sourceThumbnailCache.has("screen:1:0")).toBe(false);
   });
 
-  it("shares an in-flight source listing request across normal and forced refreshes", async () => {
+  it("queues a forced refresh behind an in-flight normal source listing", async () => {
     let resolveSources!: (sources: Electron.DesktopCapturerSource[]) => void;
     electronMocks.getAllDisplays.mockReturnValue([]);
-    electronMocks.getSources.mockImplementation(
-      () =>
+    electronMocks.getSources
+      .mockReturnValueOnce(
         new Promise<Electron.DesktopCapturerSource[]>((resolve) => {
           resolveSources = resolve;
         }),
-    );
+      )
+      .mockResolvedValueOnce([
+        createSource({ id: "screen:2:0", name: "Entire Screen" }),
+      ]);
     const service = new CapturePreviewService();
 
     const first = service.listSources();
     const second = service.listSources({ forceRefresh: true });
 
     expect(electronMocks.getSources).toHaveBeenCalledTimes(1);
+    resolveSources([createSource({ id: "screen:1:0", name: "Entire Screen" })]);
+    await expect(first).resolves.toEqual([
+      expect.objectContaining({ id: "screen:1:0" }),
+    ]);
+    await expect(second).resolves.toEqual([
+      expect.objectContaining({ id: "screen:2:0" }),
+    ]);
+    expect(electronMocks.getSources).toHaveBeenCalledTimes(2);
+    expect(poeProcessMocks.refreshSnapshot).toHaveBeenCalledOnce();
+  });
+
+  it("shares an in-flight forced source listing", async () => {
+    let resolveSources!: (sources: Electron.DesktopCapturerSource[]) => void;
+    electronMocks.getAllDisplays.mockReturnValue([]);
+    electronMocks.getSources.mockReturnValue(
+      new Promise<Electron.DesktopCapturerSource[]>((resolve) => {
+        resolveSources = resolve;
+      }),
+    );
+    const service = new CapturePreviewService();
+
+    const first = service.listSources({ forceRefresh: true });
+    const second = service.listSources({ forceRefresh: true });
+
+    expect(electronMocks.getSources).toHaveBeenCalledOnce();
     resolveSources([createSource({ id: "screen:1:0", name: "Entire Screen" })]);
     await expect(first).resolves.toEqual([
       expect.objectContaining({ id: "screen:1:0" }),
@@ -580,49 +653,264 @@ describe("CapturePreviewService", () => {
     );
   });
 
-  it("caches source ids briefly and refreshes after the cache window", async () => {
+  it("authorizes display media sources per requesting renderer frame", async () => {
+    const { handlers } = mockIpcMainHandlers();
+    const firstSource = createSource({
+      id: "screen:1:0",
+      name: "Entire Screen",
+    });
+    const secondSource = createSource({
+      id: "window:poe:2",
+      name: "Path of Exile 2",
+    });
+    electronMocks.getAllDisplays.mockReturnValue([]);
+    electronMocks.getSources.mockResolvedValue([firstSource, secondSource]);
+    const service = new CapturePreviewService();
+    await service.listSources();
+    const displayMediaHandler = electronMocks.setDisplayMediaRequestHandler.mock
+      .calls[0]?.[0] as (
+      request: Electron.DisplayMediaRequestHandlerHandlerRequest,
+      callback: (streams: Electron.Streams) => void,
+    ) => void;
+    const firstCallback = vi.fn();
+    const secondCallback = vi.fn();
+
+    handlers.get(CapturePreviewChannel.PrepareDisplayMediaSource)?.(
+      {
+        frameId: 101,
+        processId: 70,
+        senderFrame: {
+          processId: 7,
+          routingId: 11,
+        } as Electron.WebFrameMain,
+      },
+      firstSource.id,
+    );
+    handlers.get(CapturePreviewChannel.PrepareDisplayMediaSource)?.(
+      { frameId: 22, processId: 8, senderFrame: null },
+      secondSource.id,
+    );
+    displayMediaHandler(
+      {
+        frame: { processId: 8, routingId: 22 } as Electron.WebFrameMain,
+        videoRequested: true,
+      } as Electron.DisplayMediaRequestHandlerHandlerRequest,
+      secondCallback,
+    );
+    displayMediaHandler(
+      {
+        frame: { processId: 7, routingId: 11 } as Electron.WebFrameMain,
+        videoRequested: true,
+      } as Electron.DisplayMediaRequestHandlerHandlerRequest,
+      firstCallback,
+    );
+
+    expect(secondCallback).toHaveBeenCalledWith({
+      video: { id: secondSource.id, name: secondSource.name },
+    });
+    expect(firstCallback).toHaveBeenCalledWith({
+      video: { id: firstSource.id, name: firstSource.name },
+    });
+    expect(electronMocks.getSources).toHaveBeenCalledTimes(1);
+    expect(electronMocks.setDisplayMediaRequestHandler).toHaveBeenCalledWith(
+      displayMediaHandler,
+      { useSystemPicker: false },
+    );
+  });
+
+  it("denies missing, expired, and unavailable display media requests", async () => {
     let now = 1_000;
     vi.spyOn(Date, "now").mockImplementation(() => now);
+    const { handlers } = mockIpcMainHandlers();
+    const availableSource = createSource({
+      id: "screen:1:0",
+      name: "Entire Screen",
+    });
     electronMocks.getAllDisplays.mockReturnValue([]);
-    electronMocks.getSources
-      .mockResolvedValueOnce([
-        createSource({ id: "screen:1:0", name: "Entire Screen" }),
-      ])
-      .mockResolvedValueOnce([
-        createSource({ id: "screen:2:0", name: "Entire Screen" }),
-      ]);
+    electronMocks.getSources.mockResolvedValue([availableSource]);
     const service = new CapturePreviewService();
+    await service.listSources();
+    const displayMediaHandler = electronMocks.setDisplayMediaRequestHandler.mock
+      .calls[0]?.[0] as (
+      request: Electron.DisplayMediaRequestHandlerHandlerRequest,
+      callback: (streams: Electron.Streams) => void,
+    ) => void;
+    const unpreparedCallback = vi.fn();
+    const expiredCallback = vi.fn();
+    const refreshedCallback = vi.fn();
+    const unavailableCallback = vi.fn();
 
-    await expect(service.sourceExists("screen:1:0")).resolves.toBe(true);
-    await expect(service.sourceExists("screen:2:0")).resolves.toBe(false);
+    displayMediaHandler(
+      {
+        frame: null,
+        videoRequested: true,
+      } as Electron.DisplayMediaRequestHandlerHandlerRequest,
+      unpreparedCallback,
+    );
+    expect(
+      handlers.get(CapturePreviewChannel.PrepareDisplayMediaSource)?.(
+        { frameId: 11, processId: 7, senderFrame: null },
+        availableSource.id,
+      ),
+    ).toBe(true);
+    now += 6_000;
+    expect(
+      handlers.get(CapturePreviewChannel.PrepareDisplayMediaSource)?.(
+        { frameId: 12, processId: 7, senderFrame: null },
+        availableSource.id,
+      ),
+    ).toBe(true);
+    expect(
+      handlers.get(CapturePreviewChannel.PrepareDisplayMediaSource)?.(
+        { frameId: 13, processId: 7, senderFrame: null },
+        "window:missing",
+      ),
+    ).toBe(false);
+    displayMediaHandler(
+      {
+        frame: { processId: 7, routingId: 11 } as Electron.WebFrameMain,
+        videoRequested: true,
+      } as Electron.DisplayMediaRequestHandlerHandlerRequest,
+      expiredCallback,
+    );
+    displayMediaHandler(
+      {
+        frame: { processId: 7, routingId: 12 } as Electron.WebFrameMain,
+        videoRequested: true,
+      } as Electron.DisplayMediaRequestHandlerHandlerRequest,
+      refreshedCallback,
+    );
+    displayMediaHandler(
+      {
+        frame: { processId: 7, routingId: 13 } as Electron.WebFrameMain,
+        videoRequested: true,
+      } as Electron.DisplayMediaRequestHandlerHandlerRequest,
+      unavailableCallback,
+    );
+
+    expect(unpreparedCallback).toHaveBeenCalledWith({});
+    expect(expiredCallback).toHaveBeenCalledWith({});
+    expect(refreshedCallback).toHaveBeenCalledWith({
+      video: { id: availableSource.id, name: availableSource.name },
+    });
+    expect(unavailableCallback).toHaveBeenCalledWith({});
     expect(electronMocks.getSources).toHaveBeenCalledTimes(1);
-
-    now += 2_000;
-    await expect(service.sourceExists("screen:2:0")).resolves.toBe(true);
-    expect(electronMocks.getSources).toHaveBeenCalledTimes(2);
   });
 
-  it("shares an in-flight source id request", async () => {
-    let resolveSources!: (sources: Electron.DesktopCapturerSource[]) => void;
+  it("denies display media when the source snapshot is unavailable", async () => {
+    const { handlers } = mockIpcMainHandlers();
     electronMocks.getAllDisplays.mockReturnValue([]);
-    electronMocks.getSources.mockImplementation(
-      () =>
-        new Promise<Electron.DesktopCapturerSource[]>((resolve) => {
-          resolveSources = resolve;
-        }),
+    electronMocks.getSources.mockRejectedValue(
+      new Error("capture unavailable"),
     );
     const service = new CapturePreviewService();
+    await expect(service.listSources()).rejects.toThrow("capture unavailable");
+    const displayMediaHandler = electronMocks.setDisplayMediaRequestHandler.mock
+      .calls[0]?.[0] as (
+      request: Electron.DisplayMediaRequestHandlerHandlerRequest,
+      callback: (streams: Electron.Streams) => void,
+    ) => void;
+    const callback = vi.fn();
 
-    const first = service.sourceExists("screen:1:0");
-    const second = service.sourceExists("window:poe:1");
+    handlers.get(CapturePreviewChannel.PrepareDisplayMediaSource)?.(
+      { frameId: 11, processId: 7, senderFrame: null },
+      "window:poe:1",
+    );
+    displayMediaHandler(
+      {
+        frame: { processId: 7, routingId: 11 } as Electron.WebFrameMain,
+        videoRequested: true,
+      } as Electron.DisplayMediaRequestHandlerHandlerRequest,
+      callback,
+    );
 
-    expect(electronMocks.getSources).toHaveBeenCalledTimes(1);
-    resolveSources([createSource({ id: "screen:1:0", name: "Entire Screen" })]);
-    await expect(first).resolves.toBe(true);
-    await expect(second).resolves.toBe(false);
+    expect(callback).toHaveBeenCalledWith({});
   });
 
-  it("registers IPC handlers for source listing and existence checks", async () => {
+  it("revokes prepared display media when a refresh removes its source", async () => {
+    const { handlers } = mockIpcMainHandlers();
+    const availableSource = createSource({
+      id: "window:poe:1",
+      name: "Path of Exile 2",
+    });
+    electronMocks.getAllDisplays.mockReturnValue([]);
+    electronMocks.getSources
+      .mockResolvedValueOnce([availableSource])
+      .mockResolvedValueOnce([]);
+    const service = new CapturePreviewService();
+    await service.listSources();
+    const displayMediaHandler = electronMocks.setDisplayMediaRequestHandler.mock
+      .calls[0]?.[0] as (
+      request: Electron.DisplayMediaRequestHandlerHandlerRequest,
+      callback: (streams: Electron.Streams) => void,
+    ) => void;
+    const callback = vi.fn();
+
+    expect(
+      handlers.get(CapturePreviewChannel.PrepareDisplayMediaSource)?.(
+        { frameId: 11, processId: 7, senderFrame: null },
+        availableSource.id,
+      ),
+    ).toBe(true);
+    await service.listSources({ forceRefresh: true });
+    displayMediaHandler(
+      {
+        frame: { processId: 7, routingId: 11 } as Electron.WebFrameMain,
+        videoRequested: true,
+      } as Electron.DisplayMediaRequestHandlerHandlerRequest,
+      callback,
+    );
+
+    expect(callback).toHaveBeenCalledWith({});
+  });
+
+  it("rate-limits renderer capture failure warnings", () => {
+    let now = 1_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const { handlers } = mockIpcMainHandlers();
+    new CapturePreviewService();
+    const reportFailure = handlers.get(CapturePreviewChannel.ReportFailure);
+
+    reportFailure?.({}, "window:poe:1", "Capture source closed");
+    reportFailure?.({}, "window:poe:2", "Capture source closed again");
+    expect(warn).toHaveBeenCalledOnce();
+
+    now += 30_000;
+    reportFailure?.({}, "window:poe:2", "Capture source closed again");
+    expect(warn).toHaveBeenCalledTimes(2);
+  });
+
+  it("accepts capture failure reports only from the aura overlay", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const { handlers } = mockIpcMainHandlers();
+    new CapturePreviewService();
+    const reportFailure = handlers.get(CapturePreviewChannel.ReportFailure);
+    const mainSender = { id: 1 };
+    const auraSender = { id: 2 };
+    registerIpcWindowRole(mainSender, WindowName.Main);
+    registerIpcWindowRole(auraSender, WindowName.AuraOverlay);
+
+    expect(() =>
+      reportFailure?.(
+        { sender: mainSender },
+        "window:poe:1",
+        "Capture source closed",
+      ),
+    ).toThrow(
+      "capture-preview:report-failure is not available from this window",
+    );
+    expect(() =>
+      reportFailure?.(
+        { sender: auraSender },
+        "window:poe:1",
+        "Capture source closed",
+      ),
+    ).not.toThrow();
+    expect(warn).toHaveBeenCalledOnce();
+  });
+
+  it("registers IPC handlers for source listing and display-media preparation", async () => {
     const { handle, handlers } = mockIpcMainHandlers();
     settingsStoreMocks.activeGame = "poe1";
     electronMocks.getAllDisplays.mockReturnValue([]);
@@ -652,9 +940,12 @@ describe("CapturePreviewService", () => {
     await expect(
       handlers.get(CapturePreviewChannel.ListSources)?.({}, true),
     ).resolves.toEqual([expect.objectContaining({ id: "window:poe:1" })]);
-    await expect(
-      handlers.get(CapturePreviewChannel.SourceExists)?.({}, "window:poe:1"),
-    ).resolves.toBe(true);
+    expect(
+      handlers.get(CapturePreviewChannel.PrepareDisplayMediaSource)?.(
+        { frameId: 1, processId: 1, senderFrame: null },
+        "window:poe:1",
+      ),
+    ).toBe(true);
     await expect(
       handlers.get(CapturePreviewChannel.GetSourceThumbnail)?.(
         {},
@@ -667,17 +958,30 @@ describe("CapturePreviewService", () => {
       error: "forceRefresh must be a boolean",
       ok: false,
     });
-    expect(handlers.get(CapturePreviewChannel.SourceExists)?.({}, "")).toEqual({
-      error: "sourceId is too short",
-      ok: false,
-    });
+    expect(
+      handlers.get(CapturePreviewChannel.PrepareDisplayMediaSource)?.({}, ""),
+    ).toEqual({ error: "sourceId is too short", ok: false });
     expect(
       handlers.get(CapturePreviewChannel.GetSourceThumbnail)?.({}, ""),
     ).toEqual({
       error: "sourceId is too short",
       ok: false,
     });
+    expect(
+      handlers.get(CapturePreviewChannel.ReportFailure)?.(
+        {},
+        "window:poe:1",
+        "Capture source closed",
+      ),
+    ).toBeUndefined();
+    expect(
+      handlers.get(CapturePreviewChannel.ReportFailure)?.(
+        {},
+        "window:poe:1",
+        "",
+      ),
+    ).toEqual({ error: "error is too short", ok: false });
     expect(service).toBeInstanceOf(CapturePreviewService);
-    expect(handle).toHaveBeenCalledTimes(3);
+    expect(handle).toHaveBeenCalledTimes(4);
   });
 });

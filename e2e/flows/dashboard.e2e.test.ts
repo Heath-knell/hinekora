@@ -5,6 +5,7 @@ import { selectAppBarGame } from "../helpers/appbar-fixture";
 import {
   emitDashboardPoeProcessStart,
   emitDashboardPoeProcessStop,
+  emitDashboardRecorderStatus,
   expectNoUnexpectedDashboardBridgeCalls,
   getDashboardE2ECalls,
   scheduleDashboardCaptureSources,
@@ -172,14 +173,68 @@ test("prevents Live Preview refresh loops and covers source preview controls", a
     .poll(async () => {
       const calls = await getDashboardE2ECalls(page);
 
-      return calls.getUserMediaConstraints.length;
+      return calls.displayMediaConstraints.length;
     })
     .toBeGreaterThan(0);
+  expect(
+    (await getDashboardE2ECalls(page)).preparedDisplayMediaSourceIds,
+  ).toContain("window:poe2:1");
 
-  await page.getByRole("button", { name: "Stop Preview" }).click();
+  await setDashboardCaptureSources(page, [dashboardScreenSource]);
+  await emitDashboardPoeProcessStop(page);
+  await expect(sourceSelect).toHaveValue("missing-window:poe2");
+  await expect(page.getByText("Source unavailable")).toBeVisible();
+
+  const restartedPoeSource: CapturePreviewSource = {
+    displayId: null,
+    game: "poe2",
+    height: 1440,
+    id: "window:poe2:restarted",
+    kind: "window",
+    name: "Path of Exile 2",
+    thumbnailDataUrl: null,
+    width: 2560,
+  };
+  await setDashboardCaptureSources(page, [
+    dashboardScreenSource,
+    restartedPoeSource,
+  ]);
+  await emitDashboardPoeProcessStart(
+    page,
+    createPoeProcessState({
+      game: "poe2",
+      processName: "PathOfExileSteam.exe",
+    }),
+  );
+  await expect(sourceSelect).toHaveValue(restartedPoeSource.id);
+  await expect
+    .poll(
+      async () =>
+        (await getDashboardE2ECalls(page)).preparedDisplayMediaSourceIds,
+    )
+    .toContain(restartedPoeSource.id);
+  await expect(
+    page.getByRole("button", { name: "Stop Preview" }),
+  ).toBeVisible();
+
+  await emitDashboardRecorderStatus(page, { bufferActive: true });
   await expect(
     page.getByRole("button", { name: "Show Preview" }),
+  ).toBeDisabled();
+
+  await emitDashboardRecorderStatus(page, { bufferActive: false });
+  await expect(
+    page.getByRole("button", { name: "Show Preview" }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "Show Preview" }).click();
+  await expect(
+    page.getByRole("button", { name: "Stop Preview" }),
   ).toBeVisible();
+
+  await emitDashboardRecorderStatus(page, { runRecordingActive: true });
+  await expect(
+    page.getByRole("button", { name: "Show Preview" }),
+  ).toBeDisabled();
 });
 
 test("covers unavailable PoE live preview sources and auto-start alerts", async ({
@@ -332,7 +387,7 @@ test("updates live preview sources for PoE process variants", async ({
   }
 });
 
-test("retries live preview source refresh when the game window appears after process start", async ({
+test("refreshes a late game window source on demand after process start", async ({
   page,
 }) => {
   await setupDashboardE2E(page);
@@ -374,14 +429,24 @@ test("retries live preview source refresh when the game window appears after pro
 
       return calls.captureSourceResponses.slice(responseCountBeforeStart);
     })
+    .toEqual([[dashboardScreenSource.id]]);
+  await page.waitForTimeout(1_100);
+  const callsBeforeManualRefresh = await getDashboardE2ECalls(page);
+  expect(callsBeforeManualRefresh.captureSourceRequests).toHaveLength(
+    requestCountBeforeStart + 1,
+  );
+
+  await page.getByRole("button", { name: "Refresh" }).click();
+  await expect
+    .poll(async () => {
+      const calls = await getDashboardE2ECalls(page);
+
+      return calls.captureSourceResponses.slice(responseCountBeforeStart);
+    })
     .toEqual([
       [dashboardScreenSource.id],
       [dashboardScreenSource.id, poe2Source.id],
     ]);
-  const callsAfterRetry = await getDashboardE2ECalls(page);
-  expect(callsAfterRetry.captureSourceRequests).toHaveLength(
-    requestCountBeforeStart + 2,
-  );
   await expect
     .poll(() => openLivePreviewSourceSelect(sourceSelect))
     .toEqual([
@@ -689,6 +754,60 @@ test("keeps content-width tabs on one horizontally scrollable row", async ({
 
   expect(layout.rowOffsets).toHaveLength(1);
   expect(layout.scrollWidth).toBeGreaterThan(layout.clientWidth);
+});
+
+test("persists per-overlay game focus preferences", async ({ page }) => {
+  await setupDashboardE2E(page, {
+    initialHash: "/#/settings?tab=overlay",
+    skipDashboardShellChecks: true,
+  });
+
+  const recorderToggle = page.getByLabel(
+    "Keep recording controls visible while a game is running",
+  );
+  const auraToggle = page.getByLabel(
+    "Keep aura overlay visible while a game is running",
+  );
+  const clipPreviewToggle = page.getByLabel(
+    "Keep clip previews visible while a game is running",
+  );
+  const gridLinesToggle = page.getByLabel(
+    "Keep grid lines overlay visible while a game is running",
+  );
+
+  await expect(recorderToggle).not.toBeChecked();
+  await expect(auraToggle).not.toBeChecked();
+  await expect(clipPreviewToggle).not.toBeChecked();
+  await expect(gridLinesToggle).not.toBeChecked();
+  await expect(page.getByText("Hidden when game is not focused")).toHaveCount(
+    4,
+  );
+  await expect(
+    page.getByText("These settings work best with two or more monitors."),
+  ).toBeVisible();
+
+  for (const toggle of [
+    recorderToggle,
+    auraToggle,
+    clipPreviewToggle,
+    gridLinesToggle,
+  ]) {
+    await toggle.click();
+    await expect(toggle).toBeChecked();
+  }
+
+  await expect(page.getByText("Always visible")).toHaveCount(4);
+
+  await expect
+    .poll(async () => (await getDashboardE2ECalls(page)).settingsUpdates)
+    .toEqual(
+      expect.arrayContaining([
+        { recorderOverlayIgnoreGameFocus: true },
+        { auraOverlayIgnoreGameFocus: true },
+        { clipPreviewOverlayIgnoreGameFocus: true },
+        { gridLinesOverlayIgnoreGameFocus: true },
+      ]),
+    );
 });
 
 test("shows and copies the pseudonymous user ID from privacy settings", async ({

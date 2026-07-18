@@ -158,8 +158,8 @@ describe("AuraManagerOverlaysService", () => {
     electronMocks.browserWindowFactory.mockReturnValue(auraWindow);
     const coordinator = new GameOverlayCoordinator();
     const service = new AuraManagerOverlaysService(coordinator);
-    coordinator.setGameRunningActive(true);
     service.setGameRunningActive(true);
+    coordinator.setGameRunningActive(true);
     coordinator.setPoeFocusActive(true);
 
     await service.show(profile.id);
@@ -194,6 +194,31 @@ describe("AuraManagerOverlaysService", () => {
     closedListener?.();
     expect(getInternals(service).auraWindow).toBeNull();
     expect(getInternals(service).auraWindowProfileId).toBeUndefined();
+  });
+
+  it("uses the detected running game when the selected app tab differs", async () => {
+    const globalProfile = createAuraProfile({ id: "profile-global" });
+    const poe2Profile = createAuraProfile({
+      game: "poe2",
+      id: "profile-poe2",
+    });
+    vi.spyOn(ProfilesService, "getInstance").mockReturnValue({
+      list: () => [globalProfile, poe2Profile],
+      update: vi.fn(),
+    } as unknown as ProfilesService);
+    const auraWindow = createFakeWindow();
+    electronMocks.browserWindowFactory.mockReturnValue(auraWindow);
+    const coordinator = new GameOverlayCoordinator();
+    const service = new AuraManagerOverlaysService(coordinator);
+    service.setRunningGame("poe2");
+    coordinator.setGameRunningActive(true);
+    coordinator.setPoeFocusActive(true);
+
+    await service.show(poe2Profile.id);
+
+    expect(auraWindow.loadFile).toHaveBeenCalledWith(expect.any(String), {
+      hash: `/${WindowName.AuraOverlay}?profileId=profile-poe2`,
+    });
   });
 
   it("reuses the existing aura overlay window and reloads only when the profile changes", async () => {
@@ -231,6 +256,43 @@ describe("AuraManagerOverlaysService", () => {
     expect(auraWindow.loadFile).toHaveBeenNthCalledWith(2, expect.any(String), {
       hash: `/${WindowName.AuraOverlay}?profileId=profile-2`,
     });
+  });
+
+  it("does not present a stale profile while a replacement is queued", async () => {
+    const firstProfile = createAuraProfile({ id: "profile-1" });
+    const secondProfile = createAuraProfile({ id: "profile-2" });
+    vi.spyOn(ProfilesService, "getInstance").mockReturnValue({
+      list: () => [firstProfile, secondProfile],
+      update: vi.fn(),
+    } as unknown as ProfilesService);
+    let resolveFirstLoad!: () => void;
+    const firstLoad = new Promise<void>((resolve) => {
+      resolveFirstLoad = resolve;
+    });
+    const auraWindow = createFakeWindow();
+    auraWindow.loadFile
+      .mockReturnValueOnce(firstLoad)
+      .mockResolvedValueOnce(undefined);
+    electronMocks.browserWindowFactory.mockReturnValue(auraWindow);
+    const coordinator = new GameOverlayCoordinator();
+    const service = new AuraManagerOverlaysService(coordinator);
+    coordinator.setGameRunningActive(true);
+    service.setGameRunningActive(true);
+    coordinator.setPoeFocusActive(true);
+
+    const firstRequest = service.show(firstProfile.id);
+    await vi.waitFor(() => {
+      expect(auraWindow.loadFile).toHaveBeenCalledOnce();
+    });
+    const replacementRequest = service.show(secondProfile.id);
+    resolveFirstLoad();
+    await Promise.all([firstRequest, replacementRequest]);
+
+    expect(auraWindow.loadFile).toHaveBeenCalledTimes(2);
+    expect(auraWindow.loadFile).toHaveBeenLastCalledWith(expect.any(String), {
+      hash: `/${WindowName.AuraOverlay}?profileId=profile-2`,
+    });
+    expect(auraWindow.showInactive).toHaveBeenCalledOnce();
   });
 
   it("requests add aura mode without reloading the current aura profile", async () => {
@@ -375,10 +437,6 @@ describe("AuraManagerOverlaysService", () => {
     mainWindow.webContents.send.mockClear();
     setOverlayFocusActive.mockClear();
     info.mockClear();
-
-    service.setInputPassthrough(false);
-    expect(auraWindow.setIgnoreMouseEvents).not.toHaveBeenCalled();
-    expect(auraWindow.setFocusable).not.toHaveBeenCalled();
 
     service.setLocked(false);
     expect(info).toHaveBeenCalledWith(
@@ -583,14 +641,17 @@ describe("AuraManagerOverlaysService", () => {
     expect(electronMocks.BrowserWindow).toHaveBeenCalledTimes(2);
   });
 
-  it("locks and forgets editable aura requests when the game stops", async () => {
+  it("locks and restores editable aura requests when the game restarts", async () => {
     const profile = createAuraProfile();
     vi.spyOn(ProfilesService, "getInstance").mockReturnValue({
       list: () => [profile],
       update: vi.fn(),
     } as unknown as ProfilesService);
     const auraWindow = createFakeWindow();
-    electronMocks.browserWindowFactory.mockReturnValue(auraWindow);
+    const restoredWindow = createFakeWindow();
+    electronMocks.browserWindowFactory
+      .mockReturnValueOnce(auraWindow)
+      .mockReturnValueOnce(restoredWindow);
     const coordinator = new GameOverlayCoordinator();
     const service = new AuraManagerOverlaysService(coordinator);
     coordinator.setGameRunningActive(true);
@@ -601,13 +662,18 @@ describe("AuraManagerOverlaysService", () => {
     service.setLocked(false);
 
     service.setGameRunningActive(false);
+    coordinator.setGameRunningActive(false);
     service.setGameRunningActive(true);
+    coordinator.setGameRunningActive(true);
     await flushTimers();
 
     expect(service.isLocked()).toBe(true);
-    expect(getInternals(service).auraOverlayRequested).toBe(false);
+    expect(getInternals(service).auraOverlayRequested).toBe(true);
     expect(auraWindow.close).toHaveBeenCalledTimes(1);
-    expect(electronMocks.BrowserWindow).toHaveBeenCalledTimes(1);
+    expect(electronMocks.BrowserWindow).toHaveBeenCalledTimes(2);
+    expect(restoredWindow.loadFile).toHaveBeenCalledWith(expect.any(String), {
+      hash: `/${WindowName.AuraOverlay}?profileId=profile-1`,
+    });
   });
 
   it("locks and forgets editable aura requests when the native window closes", async () => {
@@ -659,7 +725,9 @@ describe("AuraManagerOverlaysService", () => {
 
     await service.show(profile.id);
     service.setGameRunningActive(false);
+    coordinator.setGameRunningActive(false);
     service.setGameRunningActive(true);
+    coordinator.setGameRunningActive(true);
     await flushTimers();
 
     expect(service.isLocked()).toBe(true);
@@ -715,8 +783,8 @@ describe("AuraManagerOverlaysService", () => {
 
     expect(electronMocks.BrowserWindow).not.toHaveBeenCalled();
 
-    coordinator.setGameRunningActive(true);
     service.setGameRunningActive(true);
+    coordinator.setGameRunningActive(true);
     await flushTimers();
 
     expect(electronMocks.BrowserWindow).toHaveBeenCalledTimes(1);
@@ -888,6 +956,50 @@ describe("AuraManagerOverlaysService", () => {
     await expect(service.show(profile.id)).resolves.toBeUndefined();
 
     expect(auraWindow.showInactive).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["it is hidden", (service) => service.hide()],
+    ["the game stops", (service) => service.setGameRunningActive(false)],
+    ["clip preview starts", (service) => service.setClipPreviewSuspended(true)],
+    ["the system suspends", (service) => service.suspendForSystem()],
+    ["the service is destroyed", (service) => service.destroy()],
+  ] satisfies Array<
+    [string, (service: AuraManagerOverlaysService) => void]
+  >)("does not recreate an aura window from queued work after %s", async (_name, invalidate) => {
+    const profile = createAuraProfile();
+    vi.spyOn(ProfilesService, "getInstance").mockReturnValue({
+      list: () => [profile],
+      update: vi.fn(),
+    } as unknown as ProfilesService);
+    let resolveLoad!: () => void;
+    const pendingLoad = new Promise<void>((resolve) => {
+      resolveLoad = resolve;
+    });
+    const auraWindow = createFakeWindow();
+    const staleWindow = createFakeWindow();
+    auraWindow.loadFile.mockReturnValue(pendingLoad);
+    electronMocks.browserWindowFactory
+      .mockReturnValueOnce(auraWindow)
+      .mockReturnValueOnce(staleWindow);
+    const coordinator = new GameOverlayCoordinator();
+    const service = new AuraManagerOverlaysService(coordinator);
+    coordinator.setGameRunningActive(true);
+    service.setGameRunningActive(true);
+    coordinator.setPoeFocusActive(true);
+
+    const showRequest = service.show(profile.id);
+    await vi.waitFor(() => {
+      expect(auraWindow.loadFile).toHaveBeenCalledOnce();
+    });
+    const queuedRestore = service.restoreRequestedOverlay();
+    invalidate(service);
+    resolveLoad();
+    await Promise.all([showRequest, queuedRestore]);
+
+    expect(electronMocks.BrowserWindow).toHaveBeenCalledTimes(1);
+    expect(staleWindow.loadFile).not.toHaveBeenCalled();
+    expect(staleWindow.showInactive).not.toHaveBeenCalled();
   });
 
   it("ignores aura overlay load failures after the window is destroyed", async () => {

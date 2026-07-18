@@ -27,13 +27,13 @@ function ManagedRecorderSettingsLockedOverlay() {
           disabled={!canUnlock}
           title={
             canUnlock
-              ? "Unlock settings"
-              : "Stop recording or rewind before unlocking settings"
+              ? "Show settings"
+              : "Stop recording or rewind before showing settings"
           }
           type="button"
           onClick={unlockSettings}
         >
-          Unlock settings
+          Show settings
         </button>
       </div>
     </div>

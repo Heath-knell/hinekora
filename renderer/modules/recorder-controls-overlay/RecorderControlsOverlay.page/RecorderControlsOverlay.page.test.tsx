@@ -219,7 +219,6 @@ describe("RecorderControlsOverlayPage", () => {
     };
     settingsState = {
       hydrate: vi.fn().mockResolvedValue(undefined),
-      pendingPreferences: {},
       preferenceErrors: {},
       startListening: vi.fn(() => vi.fn()),
       update: vi.fn().mockResolvedValue(undefined),

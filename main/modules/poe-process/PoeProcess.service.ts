@@ -13,6 +13,7 @@ import {
   isPoeProcessSnapshotRunningForGame,
   type PoeProcessSnapshot,
   type PoeProcessState,
+  resolveRunningPoeGame,
 } from "~/main/modules/poe-process/PoeProcess.dto";
 import { SettingsStoreService } from "~/main/modules/settings-store";
 import {
@@ -453,10 +454,12 @@ class PoeProcessService {
   }
 
   private syncGameRunningConsumers(): void {
-    const gameRunning = this.isActiveGameRunning();
-    OverlayWindowsService.getInstance().setGameRunningActive(gameRunning);
+    const activeGameRunning = this.isActiveGameRunning();
+    OverlayWindowsService.getInstance().setRunningGame(
+      resolveRunningPoeGame(this.currentSnapshot),
+    );
     void ManagedRecorderService.getInstance()
-      .setGameRunningState(gameRunning)
+      .setGameRunningState(activeGameRunning)
       .catch((error) => {
         logWarn(POE_PROCESS_SCOPE, "Failed to sync recorder game state", {
           error: safeErrorMessage(error),

@@ -12,7 +12,7 @@ export { createAuraArcCurvePoints } from "./createAuraArcCurvePoints/createAuraA
 export { createAuraCropClipPath } from "./createAuraCropClipPath/createAuraCropClipPath";
 export { createAuraHistorySnapshot } from "./createAuraHistorySnapshot/createAuraHistorySnapshot";
 export { createAuraPointsDisplaySize } from "./createAuraPointsDisplaySize/createAuraPointsDisplaySize";
-export { createAuraPreviewConstraints } from "./createAuraPreviewConstraints/createAuraPreviewConstraints";
+export { createAuraPreviewVideoConstraints } from "./createAuraPreviewVideoConstraints/createAuraPreviewVideoConstraints";
 export { createAuraProfileUpdateDeletingPlacement } from "./createAuraProfileUpdateDeletingPlacement/createAuraProfileUpdateDeletingPlacement";
 export { createAuraProfileUpdateFromSnapshot } from "./createAuraProfileUpdateFromSnapshot/createAuraProfileUpdateFromSnapshot";
 export { createAuraVideoStyle } from "./createAuraVideoStyle/createAuraVideoStyle";

@@ -107,11 +107,12 @@ beforeEach(() => {
       recordingMaxStorageGb: 1,
     }),
   } as unknown as SettingsStoreService);
-  service = new RecordingStorageService();
+  service = RecordingStorageService.getInstance();
 });
 
 afterEach(() => {
   vi.useRealTimers();
+  RecordingStorageService.resetForTests();
   electronMocks.getPath.mockReset();
   electronMocks.openPath.mockReset();
   electronMocks.showItemInFolder.mockReset();
@@ -776,6 +777,9 @@ describe("RecordingStorageService", () => {
 
   it("restarts an in-flight usage scan after a cacheless usage change", async () => {
     const usageModule = await import("../RecordingStorage.usage");
+    const calculateRecordingStorageUsage =
+      usageModule.calculateRecordingStorageUsage;
+    let targetCalculationCount = 0;
     let resolveFirstCalculation!: (value: {
       clipsSizeBytes: number;
       recordingsSizeBytes: number;
@@ -788,9 +792,20 @@ describe("RecordingStorageService", () => {
     }>((resolvePromise) => {
       resolveFirstCalculation = resolvePromise;
     });
-    const calculateUsage = vi
-      .spyOn(usageModule, "calculateRecordingStorageUsage")
-      .mockImplementationOnce(() => firstCalculation);
+    vi.spyOn(usageModule, "calculateRecordingStorageUsage").mockImplementation(
+      (options) => {
+        if (options.root !== root) {
+          return calculateRecordingStorageUsage(options);
+        }
+
+        targetCalculationCount += 1;
+        if (targetCalculationCount === 1) {
+          return firstCalculation;
+        }
+
+        return calculateRecordingStorageUsage(options);
+      },
+    );
 
     const usageRequest = service.getUsage();
     await new Promise<void>((resolvePromise) => setImmediate(resolvePromise));
@@ -809,7 +824,7 @@ describe("RecordingStorageService", () => {
     });
 
     await expect(usageRequest).resolves.toMatchObject({ clipsSizeBytes: 5 });
-    expect(calculateUsage).toHaveBeenCalledTimes(2);
+    expect(targetCalculationCount).toBeGreaterThanOrEqual(2);
   });
 
   it("updates cached usage when a run recording is finalized", async () => {

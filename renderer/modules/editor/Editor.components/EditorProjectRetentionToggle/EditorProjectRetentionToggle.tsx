@@ -10,11 +10,10 @@ interface EditorProjectRetentionToggleProps {
 function EditorProjectRetentionToggle({
   disabled = false,
 }: EditorProjectRetentionToggleProps) {
-  const { error, isEnabled, isSaving, updatePreference } = useSettingsShallow(
+  const { error, isEnabled, updatePreference } = useSettingsShallow(
     (settings) => ({
       error: settings.preferenceErrors.editorAutoPruneProjects ?? null,
       isEnabled: settings.value?.editorAutoPruneProjects ?? true,
-      isSaving: settings.pendingPreferences.editorAutoPruneProjects === true,
       updatePreference: settings.updatePreference,
     }),
   );
@@ -34,7 +33,7 @@ function EditorProjectRetentionToggle({
     <label
       className={clsx(
         "flex h-8 w-full cursor-pointer items-center justify-between gap-3 rounded-md px-3 text-sm transition-colors hover:bg-base-300",
-        { "cursor-not-allowed opacity-50": disabled || isSaving },
+        { "cursor-not-allowed opacity-50": disabled },
       )}
       title="Automatically delete saved edits older than the latest five."
     >
@@ -50,7 +49,7 @@ function EditorProjectRetentionToggle({
         aria-label="Auto-prune all but last 5 edits"
         checked={isEnabled}
         className="toggle toggle-primary toggle-xs"
-        disabled={disabled || isSaving}
+        disabled={disabled}
         type="checkbox"
         onChange={handleToggleChange}
       />

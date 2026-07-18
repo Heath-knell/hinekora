@@ -11,8 +11,9 @@ import type {
   ManagedRecorderStatus,
 } from "~/main/modules/managed-recorder/ManagedRecorder.dto";
 import {
+  hasRenderableAuraPlacements,
   ProfilesService,
-  resolveRenderableProfileForGame,
+  resolveProfileForGame,
 } from "~/main/modules/profiles";
 import { RecordingControlsOverlayService } from "~/main/modules/recording-controls-overlay";
 import { SettingsStoreService } from "~/main/modules/settings-store";
@@ -25,7 +26,7 @@ import {
 } from "~/main/utils/ipc-validation";
 import { registerGuardedIpcHandler } from "~/main/utils/ipc-window-roles";
 
-import type { AppSettings, ReplayClip } from "~/types";
+import type { AppSettings, GameId, ReplayClip } from "~/types";
 import { GameOverlayCoordinator } from "./GameOverlayCoordinator";
 import { OverlayWindowsChannel } from "./OverlayWindows.channels";
 import type {
@@ -40,7 +41,6 @@ const OVERLAY_WINDOWS_SCOPE = "overlay-windows";
 const ACTIVE_GAME_FOCUS_HANDOFF_ID = "active-game-focus-handoff";
 const ACTIVE_GAME_FOCUS_HANDOFF_GRACE_MS = 2_500;
 const RECORDER_SUPPRESSION_AURA_OVERLAY = "aura-overlay";
-const RECORDER_SUPPRESSION_CROP_SELECTOR = "crop-selector";
 
 function resolveOverlayCaptureProtectionEnabled(
   settings: Pick<
@@ -87,6 +87,18 @@ class OverlayWindowsService {
     recordingHideOverlaysFromRecording: true,
     recordingHideOverlaysFromRewind: true,
   };
+  private overlayFocusSettings: Pick<
+    AppSettings,
+    | "auraOverlayIgnoreGameFocus"
+    | "clipPreviewOverlayIgnoreGameFocus"
+    | "gridLinesOverlayIgnoreGameFocus"
+    | "recorderOverlayIgnoreGameFocus"
+  > = {
+    auraOverlayIgnoreGameFocus: false,
+    clipPreviewOverlayIgnoreGameFocus: false,
+    gridLinesOverlayIgnoreGameFocus: false,
+    recorderOverlayIgnoreGameFocus: false,
+  };
   private recorderCaptureMode: ManagedRecorderCaptureMode = "rewind";
   private recorderStatus: Pick<
     ManagedRecorderStatus,
@@ -97,6 +109,14 @@ class OverlayWindowsService {
   };
   private readonly getOverlayCaptureProtectionEnabled = () =>
     this.overlayCaptureProtectionEnabled;
+  private readonly shouldRecorderOverlayIgnoreGameFocus = () =>
+    this.overlayFocusSettings.recorderOverlayIgnoreGameFocus;
+  private readonly shouldClipPreviewOverlayIgnoreGameFocus = () =>
+    this.overlayFocusSettings.clipPreviewOverlayIgnoreGameFocus;
+  private readonly shouldAuraOverlayIgnoreGameFocus = () =>
+    this.overlayFocusSettings.auraOverlayIgnoreGameFocus;
+  private readonly shouldGridLinesOverlayIgnoreGameFocus = () =>
+    this.overlayFocusSettings.gridLinesOverlayIgnoreGameFocus;
   private managedRecorderChangeUnsubscribe: (() => void) | null = null;
   private settingsChangeUnsubscribe: (() => void) | null = null;
   private readonly coordinator = new GameOverlayCoordinator();
@@ -106,17 +126,20 @@ class OverlayWindowsService {
       this.coordinator,
       this.getOverlayCaptureProtectionEnabled,
       () => !this.isRecorderOverlaySuppressed(),
+      this.shouldRecorderOverlayIgnoreGameFocus,
     );
   private readonly deathClipsOverlay = new DeathClipsOverlayService(
     this.coordinator,
     () => this.recordingControlsOverlay.createAnchorBounds(),
     this.getOverlayCaptureProtectionEnabled,
     () => this.restoreClipPreviewResources(),
+    this.shouldClipPreviewOverlayIgnoreGameFocus,
   );
   private readonly gridLinesOverlay = new GridLinesOverlayService(
     this.coordinator,
     this.getOverlayCaptureProtectionEnabled,
     () => this.startActiveGameFocusHandoff("crop-selector-hidden"),
+    this.shouldGridLinesOverlayIgnoreGameFocus,
   );
   private readonly auraManagerOverlays = new AuraManagerOverlaysService(
     this.coordinator,
@@ -126,12 +149,14 @@ class OverlayWindowsService {
         RECORDER_SUPPRESSION_AURA_OVERLAY,
         active,
       ),
+    this.shouldAuraOverlayIgnoreGameFocus,
   );
-  private gameRunningActive = false;
+  private runningGame: GameId | null = null;
   private persistentAuraOverlayRequested = false;
   private clipPreviewResourcesSuspended = false;
   private clipPreviewResourceRestoreEnabled = true;
   private activeGameFocusHandoffTimer: NodeJS.Timeout | null = null;
+  private cropSelectionGeneration = 0;
 
   static getInstance(): OverlayWindowsService {
     if (!OverlayWindowsService.instance) {
@@ -144,16 +169,26 @@ class OverlayWindowsService {
   constructor() {
     const settingsStore = SettingsStoreService.getInstance();
     const managedRecorder = ManagedRecorderService.getInstance();
-    this.overlayCaptureProtectionSettings = settingsStore.get();
+    const settings = settingsStore.get();
+    this.overlayCaptureProtectionSettings = settings;
+    this.overlayFocusSettings = settings;
     this.updateManagedRecorderSnapshot({
       captureMode: managedRecorder.getCaptureMode(),
       status: managedRecorder.getStatus(),
     });
     this.applyOverlayCaptureProtection();
-    this.settingsChangeUnsubscribe = settingsStore.onDidChange((settings) => {
-      this.overlayCaptureProtectionSettings = settings;
-      this.applyOverlayCaptureProtection();
-    });
+    this.settingsChangeUnsubscribe = settingsStore.onDidChange(
+      (nextSettings) => {
+        const focusSettingsChanged =
+          this.haveOverlayFocusSettingsChanged(nextSettings);
+        this.overlayCaptureProtectionSettings = nextSettings;
+        this.overlayFocusSettings = nextSettings;
+        this.applyOverlayCaptureProtection();
+        if (focusSettingsChanged) {
+          void this.coordinator.applyFocusGateToGameOverlays();
+        }
+      },
+    );
     this.managedRecorderChangeUnsubscribe = managedRecorder.onDidChange(
       (snapshot) => {
         this.updateManagedRecorderSnapshot(snapshot);
@@ -203,16 +238,27 @@ class OverlayWindowsService {
     this.coordinator.setPoeFocusActive(active);
   }
 
-  setGameRunningActive(active: boolean): void {
-    const wasActive = this.gameRunningActive;
-    this.gameRunningActive = active;
+  setRunningGame(runningGame: GameId | null): void {
+    const previousRunningGame = this.runningGame;
+    const active = runningGame !== null;
+    const runningGameChanged = previousRunningGame !== runningGame;
+    this.runningGame = runningGame;
+
+    if (
+      active &&
+      runningGameChanged &&
+      (this.persistentAuraOverlayRequested || previousRunningGame !== null)
+    ) {
+      this.persistentAuraOverlayRequested = false;
+      this.auraManagerOverlays.hide();
+    }
+    this.auraManagerOverlays.setRunningGame(runningGame);
     this.coordinator.setGameRunningActive(active);
-    this.auraManagerOverlays.setGameRunningActive(active);
     if (!active) {
       this.endActiveGameFocusHandoff("game-stopped");
     }
 
-    if (active && !wasActive && !this.persistentAuraOverlayRequested) {
+    if (active && runningGameChanged) {
       this.requestPersistentAuraOverlay();
     }
   }
@@ -275,6 +321,9 @@ class OverlayWindowsService {
     this.managedRecorderChangeUnsubscribe?.();
     this.managedRecorderChangeUnsubscribe = null;
     this.endActiveGameFocusHandoff("destroy");
+    this.coordinator.setGameRunningActive(false);
+    this.cropSelectionGeneration += 1;
+    this.coordinator.resetExclusiveParticipant();
     this.clipPreviewResourceRestoreEnabled = false;
     this.recordingControlsOverlay.destroy();
     this.deathClipsOverlay.destroy();
@@ -284,8 +333,11 @@ class OverlayWindowsService {
   }
 
   suspendForSystem(): void {
+    this.coordinator.setGameRunningActive(false);
     this.setPoeFocusActive(false);
     this.endActiveGameFocusHandoff("system-suspend");
+    this.cropSelectionGeneration += 1;
+    this.coordinator.resetExclusiveParticipant();
     this.clipPreviewResourceRestoreEnabled = false;
     this.recordingControlsOverlay.suspendForSystem();
     this.deathClipsOverlay.destroy();
@@ -331,15 +383,13 @@ class OverlayWindowsService {
   selectCropRegion(
     options: SelectCropRegionOptions = {},
   ): Promise<CropRegionSelection | null> {
-    this.auraManagerOverlays.setInputPassthrough(true);
-    this.setRecorderOverlaySuppressed(RECORDER_SUPPRESSION_CROP_SELECTOR, true);
+    const generation = ++this.cropSelectionGeneration;
+    this.coordinator.setExclusiveParticipant(this.gridLinesOverlay);
 
     return this.gridLinesOverlay.selectCropRegion(options).finally(() => {
-      this.auraManagerOverlays.setInputPassthrough(false);
-      this.setRecorderOverlaySuppressed(
-        RECORDER_SUPPRESSION_CROP_SELECTOR,
-        false,
-      );
+      if (generation === this.cropSelectionGeneration) {
+        this.coordinator.setExclusiveParticipant(null);
+      }
     });
   }
 
@@ -462,26 +512,28 @@ class OverlayWindowsService {
   }
 
   private resolveRenderableAuraProfile() {
-    const { activeGame } = SettingsStoreService.getInstance().get();
-
-    return resolveRenderableProfileForGame(
+    const { activeGame, selectedProfileId } =
+      SettingsStoreService.getInstance().get();
+    const profile = resolveProfileForGame(
       ProfilesService.getInstance().list(),
-      activeGame,
+      selectedProfileId,
+      this.runningGame ?? activeGame,
     );
+
+    return profile && hasRenderableAuraPlacements(profile) ? profile : null;
   }
 
   private startActiveGameFocusHandoff(
     reason: ActiveGameFocusRestoreReason,
   ): void {
-    if (!this.gameRunningActive) {
+    if (!this.runningGame) {
       return;
     }
 
     this.endActiveGameFocusHandoff("restart");
-    const { activeGame } = SettingsStoreService.getInstance().get();
     this.coordinator.setOverlayFocusActive(ACTIVE_GAME_FOCUS_HANDOFF_ID, true);
     logInfo(OVERLAY_WINDOWS_SCOPE, "Active game focus handoff started", {
-      activeGame,
+      activeGame: this.runningGame,
       graceMs: ACTIVE_GAME_FOCUS_HANDOFF_GRACE_MS,
       reason,
     });
@@ -533,6 +585,19 @@ class OverlayWindowsService {
           status: this.recorderStatus,
         },
       ),
+    );
+  }
+
+  private haveOverlayFocusSettingsChanged(settings: AppSettings): boolean {
+    return (
+      settings.recorderOverlayIgnoreGameFocus !==
+        this.overlayFocusSettings.recorderOverlayIgnoreGameFocus ||
+      settings.auraOverlayIgnoreGameFocus !==
+        this.overlayFocusSettings.auraOverlayIgnoreGameFocus ||
+      settings.clipPreviewOverlayIgnoreGameFocus !==
+        this.overlayFocusSettings.clipPreviewOverlayIgnoreGameFocus ||
+      settings.gridLinesOverlayIgnoreGameFocus !==
+        this.overlayFocusSettings.gridLinesOverlayIgnoreGameFocus
     );
   }
 

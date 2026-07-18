@@ -14,9 +14,14 @@ import {
 
 interface AppBarE2EOptions {
   activeGame?: GameId;
+  activeGameFocused?: boolean;
   auraLocked?: boolean;
+  poeProcessState?: Parameters<typeof emitDashboardPoeProcessStart>[1];
   recordingMaxStorageGb?: number;
   recordingStorageUsage?: Partial<RecordingStorageUsage>;
+  recorderGameRunning?: boolean;
+  recorderOverlayIgnoreGameFocus?: boolean;
+  recorderOverlayRequested?: boolean;
   recorderOverlayVisible?: boolean;
 }
 

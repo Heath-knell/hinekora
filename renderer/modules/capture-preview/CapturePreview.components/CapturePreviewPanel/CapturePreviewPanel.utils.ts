@@ -2,20 +2,11 @@ import { isCapturePreviewSourceAvailable } from "~/renderer/modules/capture-prev
 
 import type { CapturePreviewSource } from "~/types";
 
-export function createDesktopPreviewConstraints(
-  sourceId: string,
-): MediaStreamConstraints {
+export function createDesktopPreviewVideoConstraints(): MediaTrackConstraints {
   return {
-    audio: false,
-    video: {
-      mandatory: {
-        chromeMediaSource: "desktop",
-        chromeMediaSourceId: sourceId,
-        maxWidth: 3840,
-        maxHeight: 2160,
-        maxFrameRate: 30,
-      },
-    } as unknown as MediaTrackConstraints,
+    width: { max: 3840 },
+    height: { max: 2160 },
+    frameRate: { max: 30 },
   };
 }
 

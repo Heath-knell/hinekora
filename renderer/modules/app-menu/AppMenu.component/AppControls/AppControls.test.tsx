@@ -10,11 +10,16 @@ const storeMocks = vi.hoisted(() => ({
   minimize: vi.fn(),
   openWhatsNew: vi.fn(),
   status: null as ManagedRecorderStatus | null,
+  recorderOverlayIgnoreGameFocus: false,
+  poe1Running: true,
+  poe2Running: false,
   toggleRecorderOverlay: vi.fn(),
   unmaximize: vi.fn(),
   useAppMenuShallow: vi.fn(),
   useClientLogSelector: vi.fn(),
   useManagedRecorderSelector: vi.fn(),
+  usePoeProcessSelector: vi.fn(),
+  useSettingsSelector: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -38,6 +43,8 @@ vi.mock("~/renderer/store", () => ({
   useAppMenuShallow: storeMocks.useAppMenuShallow,
   useClientLogSelector: storeMocks.useClientLogSelector,
   useManagedRecorderSelector: storeMocks.useManagedRecorderSelector,
+  usePoeProcessSelector: storeMocks.usePoeProcessSelector,
+  useSettingsSelector: storeMocks.useSettingsSelector,
 }));
 
 import AppControls from "./AppControls";
@@ -94,6 +101,9 @@ describe("AppControls", () => {
     document.body.append(container);
     root = createRoot(container);
     storeMocks.status = createStatus();
+    storeMocks.recorderOverlayIgnoreGameFocus = false;
+    storeMocks.poe1Running = true;
+    storeMocks.poe2Running = false;
     storeMocks.useAppMenuShallow.mockImplementation((selector) =>
       selector({
         close: storeMocks.close,
@@ -112,6 +122,22 @@ describe("AppControls", () => {
     );
     storeMocks.useClientLogSelector.mockImplementation((selector) =>
       selector({ status: { activeGameFocused: true } }),
+    );
+    storeMocks.usePoeProcessSelector.mockImplementation((selector) =>
+      selector({
+        states: {
+          poe1: { isRunning: storeMocks.poe1Running },
+          poe2: { isRunning: storeMocks.poe2Running },
+        },
+      }),
+    );
+    storeMocks.useSettingsSelector.mockImplementation((selector) =>
+      selector({
+        value: {
+          recorderOverlayIgnoreGameFocus:
+            storeMocks.recorderOverlayIgnoreGameFocus,
+        },
+      }),
     );
   });
 
@@ -187,6 +213,29 @@ describe("AppControls", () => {
     });
 
     expect(storeMocks.toggleRecorderOverlay).not.toHaveBeenCalled();
+  });
+
+  it("allows the overlay while either game runs when focus is ignored", async () => {
+    storeMocks.status = createStatus({ gameRunning: false });
+    storeMocks.poe1Running = false;
+    storeMocks.poe2Running = true;
+    storeMocks.recorderOverlayIgnoreGameFocus = true;
+    storeMocks.useClientLogSelector.mockImplementation((selector) =>
+      selector({ status: { activeGameFocused: false } }),
+    );
+
+    const button = await renderControls();
+
+    expect(button.disabled).toBe(false);
+    expect(button.closest("[data-tip]")?.getAttribute("data-tip")).toBe(
+      "Show recording overlay",
+    );
+
+    await act(async () => {
+      button.click();
+    });
+
+    expect(storeMocks.toggleRecorderOverlay).toHaveBeenCalledTimes(1);
   });
 
   it("allows requesting the recorder overlay when it was manually closed", async () => {

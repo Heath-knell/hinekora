@@ -8,19 +8,13 @@ import { PseudonymousUserIdField } from "../PseudonymousUserIdField/Pseudonymous
 import { SettingsToggleRow } from "../SettingsToggleRow/SettingsToggleRow";
 
 function PrivacySettingsCard() {
-  const {
-    crashReportingError,
-    isSavingCrashReporting,
-    settingsValue,
-    updatePreference,
-  } = useSettingsShallow((settings) => ({
-    crashReportingError:
-      settings.preferenceErrors.telemetryCrashReporting ?? null,
-    isSavingCrashReporting:
-      settings.pendingPreferences.telemetryCrashReporting === true,
-    settingsValue: settings.value,
-    updatePreference: settings.updatePreference,
-  }));
+  const { crashReportingError, settingsValue, updatePreference } =
+    useSettingsShallow((settings) => ({
+      crashReportingError:
+        settings.preferenceErrors.telemetryCrashReporting ?? null,
+      settingsValue: settings.value,
+      updatePreference: settings.updatePreference,
+    }));
 
   const handleCrashReportingChange = (event: ChangeEvent<HTMLInputElement>) => {
     void updatePreference("telemetryCrashReporting", event.target.checked);
@@ -39,15 +33,11 @@ function PrivacySettingsCard() {
           ariaLabel="Crash Reporting"
           checked={settingsValue?.telemetryCrashReporting ?? true}
           description="Send error reports when something goes wrong. Reports can include your OS type, app version, and error details; usernames and local paths are redacted where possible."
-          disabled={isSavingCrashReporting}
           label="Crash Reporting"
           statusClassName={
             crashReportingError ? "text-error" : "text-base-content/50"
           }
-          statusLabel={
-            crashReportingError ??
-            (isSavingCrashReporting ? "Saving..." : undefined)
-          }
+          statusLabel={crashReportingError ?? undefined}
           statusRole={crashReportingError ? "alert" : "status"}
           onChange={handleCrashReportingChange}
         />

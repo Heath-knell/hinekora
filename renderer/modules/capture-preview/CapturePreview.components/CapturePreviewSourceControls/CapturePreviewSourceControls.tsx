@@ -12,6 +12,7 @@ import {
   isCapturePreviewSourceCompatibleWithGame,
 } from "~/renderer/modules/capture-preview/CapturePreview.utils/CapturePreview.utils";
 import { CaptureProfileLockToggle } from "~/renderer/modules/capture-profiles/CaptureProfiles.components/CaptureProfileLockToggle/CaptureProfileLockToggle";
+import { useManagedRecorderActive } from "~/renderer/modules/managed-recorder/ManagedRecorder.hooks/useManagedRecorderActive/useManagedRecorderActive";
 import { useManagedRecorderSettingsDisabled } from "~/renderer/modules/managed-recorder/ManagedRecorder.hooks/useManagedRecorderSettingsDisabled/useManagedRecorderSettingsDisabled";
 import {
   useCapturePreviewShallow,
@@ -49,6 +50,7 @@ function CapturePreviewSourceControls({
     (settings) => settings.value?.activeGame ?? "poe1",
   );
   const isSettingsDisabled = useManagedRecorderSettingsDisabled();
+  const isRecorderActive = useManagedRecorderActive();
   const selectedSource = useMemo(
     () => sources.find((source) => source.id === selectedSourceId) ?? null,
     [selectedSourceId, sources],
@@ -56,7 +58,8 @@ function CapturePreviewSourceControls({
   const canPreviewSelectedSource =
     isCapturePreviewSourceAvailable(selectedSource);
   const isPreviewToggleDisabled =
-    !canPreviewSelectedSource && !isPreviewing && previewSourceId === null;
+    isRecorderActive ||
+    (!canPreviewSelectedSource && !isPreviewing && previewSourceId === null);
 
   const handleSourceChange = (event: ChangeEvent<HTMLSelectElement>) => {
     if (isSettingsDisabled) {

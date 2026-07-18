@@ -118,7 +118,7 @@ describe("Settings slice", () => {
     expect(store.getState().settings.value?.activeLeague).toBe("Hardcore");
   });
 
-  it("optimistically persists a preference and clears its pending state", async () => {
+  it("optimistically persists a preference", async () => {
     updateSettings.mockImplementationOnce(async (input) => ({
       ...settings,
       ...input,
@@ -131,13 +131,7 @@ describe("Settings slice", () => {
       .settings.updatePreference("clipsLibraryView", "manual");
 
     expect(store.getState().settings.value?.clipsLibraryView).toBe("manual");
-    expect(store.getState().settings.pendingPreferences.clipsLibraryView).toBe(
-      true,
-    );
     await expect(request).resolves.toBe(true);
-    expect(
-      store.getState().settings.pendingPreferences.clipsLibraryView,
-    ).toBeUndefined();
     expect(
       store.getState().settings.preferenceErrors.clipsLibraryView,
     ).toBeUndefined();

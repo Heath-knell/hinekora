@@ -8,7 +8,8 @@ const hookMocks = vi.hoisted(() => ({
   state: {
     canUnlock: true,
     isLocked: true,
-    message: "Settings are locked because the selected profile is locked.",
+    message:
+      "This profile's settings are hidden to prevent accidental changes.",
     title: "Settings locked",
     unlockSettings: vi.fn(),
   },
@@ -38,7 +39,8 @@ describe("ManagedRecorderSettingsLockedOverlay", () => {
     hookMocks.state = {
       canUnlock: true,
       isLocked: true,
-      message: "Settings are locked because the selected profile is locked.",
+      message:
+        "This profile's settings are hidden to prevent accidental changes.",
       title: "Settings locked",
       unlockSettings: vi.fn(),
     };
@@ -60,14 +62,15 @@ describe("ManagedRecorderSettingsLockedOverlay", () => {
     expect(container.textContent).toBe("");
   });
 
-  it("unlocks settings from the locked profile overlay", async () => {
+  it("shows settings from the locked profile overlay", async () => {
     await renderOverlay();
 
     const button = container.querySelector<HTMLButtonElement>("button")!;
 
     expect(container.textContent).toContain("Settings locked");
     expect(button.disabled).toBe(false);
-    expect(button.title).toBe("Unlock settings");
+    expect(button.title).toBe("Show settings");
+    expect(button.textContent).toBe("Show settings");
 
     await act(async () => {
       button.click();
@@ -89,7 +92,7 @@ describe("ManagedRecorderSettingsLockedOverlay", () => {
 
     expect(button.disabled).toBe(true);
     expect(button.title).toBe(
-      "Stop recording or rewind before unlocking settings",
+      "Stop recording or rewind before showing settings",
     );
     expect(container.textContent).toContain(
       "Settings are locked during recording or rewind.",

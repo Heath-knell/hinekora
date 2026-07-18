@@ -71,7 +71,7 @@ describe("useManagedRecorderSettingsLockState", () => {
 
     expect(button.textContent).toContain('"canUnlock":true');
     expect(button.textContent).toContain(
-      "Settings are locked because the selected profile is locked.",
+      "This profile's settings are hidden to prevent accidental changes.",
     );
 
     await act(async () => {

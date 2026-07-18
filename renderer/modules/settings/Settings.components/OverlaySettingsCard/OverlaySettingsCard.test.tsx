@@ -5,15 +5,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type AppSettings, createDefaultSettings } from "~/types";
 
 const storeMocks = vi.hoisted(() => ({
+  preferenceErrors: {} as Partial<Record<keyof AppSettings, string>>,
   settingsValue: null as AppSettings | null,
-  updateSettings: vi.fn(),
+  updatePreference: vi.fn(),
 }));
 
 vi.mock("~/renderer/store", () => ({
   useSettingsShallow: (selector: unknown) =>
     (selector as (settings: unknown) => unknown)({
+      preferenceErrors: storeMocks.preferenceErrors,
+      updatePreference: storeMocks.updatePreference,
       value: storeMocks.settingsValue,
-      update: storeMocks.updateSettings,
     }),
 }));
 
@@ -33,8 +35,9 @@ describe("OverlaySettingsCard", () => {
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
+    storeMocks.preferenceErrors = {};
     storeMocks.settingsValue = createDefaultSettings();
-    storeMocks.updateSettings.mockResolvedValue(undefined);
+    storeMocks.updatePreference.mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -53,21 +56,96 @@ describe("OverlaySettingsCard", () => {
     const auraEditingFrameToggle = container.querySelector<HTMLInputElement>(
       'input[aria-label="Show aura overlay editing frame"]',
     );
+    const recorderFocusToggle = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Keep recording controls visible while a game is running"]',
+    );
+    const auraFocusToggle = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Keep aura overlay visible while a game is running"]',
+    );
+    const clipPreviewFocusToggle = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Keep clip previews visible while a game is running"]',
+    );
+    const gridLinesFocusToggle = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Keep grid lines overlay visible while a game is running"]',
+    );
 
     await act(async () => {
-      if (!recorderStartupToggle || !auraEditingFrameToggle) {
+      if (
+        !recorderStartupToggle ||
+        !auraEditingFrameToggle ||
+        !recorderFocusToggle ||
+        !auraFocusToggle ||
+        !clipPreviewFocusToggle ||
+        !gridLinesFocusToggle
+      ) {
         throw new Error("Expected overlay preference toggles to render");
       }
 
       recorderStartupToggle.click();
       auraEditingFrameToggle.click();
+      recorderFocusToggle.click();
+      auraFocusToggle.click();
+      clipPreviewFocusToggle.click();
+      gridLinesFocusToggle.click();
     });
 
-    expect(storeMocks.updateSettings).toHaveBeenCalledWith({
-      recorderOverlayShowOnStartup: false,
-    });
-    expect(storeMocks.updateSettings).toHaveBeenCalledWith({
-      auraOverlayShowEditingFrame: false,
-    });
+    expect(storeMocks.updatePreference).toHaveBeenCalledWith(
+      "recorderOverlayShowOnStartup",
+      false,
+    );
+    expect(storeMocks.updatePreference).toHaveBeenCalledWith(
+      "auraOverlayShowEditingFrame",
+      false,
+    );
+    expect(storeMocks.updatePreference).toHaveBeenCalledWith(
+      "recorderOverlayIgnoreGameFocus",
+      true,
+    );
+    expect(storeMocks.updatePreference).toHaveBeenCalledWith(
+      "auraOverlayIgnoreGameFocus",
+      true,
+    );
+    expect(storeMocks.updatePreference).toHaveBeenCalledWith(
+      "clipPreviewOverlayIgnoreGameFocus",
+      true,
+    );
+    expect(storeMocks.updatePreference).toHaveBeenCalledWith(
+      "gridLinesOverlayIgnoreGameFocus",
+      true,
+    );
+    expect(container.textContent).toContain("Hidden when game is not focused");
+    expect(container.textContent).toContain(
+      "These settings work best with two or more monitors.",
+    );
+
+    storeMocks.settingsValue = {
+      ...createDefaultSettings(),
+      auraOverlayIgnoreGameFocus: true,
+      clipPreviewOverlayIgnoreGameFocus: true,
+      gridLinesOverlayIgnoreGameFocus: true,
+      recorderOverlayIgnoreGameFocus: true,
+    };
+    await renderOverlaySettings();
+
+    expect(container.textContent).toContain("Always visible");
+  });
+
+  it("keeps preferences interactive and surfaces save failures", async () => {
+    storeMocks.preferenceErrors = {
+      gridLinesOverlayIgnoreGameFocus: "Could not save this preference.",
+    };
+
+    await renderOverlaySettings();
+
+    expect(
+      container.querySelector<HTMLInputElement>(
+        'input[aria-label="Keep recording controls visible while a game is running"]',
+      )?.disabled,
+    ).toBe(false);
+    expect(container.textContent).not.toContain("Saving...");
+    expect(container.querySelector(".loading-spinner")).toBeNull();
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      "Could not save this preference.",
+    );
   });
 });

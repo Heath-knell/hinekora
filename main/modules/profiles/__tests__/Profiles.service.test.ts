@@ -180,54 +180,6 @@ describe("ProfilesService", () => {
     expect(send).toHaveBeenCalledTimes(5);
   });
 
-  it("resolves active and renderable aura profiles through service helpers", () => {
-    DatabaseService.getInstance(":memory:");
-    electronMocks.getAllWindows.mockReturnValue([]);
-    const service = new ProfilesService();
-    const profile = service.create({ name: "Global" });
-    const poe1OnlyProfile = service.create({
-      name: "PoE 1 only",
-      game: "poe1",
-    });
-    const renderableProfile = service.update({
-      id: profile.id,
-      cropRegions: [
-        {
-          id: "crop-1",
-          label: "Aura",
-          x: 0,
-          y: 0,
-          width: 10,
-          height: 10,
-        },
-      ],
-      overlayPlacements: [
-        {
-          id: "placement-1",
-          cropRegionId: "crop-1",
-          x: 0,
-          y: 0,
-          scale: 1,
-          opacity: 1,
-        },
-      ],
-    });
-
-    expect(service.hasRenderableAuraPlacements(renderableProfile)).toBe(true);
-    expect(service.resolveProfileForGame(renderableProfile.id, "poe2")).toEqual(
-      renderableProfile,
-    );
-    expect(service.resolveProfileForGame(poe1OnlyProfile.id, "poe2")).toEqual(
-      renderableProfile,
-    );
-    expect(service.resolveProfileForGame(null, "poe2")).toEqual(
-      renderableProfile,
-    );
-    expect(service.resolveRenderableProfileForGame("poe2")).toEqual(
-      renderableProfile,
-    );
-  });
-
   it("registers IPC handlers with validation", async () => {
     const { handlers } = mockIpcMainHandlers();
     DatabaseService.getInstance(":memory:");

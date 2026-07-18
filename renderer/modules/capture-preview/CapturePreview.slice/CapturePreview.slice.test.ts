@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createStoppedPoeProcessStates } from "~/main/modules/poe-process/PoeProcess.dto";
-import {
-  createPoeProcessStatesWithState,
-  createRunningPoeProcessState,
-} from "~/main/test/poe-process";
 import type { BoundStore } from "~/renderer/store/store.types";
 import { createBoundStoreForTests } from "~/renderer/test/createBoundStoreForTests";
 
@@ -204,244 +200,22 @@ describe("CapturePreview slice", () => {
     expect(unsubscribeRefreshRequested).toHaveBeenCalled();
   });
 
-  it("retries until a requested refresh finds the running game source", async () => {
-    vi.useFakeTimers();
-    listSources
-      .mockResolvedValueOnce([source])
-      .mockResolvedValueOnce([source])
-      .mockResolvedValueOnce([source, poe2WindowSource]);
-    const store = createTestStore();
-    store.setState((state) => ({
-      poeProcess: {
-        ...state.poeProcess,
-        state: createRunningPoeProcessState("poe2"),
-        states: createPoeProcessStatesWithState(
-          createRunningPoeProcessState("poe2"),
-        ),
-      },
-    }));
-    const stopListening = store.getState().capturePreview.startListening();
-
-    refreshRequestedListener?.();
-    await vi.waitFor(() => {
-      expect(listSources).toHaveBeenCalledTimes(1);
-    });
-
-    await vi.advanceTimersByTimeAsync(2_499);
-    expect(listSources).toHaveBeenCalledTimes(1);
-
-    await vi.advanceTimersByTimeAsync(1);
-    await vi.waitFor(() => {
-      expect(listSources).toHaveBeenCalledTimes(2);
-    });
-    await vi.advanceTimersByTimeAsync(2_500);
-    await vi.waitFor(() => {
-      expect(listSources).toHaveBeenCalledTimes(3);
-    });
-    await vi.advanceTimersByTimeAsync(2_500);
-    expect(listSources).toHaveBeenCalledTimes(3);
-    expect(listSources).toHaveBeenNthCalledWith(1, true);
-    expect(listSources).toHaveBeenNthCalledWith(2, true);
-    expect(listSources).toHaveBeenNthCalledWith(3, true);
-
-    stopListening();
-    vi.useRealTimers();
-  });
-
-  it("does not retry when a requested refresh includes the running game source", async () => {
-    vi.useFakeTimers();
-    listSources.mockResolvedValue([source, poe2WindowSource]);
-    const store = createTestStore();
-    store.setState((state) => ({
-      poeProcess: {
-        ...state.poeProcess,
-        state: createRunningPoeProcessState("poe2"),
-        states: createPoeProcessStatesWithState(
-          createRunningPoeProcessState("poe2"),
-        ),
-      },
-    }));
-    const stopListening = store.getState().capturePreview.startListening();
-
-    refreshRequestedListener?.();
-    await vi.waitFor(() => {
-      expect(listSources).toHaveBeenCalledTimes(1);
-    });
-    await vi.advanceTimersByTimeAsync(2_500);
-    expect(listSources).toHaveBeenCalledTimes(1);
-
-    stopListening();
-    vi.useRealTimers();
-  });
-
-  it("does not retry when the game stops before the retry delay elapses", async () => {
-    vi.useFakeTimers();
-    listSources.mockResolvedValue([source]);
-    const store = createTestStore();
-    store.setState((state) => ({
-      poeProcess: {
-        ...state.poeProcess,
-        state: createRunningPoeProcessState("poe2"),
-        states: createPoeProcessStatesWithState(
-          createRunningPoeProcessState("poe2"),
-        ),
-      },
-    }));
-    const stopListening = store.getState().capturePreview.startListening();
-
-    refreshRequestedListener?.();
-    await vi.waitFor(() => {
-      expect(listSources).toHaveBeenCalledTimes(1);
-    });
-    store.setState((state) => ({
-      poeProcess: {
-        ...state.poeProcess,
-        state: {
-          isRunning: false,
-          processName: "",
-        },
-        states: createStoppedPoeProcessStates(),
-      },
-    }));
-
-    await vi.advanceTimersByTimeAsync(2_500);
-    expect(listSources).toHaveBeenCalledTimes(1);
-
-    stopListening();
-    vi.useRealTimers();
-  });
-
-  it("cancels a pending retry when the listener stops", async () => {
-    vi.useFakeTimers();
-    listSources.mockResolvedValue([source]);
-    const store = createTestStore();
-    store.setState((state) => ({
-      poeProcess: {
-        ...state.poeProcess,
-        state: createRunningPoeProcessState("poe2"),
-        states: createPoeProcessStatesWithState(
-          createRunningPoeProcessState("poe2"),
-        ),
-      },
-    }));
-    const stopListening = store.getState().capturePreview.startListening();
-
-    refreshRequestedListener?.();
-    await vi.waitFor(() => {
-      expect(listSources).toHaveBeenCalledTimes(1);
-    });
-    await vi.waitFor(() => {
-      expect(vi.getTimerCount()).toBe(1);
-    });
-
-    stopListening();
-    await vi.advanceTimersByTimeAsync(2_500);
-
-    expect(listSources).toHaveBeenCalledTimes(1);
-    vi.useRealTimers();
-  });
-
-  it("does not retry when a newer refresh finds the running game source", async () => {
-    vi.useFakeTimers();
-    listSources
-      .mockResolvedValueOnce([source])
-      .mockResolvedValueOnce([source, poe2WindowSource]);
-    const store = createTestStore();
-    store.setState((state) => ({
-      poeProcess: {
-        ...state.poeProcess,
-        state: createRunningPoeProcessState("poe2"),
-        states: createPoeProcessStatesWithState(
-          createRunningPoeProcessState("poe2"),
-        ),
-      },
-    }));
-    const stopListening = store.getState().capturePreview.startListening();
-
-    refreshRequestedListener?.();
-    await vi.waitFor(() => {
-      expect(listSources).toHaveBeenCalledTimes(1);
-    });
-    await store.getState().capturePreview.refresh({ force: true });
-    expect(listSources).toHaveBeenCalledTimes(2);
-
-    await vi.advanceTimersByTimeAsync(2_500);
-    expect(listSources).toHaveBeenCalledTimes(2);
-
-    stopListening();
-    vi.useRealTimers();
-  });
-
-  it("stops retrying after the retry budget is exhausted", async () => {
-    vi.useFakeTimers();
-    listSources.mockResolvedValue([source]);
-    const store = createTestStore();
-    store.setState((state) => ({
-      poeProcess: {
-        ...state.poeProcess,
-        state: createRunningPoeProcessState("poe2"),
-        states: createPoeProcessStatesWithState(
-          createRunningPoeProcessState("poe2"),
-        ),
-      },
-    }));
-    const stopListening = store.getState().capturePreview.startListening();
-
-    refreshRequestedListener?.();
-    await vi.waitFor(() => {
-      expect(listSources).toHaveBeenCalledTimes(1);
-    });
-
-    for (let index = 0; index < 8; index += 1) {
-      await vi.advanceTimersByTimeAsync(2_500);
-      await vi.waitFor(() => {
-        expect(listSources).toHaveBeenCalledTimes(index + 2);
-      });
-    }
-    await vi.advanceTimersByTimeAsync(2_500);
-
-    expect(listSources).toHaveBeenCalledTimes(9);
-    stopListening();
-    vi.useRealTimers();
-  });
-
-  it("ignores stale retry refreshes after the listener stops", async () => {
-    vi.useFakeTimers();
-    let resolveRetryRefresh: (sources: CapturePreviewSource[]) => void = () =>
-      undefined;
-    listSources.mockResolvedValueOnce([source]).mockReturnValueOnce(
-      new Promise<CapturePreviewSource[]>((resolve) => {
-        resolveRetryRefresh = resolve;
+  it("coalesces concurrent capture source recovery requests", async () => {
+    let resolveSources!: (sources: CapturePreviewSource[]) => void;
+    listSources.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveSources = resolve;
       }),
     );
     const store = createTestStore();
-    store.setState((state) => ({
-      poeProcess: {
-        ...state.poeProcess,
-        state: createRunningPoeProcessState("poe2"),
-        states: createPoeProcessStatesWithState(
-          createRunningPoeProcessState("poe2"),
-        ),
-      },
-    }));
-    const stopListening = store.getState().capturePreview.startListening();
 
-    refreshRequestedListener?.();
-    await vi.waitFor(() => {
-      expect(listSources).toHaveBeenCalledTimes(1);
-    });
-    await vi.advanceTimersByTimeAsync(2_500);
-    await vi.waitFor(() => {
-      expect(listSources).toHaveBeenCalledTimes(2);
-    });
+    const firstRequest = store.getState().capturePreview.recoverSources();
+    const secondRequest = store.getState().capturePreview.recoverSources();
 
-    stopListening();
-    resolveRetryRefresh([source]);
-    await Promise.resolve();
-    await vi.advanceTimersByTimeAsync(2_500);
-
-    expect(listSources).toHaveBeenCalledTimes(2);
-    vi.useRealTimers();
+    expect(secondRequest).toBe(firstRequest);
+    expect(listSources).toHaveBeenCalledOnce();
+    resolveSources([source]);
+    await firstRequest;
   });
 
   it("refreshes immediately when listener startup refresh is requested", async () => {

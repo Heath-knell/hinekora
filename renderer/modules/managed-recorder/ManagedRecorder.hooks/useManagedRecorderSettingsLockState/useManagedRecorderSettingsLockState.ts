@@ -42,7 +42,8 @@ function useManagedRecorderSettingsLockState(): ManagedRecorderSettingsLockState
     return {
       canUnlock: true,
       isLocked: true,
-      message: "Settings are locked because the selected profile is locked.",
+      message:
+        "This profile's settings are hidden to prevent accidental changes.",
       title: "Settings locked",
       unlockSettings,
     };

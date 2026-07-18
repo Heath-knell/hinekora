@@ -87,13 +87,14 @@ interface DashboardE2ECalls {
   captureProfileCreates: Array<CaptureProfileCreateInput & { id: string }>;
   captureProfileDeletes: string[];
   captureProfileUpdates: CaptureProfileUpdateInput[];
+  displayMediaConstraints: unknown[];
+  preparedDisplayMediaSourceIds: string[];
   captureSourceRequests: boolean[];
   captureSourceResponses: string[][];
   clientLogActiveGames: Array<{ game: "poe1" | "poe2" }>;
   clientLogPathUpdates: ClientLogPathInput[];
   clipboardWrites: string[];
   duplicatePoeStateEmissions: number;
-  getUserMediaConstraints: unknown[];
   mainWindowActions: string[];
   pathSelectionRequests: AppSelectPathInput[];
   profileCreates: Array<{ game: GameId | null; id: string; name: string }>;
@@ -141,6 +142,7 @@ interface DashboardE2EApi {
     progress: number;
   }) => void;
   emitRecorderOverlayVisibility: (visible: boolean) => void;
+  emitRecorderStatus: (status: Partial<ManagedRecorderStatus>) => void;
   setAppSetupValidation: (validation: StepValidationResult) => void;
   setCaptureSources: (sources: CapturePreviewSource[]) => void;
 }
@@ -186,6 +188,7 @@ interface DashboardE2EFixture {
   sources: CapturePreviewSource[];
   storageInfo: StorageInfo;
   recorderOverlayVisible: boolean;
+  recorderOverlayRequested: boolean;
 }
 
 type DashboardE2EElectron = Window["electron"];
@@ -194,6 +197,7 @@ const dashboardE2ENow = "2026-06-25T00:00:00.000Z";
 
 interface DashboardE2EOptions {
   activeGame?: GameId;
+  activeGameFocused?: boolean;
   activitySessions?: ActivitySessionLibraryItem[];
   activitySessionTimelines?: Record<string, ActivitySessionTimeline>;
   appSetupTransitions?: AppSetupE2ETransition[];
@@ -204,10 +208,14 @@ interface DashboardE2EOptions {
   recordingStorageUsage?: Partial<RecordingStorageUsage>;
   recordingStorageEstimateDelayMs?: number;
   recordingStorageEstimateError?: string;
+  recorderGameRunning?: boolean;
+  recorderOverlayIgnoreGameFocus?: boolean;
+  recorderOverlayRequested?: boolean;
   recorderOverlayVisible?: boolean;
   replayClipDetails?: Record<string, ReplayClipDetail>;
   replayClipOperationDelayMs?: number;
   selectedPaths?: Array<string | null>;
+  poeProcessState?: PoeProcessState;
   setupState?: SetupState;
   skipDashboardShellChecks?: boolean;
   initialHash?: string;
@@ -241,6 +249,14 @@ function createDashboardE2EFixture(
   const selectedProfileId =
     activeGame === "poe1" ? "profile-poe1" : "profile-1";
   const defaultSettings = createDefaultSettings();
+  const poeProcessState = options.poeProcessState ?? {
+    game: activeGame,
+    isRunning: true,
+    pid: activeGame === "poe2" ? 4242 : 4241,
+    processName:
+      activeGame === "poe2" ? "PathOfExileSteam.exe" : "PathOfExile.exe",
+    windowTitle: activeGame === "poe2" ? "Path of Exile 2" : "Path of Exile",
+  };
   const settings: AppSettings = {
     ...defaultSettings,
     activeGame,
@@ -256,6 +272,9 @@ function createDashboardE2EFixture(
     recordingMaxStorageGb:
       options.recordingMaxStorageGb ?? defaultSettings.recordingMaxStorageGb,
     recordingRunQuality: "moderate",
+    recorderOverlayIgnoreGameFocus:
+      options.recorderOverlayIgnoreGameFocus ??
+      defaultSettings.recorderOverlayIgnoreGameFocus,
     poe1ClientTxtPath: setupState.poe1ClientPath ?? "",
     poe2ClientTxtPath: setupState.poe2ClientPath ?? "",
     setupCompleted: setupState.isComplete,
@@ -331,7 +350,9 @@ function createDashboardE2EFixture(
     encoder: "hardware_h264",
     error: null,
     fps: 60,
-    gameRunning: true,
+    gameRunning:
+      options.recorderGameRunning ??
+      (poeProcessState.isRunning && poeProcessState.game === activeGame),
     initialized: true,
     isStartingRecording: false,
     isStoppingRecording: false,
@@ -383,22 +404,19 @@ function createDashboardE2EFixture(
     bookmarks: options.bookmarks ?? [],
     clientLogStatus: {
       activeGame,
-      activeGameFocused: true,
+      activeGameFocused: options.activeGameFocused ?? true,
       lastError: null,
       path: null,
       watching: false,
     },
     now: dashboardE2ENow,
-    poeProcessState: {
-      game: activeGame,
-      isRunning: true,
-      pid: activeGame === "poe2" ? 4242 : 4241,
-      processName:
-        activeGame === "poe2" ? "PathOfExileSteam.exe" : "PathOfExile.exe",
-      windowTitle: activeGame === "poe2" ? "Path of Exile 2" : "Path of Exile",
-    },
+    poeProcessState,
     profile,
     captureProfile,
+    recorderOverlayRequested:
+      options.recorderOverlayRequested ??
+      options.recorderOverlayVisible ??
+      false,
     recorderOverlayVisible: options.recorderOverlayVisible ?? false,
     recordingStorageUsage: {
       clipsSizeBytes: 0,
@@ -505,7 +523,7 @@ async function setupDashboardE2E(
       const replayClipDetails = clone(fixture.replayClipDetails);
       let recorderStatus = clone(fixture.recorderStatus);
       let captureMode: ManagedRecorderCaptureMode = "rewind";
-      let recorderOverlayRequested = fixture.recorderOverlayVisible;
+      let recorderOverlayRequested = fixture.recorderOverlayRequested;
       let recorderOverlayVisible = fixture.recorderOverlayVisible;
       let auraLocked = fixture.auraLocked;
       let isMaximized = false;
@@ -604,7 +622,8 @@ async function setupDashboardE2E(
         clientLogPathUpdates: [],
         clipboardWrites: [],
         duplicatePoeStateEmissions: 0,
-        getUserMediaConstraints: [],
+        displayMediaConstraints: [],
+        preparedDisplayMediaSourceIds: [],
         clipPreviewOverlayWindowActions: [],
         mainWindowActions: [],
         mainWindowOpenEditorClipCalls: [],
@@ -901,8 +920,8 @@ async function setupDashboardE2E(
       Object.defineProperty(navigator, "mediaDevices", {
         configurable: true,
         value: {
-          getUserMedia: async (constraints: MediaStreamConstraints) => {
-            calls.getUserMediaConstraints.push(clone(constraints));
+          getDisplayMedia: async (constraints: DisplayMediaStreamOptions) => {
+            calls.displayMediaConstraints.push(clone(constraints));
 
             return new MediaStream();
           },
@@ -1007,14 +1026,18 @@ async function setupDashboardE2E(
 
             return unsubscribe;
           },
-          sourceExists: async (sourceId: string) =>
-            captureSources.some((source) => source.id === sourceId),
+          prepareDisplayMediaSource: async (sourceId: string) => {
+            calls.preparedDisplayMediaSourceIds.push(sourceId);
+            return true;
+          },
         }),
         captureProfiles: createBridgeDomain<
           DashboardE2EElectron["captureProfiles"]
         >("captureProfiles", {
           create: async (input) => {
-            const createdProfileId = `capture-profile-${captureProfilesById.size + 1}`;
+            const createdProfileId = `capture-profile-${
+              captureProfilesById.size + 1
+            }`;
             const createdProfile = applyCaptureProfileUpdate(
               {
                 ...fixture.captureProfile,
@@ -1645,6 +1668,9 @@ async function setupDashboardE2E(
         emitRecorderOverlayVisibility: (visible) => {
           emitRecorderVisibility(visible);
         },
+        emitRecorderStatus: (status) => {
+          updateRecorderStatus(status);
+        },
         setAppSetupValidation: (validation) => {
           appSetupValidation = clone(validation);
         },
@@ -1719,6 +1745,19 @@ async function emitDashboardRecorderOverlayVisibility(
       nextVisible,
     );
   }, visible);
+}
+
+async function emitDashboardRecorderStatus(
+  page: Page,
+  status: Partial<ManagedRecorderStatus>,
+) {
+  await page.evaluate((nextStatus) => {
+    const e2eWindow = window as unknown as {
+      __HINEKORA_DASHBOARD_E2E_API__: DashboardE2EApi;
+    };
+
+    e2eWindow.__HINEKORA_DASHBOARD_E2E_API__.emitRecorderStatus(nextStatus);
+  }, status);
 }
 
 async function emitDashboardPoeProcessStart(
@@ -1858,6 +1897,7 @@ export {
   emitDashboardPoeProcessStart,
   emitDashboardPoeProcessStop,
   emitDashboardRecorderOverlayVisibility,
+  emitDashboardRecorderStatus,
   emitDashboardReplayClipPreviewProgress,
   emitDashboardReplayClipProgress,
   emitDashboardReplayClipStatusChanged,

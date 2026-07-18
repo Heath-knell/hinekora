@@ -42,7 +42,11 @@ describe("shared schemas", () => {
       mainWindowBounds: null,
       recorderOverlayBounds: null,
       recorderOverlayShowOnStartup: true,
+      recorderOverlayIgnoreGameFocus: false,
+      auraOverlayIgnoreGameFocus: false,
       auraOverlayShowEditingFrame: true,
+      clipPreviewOverlayIgnoreGameFocus: false,
+      gridLinesOverlayIgnoreGameFocus: false,
       installedGames: ["poe1"],
       recordingStoragePath: null,
       keybindManualBookmark: "Alt+B",
@@ -97,7 +101,11 @@ describe("shared schemas", () => {
     expect(appSettingsKeys).toContain("keybindManualBookmark");
     expect(appSettingsKeys).toContain("replayClipPreviewResolution");
     expect(appSettingsKeys).toContain("recorderOverlayShowOnStartup");
+    expect(appSettingsKeys).toContain("recorderOverlayIgnoreGameFocus");
+    expect(appSettingsKeys).toContain("auraOverlayIgnoreGameFocus");
     expect(appSettingsKeys).toContain("auraOverlayShowEditingFrame");
+    expect(appSettingsKeys).toContain("clipPreviewOverlayIgnoreGameFocus");
+    expect(appSettingsKeys).toContain("gridLinesOverlayIgnoreGameFocus");
     expect(appSettingsKeys).not.toContain("recordingHideOverlaysFromCapture");
   });
 

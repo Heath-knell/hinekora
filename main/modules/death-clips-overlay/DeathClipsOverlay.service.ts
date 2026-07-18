@@ -47,8 +47,9 @@ class DeathClipsOverlayService {
     private readonly createAnchorBounds: () => Electron.Rectangle,
     private readonly getContentProtectionEnabled = () => false,
     private readonly onClosed = () => {},
+    ignorePoeFocus = () => false,
   ) {
-    this.coordinator.register(this);
+    this.coordinator.register(this, { ignorePoeFocus });
   }
 
   async showClip(clip: ReplayClip): Promise<void> {
@@ -97,13 +98,13 @@ class DeathClipsOverlayService {
     }
 
     this.clipPreviewOverlayRequested = true;
-    this.coordinator.showOrHideGameOverlayWindow(this.clipPreviewWindow);
+    this.coordinator.showOrHideGameOverlayWindow(this.clipPreviewWindow, this);
     logInfo(CLIP_PREVIEW_OVERLAY_SCOPE, "Replay clip overlay presented", {
-      canShowGameOverlays: this.coordinator.canShowGameOverlays(),
+      canShowGameOverlays: this.coordinator.canShowGameOverlays(this),
       clipId: clip.id,
       elapsedMs: Date.now() - showStartedAt,
     });
-    if (!wasRequested && this.coordinator.canShowGameOverlays()) {
+    if (!wasRequested && this.coordinator.canShowGameOverlays(this)) {
       logInfo(CLIP_PREVIEW_OVERLAY_SCOPE, "Replay clip overlay opened", {
         clipId: clip.id,
         kind: clip.kind,
@@ -127,7 +128,10 @@ class DeathClipsOverlayService {
 
   restoreRequestedOverlay(): void {
     if (this.clipPreviewOverlayRequested) {
-      this.coordinator.showGameOverlayWindow(this.clipPreviewWindow);
+      this.coordinator.showOrHideGameOverlayWindow(
+        this.clipPreviewWindow,
+        this,
+      );
     }
   }
 

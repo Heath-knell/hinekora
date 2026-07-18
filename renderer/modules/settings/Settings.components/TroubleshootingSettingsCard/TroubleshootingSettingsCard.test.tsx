@@ -11,7 +11,6 @@ const settingsMocks = vi.hoisted(() => ({
 vi.mock("~/renderer/store", () => ({
   useSettingsShallow: (selector: (settings: unknown) => unknown) =>
     selector({
-      pendingPreferences: {},
       preferenceErrors: {
         ...(settingsMocks.preferenceError
           ? { editorLogEnabled: settingsMocks.preferenceError }

@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const settingsMocks = vi.hoisted(() => ({
   crashReporting: null as boolean | null,
-  isSaving: false,
   preferenceError: null as string | null,
   updatePreference: vi.fn(),
 }));
@@ -25,9 +24,6 @@ vi.mock("~/renderer/store", () => ({
     }),
   useSettingsShallow: (selector: (settings: unknown) => unknown) =>
     selector({
-      pendingPreferences: {
-        ...(settingsMocks.isSaving ? { telemetryCrashReporting: true } : {}),
-      },
       preferenceErrors: {
         ...(settingsMocks.preferenceError
           ? { telemetryCrashReporting: settingsMocks.preferenceError }
@@ -58,7 +54,6 @@ describe("PrivacySettingsCard", () => {
     document.body.append(container);
     root = createRoot(container);
     settingsMocks.crashReporting = null;
-    settingsMocks.isSaving = false;
     settingsMocks.preferenceError = null;
     leagueMocks.loadSessionUserId.mockResolvedValue(undefined);
     settingsMocks.updatePreference.mockResolvedValue(true);
@@ -106,18 +101,6 @@ describe("PrivacySettingsCard", () => {
       "telemetryCrashReporting",
       true,
     );
-  });
-
-  it("disables crash reporting changes while a save is pending", async () => {
-    settingsMocks.isSaving = true;
-
-    await renderCard();
-
-    const toggle = container.querySelector<HTMLInputElement>(
-      'input[aria-label="Crash Reporting"]',
-    );
-    expect(toggle?.disabled).toBe(true);
-    expect(container.textContent).toContain("Saving...");
   });
 
   it("surfaces crash reporting persistence failures", async () => {

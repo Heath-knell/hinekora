@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { OverlayExitNotice } from "~/renderer/components/OverlayExitNotice/OverlayExitNotice";
 import { AuraEditingNotice } from "~/renderer/modules/aura-overlay/AuraOverlay.components/AuraEditingNotice/AuraEditingNotice";
@@ -7,22 +7,16 @@ import { AuraLockHandoffNotice } from "~/renderer/modules/aura-overlay/AuraOverl
 import { AuraOverlayPlacement } from "~/renderer/modules/aura-overlay/AuraOverlay.components/AuraOverlayPlacement/AuraOverlayPlacement";
 import { AuraPlacementFocusStrip } from "~/renderer/modules/aura-overlay/AuraOverlay.components/AuraPlacementFocusStrip/AuraPlacementFocusStrip";
 import { useAuraOverlayAddAuraSelection } from "~/renderer/modules/aura-overlay/AuraOverlay.hooks/useAuraOverlayAddAuraSelection/useAuraOverlayAddAuraSelection";
+import { useAuraOverlayCaptureStream } from "~/renderer/modules/aura-overlay/AuraOverlay.hooks/useAuraOverlayCaptureStream/useAuraOverlayCaptureStream";
 import { useAuraOverlayEditingHistory } from "~/renderer/modules/aura-overlay/AuraOverlay.hooks/useAuraOverlayEditingHistory/useAuraOverlayEditingHistory";
 import { useAuraOverlayLockState } from "~/renderer/modules/aura-overlay/AuraOverlay.hooks/useAuraOverlayLockState/useAuraOverlayLockState";
 import { useAuraOverlayPlacementEditor } from "~/renderer/modules/aura-overlay/AuraOverlay.hooks/useAuraOverlayPlacementEditor/useAuraOverlayPlacementEditor";
 import { useAuraOverlayVideoSizing } from "~/renderer/modules/aura-overlay/AuraOverlay.hooks/useAuraOverlayVideoSizing/useAuraOverlayVideoSizing";
-import { useDesktopCaptureStream } from "~/renderer/modules/capture-preview/CapturePreview.hooks/useDesktopCaptureStream/useDesktopCaptureStream";
-import { resolveCapturePreviewSourceId } from "~/renderer/modules/capture-preview/CapturePreview.utils/CapturePreview.utils";
 import { getSelectedCropLayoutProfile } from "~/renderer/modules/crop-editor/CropEditor.components/CropLayoutPreview/CropLayoutPreview.utils";
-import {
-  useCapturePreviewShallow,
-  useProfilesShallow,
-  useSettingsSelector,
-} from "~/renderer/store";
+import { useProfilesShallow, useSettingsSelector } from "~/renderer/store";
 
 import {
   type AuraVideoSize,
-  createAuraPreviewConstraints,
   readAuraRouteParams,
 } from "./AuraOverlay.page.utils";
 import styles from "./AuraOverlayPage.module.css";
@@ -35,14 +29,6 @@ function AuraOverlayPage() {
       updateProfile: profiles.update,
     }),
   );
-  const { isLoadingSources, refreshSources, selectedSourceId, sources } =
-    useCapturePreviewShallow((capturePreview) => ({
-      isLoadingSources: capturePreview.isLoading,
-      refreshSources: capturePreview.refresh,
-      selectedSourceId: capturePreview.selectedSourceId,
-      sources: capturePreview.sources,
-    }));
-  const hasRequestedSourcesRef = useRef(false);
   const [routeParams, setRouteParams] = useState(readAuraRouteParams);
   const routeProfileId = routeParams.get("profileId");
   const routeStartAddingAura = routeParams.get("startAddingAura") === "1";
@@ -61,35 +47,6 @@ function AuraOverlayPage() {
   const { auraOverlayLocked, lockAuraOverlay, showLockHandoffHint } =
     useAuraOverlayLockState();
 
-  useEffect(() => {
-    if (
-      hasRequestedSourcesRef.current ||
-      isLoadingSources ||
-      sources.length > 0
-    ) {
-      return;
-    }
-
-    hasRequestedSourcesRef.current = true;
-    void refreshSources();
-  }, [isLoadingSources, refreshSources, sources.length]);
-
-  const captureSourceId = useMemo(
-    () =>
-      resolveCapturePreviewSourceId(
-        profile?.captureTarget,
-        sources,
-        selectedSourceId,
-        activeGame,
-      ),
-    [activeGame, profile, selectedSourceId, sources],
-  );
-  const captureSource =
-    sources.find((source) => source.id === captureSourceId) ?? null;
-  const captureSourceVideoSize =
-    captureSource?.width && captureSource.height
-      ? { width: captureSource.width, height: captureSource.height }
-      : null;
   const profileReferenceViewport: AuraVideoSize | null =
     profile?.captureTarget?.width && profile.captureTarget.height
       ? {
@@ -103,6 +60,14 @@ function AuraOverlayPage() {
     : profile.overlayPlacements.length === 0
       ? "No aura positions configured"
       : null;
+  const {
+    captureSourceId,
+    fallbackVideoSize: captureSourceVideoSize,
+    stream,
+  } = useAuraOverlayCaptureStream({
+    enabled: emptyMessage === null,
+    profile,
+  });
   const canEditAuras = !auraOverlayLocked;
   const { recordAuraHistory, selectPlacement, selectedPlacementId } =
     useAuraOverlayEditingHistory({
@@ -110,11 +75,6 @@ function AuraOverlayPage() {
       profile,
       updateProfile,
     });
-  const { stream } = useDesktopCaptureStream({
-    sourceId: captureSourceId,
-    enabled: Boolean(captureSourceId && !emptyMessage),
-    createConstraints: createAuraPreviewConstraints,
-  });
   const { bindAuraVideo, effectiveVideoSize, handleVideoSizeChange } =
     useAuraOverlayVideoSizing({
       captureSourceId,

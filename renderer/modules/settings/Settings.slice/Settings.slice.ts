@@ -23,7 +23,6 @@ export const createSettingsSlice: BoundStoreStateCreator<SettingsSlice> = (
 
   return {
     settings: {
-      pendingPreferences: {},
       preferenceErrors: {},
       value: null,
       hydrate: async () => {
@@ -105,17 +104,11 @@ export const createSettingsSlice: BoundStoreStateCreator<SettingsSlice> = (
         set((state) => {
           state.settings.value ??= {};
           state.settings.value[key] = value as never;
-          state.settings.pendingPreferences[key] = true;
           delete state.settings.preferenceErrors[key];
         });
 
         try {
           await get().settings.update({ [key]: value } as AppSettingsUpdate);
-          if (preferenceRequestVersions.get(key) === requestVersion) {
-            set((state) => {
-              delete state.settings.pendingPreferences[key];
-            });
-          }
           return true;
         } catch {
           if (preferenceRequestVersions.get(key) !== requestVersion) {
@@ -132,7 +125,6 @@ export const createSettingsSlice: BoundStoreStateCreator<SettingsSlice> = (
             }
             state.settings.preferenceErrors[key] =
               "Could not save this preference.";
-            delete state.settings.pendingPreferences[key];
           });
           return false;
         }

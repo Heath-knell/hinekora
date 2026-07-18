@@ -34,7 +34,7 @@ const serviceMocks = vi.hoisted(() => ({
   getSettings: vi.fn(),
   onDidChangeSettings: vi.fn(),
   recorderSetGameRunningState: vi.fn(),
-  overlaySetGameRunningActive: vi.fn(),
+  overlaySetRunningGame: vi.fn(),
   settingsChangeListeners: [] as Array<
     (settings: { activeGame: "poe1" | "poe2" }) => void
   >,
@@ -71,7 +71,7 @@ vi.mock("~/main/modules/managed-recorder", () => ({
 vi.mock("~/main/modules/overlay-windows", () => ({
   OverlayWindowsService: {
     getInstance: () => ({
-      setGameRunningActive: serviceMocks.overlaySetGameRunningActive,
+      setRunningGame: serviceMocks.overlaySetRunningGame,
     }),
   },
 }));
@@ -201,7 +201,7 @@ describe("PoeProcessService", () => {
     });
     serviceMocks.recorderSetGameRunningState.mockReset();
     serviceMocks.recorderSetGameRunningState.mockResolvedValue(false);
-    serviceMocks.overlaySetGameRunningActive.mockReset();
+    serviceMocks.overlaySetRunningGame.mockReset();
     vi.restoreAllMocks();
   });
 
@@ -377,9 +377,7 @@ describe("PoeProcessService", () => {
       windowTitle: "Path of Exile 2",
     });
     expect(service.isActiveGameRunning()).toBe(true);
-    expect(serviceMocks.overlaySetGameRunningActive).toHaveBeenLastCalledWith(
-      true,
-    );
+    expect(serviceMocks.overlaySetRunningGame).toHaveBeenLastCalledWith("poe2");
     expect(serviceMocks.recorderSetGameRunningState).toHaveBeenLastCalledWith(
       true,
     );
@@ -399,7 +397,8 @@ describe("PoeProcessService", () => {
       }),
     );
     expect(service.isActiveGameRunning()).toBe(false);
-    expect(serviceMocks.overlaySetGameRunningActive).toHaveBeenLastCalledWith(
+    expect(serviceMocks.overlaySetRunningGame).toHaveBeenLastCalledWith("poe1");
+    expect(serviceMocks.recorderSetGameRunningState).toHaveBeenLastCalledWith(
       false,
     );
 
@@ -425,7 +424,7 @@ describe("PoeProcessService", () => {
     );
 
     expect(service.getState()).toEqual({ isRunning: false, processName: "" });
-    expect(serviceMocks.overlaySetGameRunningActive).not.toHaveBeenCalled();
+    expect(serviceMocks.overlaySetRunningGame).not.toHaveBeenCalled();
     expect(serviceMocks.recorderSetGameRunningState).not.toHaveBeenCalled();
     expect(window.webContents.send).not.toHaveBeenCalled();
   });
@@ -455,9 +454,7 @@ describe("PoeProcessService", () => {
 
     expect(service.getState()).toEqual({ isRunning: false, processName: "" });
     expect(service.isActiveGameRunning()).toBe(false);
-    expect(serviceMocks.overlaySetGameRunningActive).toHaveBeenLastCalledWith(
-      false,
-    );
+    expect(serviceMocks.overlaySetRunningGame).toHaveBeenLastCalledWith("poe1");
     expect(window.webContents.send).toHaveBeenCalledWith(
       PoeProcessChannel.SnapshotChanged,
       poe1Snapshot,
@@ -490,7 +487,7 @@ describe("PoeProcessService", () => {
       getWatcherListener("error")(new Error("database closed"));
     }).not.toThrow();
     expect(service.getState()).toEqual({ isRunning: false, processName: "" });
-    expect(serviceMocks.overlaySetGameRunningActive).not.toHaveBeenCalled();
+    expect(serviceMocks.overlaySetRunningGame).not.toHaveBeenCalled();
     expect(serviceMocks.recorderSetGameRunningState).not.toHaveBeenCalled();
   });
 
@@ -513,9 +510,7 @@ describe("PoeProcessService", () => {
       processName: "PathOfExileSteam.exe",
       windowTitle: "Path of Exile 2",
     });
-    expect(serviceMocks.overlaySetGameRunningActive).toHaveBeenLastCalledWith(
-      true,
-    );
+    expect(serviceMocks.overlaySetRunningGame).toHaveBeenLastCalledWith("poe2");
     expect(serviceMocks.recorderSetGameRunningState).toHaveBeenLastCalledWith(
       true,
     );
@@ -623,9 +618,7 @@ describe("PoeProcessService", () => {
 
     await expect(service.refreshSnapshot()).resolves.toEqual(snapshot);
 
-    expect(serviceMocks.overlaySetGameRunningActive).toHaveBeenLastCalledWith(
-      true,
-    );
+    expect(serviceMocks.overlaySetRunningGame).toHaveBeenLastCalledWith("poe2");
     expect(window.webContents.send).toHaveBeenCalledWith(
       PoeProcessChannel.SnapshotChanged,
       snapshot,
@@ -647,9 +640,7 @@ describe("PoeProcessService", () => {
 
     await expect(service.refreshSnapshot()).resolves.toEqual(snapshot);
 
-    expect(serviceMocks.overlaySetGameRunningActive).toHaveBeenLastCalledWith(
-      false,
-    );
+    expect(serviceMocks.overlaySetRunningGame).toHaveBeenLastCalledWith(null);
     expect(serviceMocks.recorderSetGameRunningState).toHaveBeenLastCalledWith(
       false,
     );
@@ -700,7 +691,8 @@ describe("PoeProcessService", () => {
         "poe1",
       ),
     );
-    expect(serviceMocks.overlaySetGameRunningActive).toHaveBeenLastCalledWith(
+    expect(serviceMocks.overlaySetRunningGame).toHaveBeenLastCalledWith("poe2");
+    expect(serviceMocks.recorderSetGameRunningState).toHaveBeenLastCalledWith(
       false,
     );
     window.webContents.send.mockClear();
@@ -719,9 +711,7 @@ describe("PoeProcessService", () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(serviceMocks.overlaySetGameRunningActive).toHaveBeenLastCalledWith(
-      true,
-    );
+    expect(serviceMocks.overlaySetRunningGame).toHaveBeenLastCalledWith("poe2");
     expect(serviceMocks.recorderSetGameRunningState).toHaveBeenLastCalledWith(
       true,
     );
@@ -743,9 +733,7 @@ describe("PoeProcessService", () => {
 
     await service.refreshState();
 
-    expect(serviceMocks.overlaySetGameRunningActive).toHaveBeenLastCalledWith(
-      true,
-    );
+    expect(serviceMocks.overlaySetRunningGame).toHaveBeenLastCalledWith("poe2");
     expect(serviceMocks.recorderSetGameRunningState).toHaveBeenLastCalledWith(
       true,
     );
@@ -769,9 +757,7 @@ describe("PoeProcessService", () => {
 
     expect(watcherMocks.pollSnapshot).not.toHaveBeenCalled();
     expect(service.getState()).toEqual({ isRunning: false, processName: "" });
-    expect(serviceMocks.overlaySetGameRunningActive).toHaveBeenLastCalledWith(
-      false,
-    );
+    expect(serviceMocks.overlaySetRunningGame).toHaveBeenLastCalledWith(null);
     expect(window.webContents.send).toHaveBeenCalledWith(
       PoeProcessChannel.SnapshotChanged,
       createPoeProcessSnapshot(createStoppedPoeProcessStates(), "poe1"),
@@ -798,9 +784,7 @@ describe("PoeProcessService", () => {
     await Promise.resolve();
 
     expect(service.getState()).toEqual({ isRunning: false, processName: "" });
-    expect(serviceMocks.overlaySetGameRunningActive).toHaveBeenLastCalledWith(
-      false,
-    );
+    expect(serviceMocks.overlaySetRunningGame).toHaveBeenLastCalledWith(null);
     expect(serviceMocks.recorderSetGameRunningState).toHaveBeenLastCalledWith(
       false,
     );
@@ -822,7 +806,7 @@ describe("PoeProcessService", () => {
       listener({ activeGame: "poe2" });
     }
 
-    expect(serviceMocks.overlaySetGameRunningActive).not.toHaveBeenCalled();
+    expect(serviceMocks.overlaySetRunningGame).not.toHaveBeenCalled();
     expect(serviceMocks.recorderSetGameRunningState).not.toHaveBeenCalled();
     expect(window.webContents.send).not.toHaveBeenCalled();
   });
@@ -862,9 +846,7 @@ describe("PoeProcessService", () => {
       expect.stringContaining("PoE process active-game refresh failed"),
       expect.objectContaining({ error: "watch failed", watcherMode: "helper" }),
     );
-    expect(serviceMocks.overlaySetGameRunningActive).toHaveBeenLastCalledWith(
-      false,
-    );
+    expect(serviceMocks.overlaySetRunningGame).toHaveBeenLastCalledWith(null);
     expect(window.webContents.send).toHaveBeenCalledWith(
       PoeProcessChannel.SnapshotChanged,
       createPoeProcessSnapshot(createStoppedPoeProcessStates(), "poe1"),

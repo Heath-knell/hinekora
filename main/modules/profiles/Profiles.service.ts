@@ -25,7 +25,6 @@ import {
   type ProfileUpdateInput,
   ProfileUpdateInputSchema,
   resolveActiveGameProfile,
-  resolveRenderableProfileForGame,
 } from "~/types";
 import { SettingsStoreService } from "../settings-store/SettingsStore.service";
 import { ProfilesChannel } from "./Profiles.channels";
@@ -132,21 +131,6 @@ class ProfilesService {
     this.publishProfilesChanged();
   }
 
-  resolveProfileForGame(
-    profileId: string | null | undefined,
-    game: GameId,
-  ): Profile | null {
-    return resolveProfileForGame(this.list(), profileId, game);
-  }
-
-  resolveRenderableProfileForGame(game: GameId): Profile | null {
-    return resolveRenderableProfileForGame(this.list(), game);
-  }
-
-  hasRenderableAuraPlacements(profile: Profile): boolean {
-    return hasRenderableAuraPlacements(profile);
-  }
-
   private publishProfilesChanged(): void {
     const profiles = this.list();
 
@@ -248,5 +232,4 @@ export {
   isProfileAvailableForGame,
   ProfilesService,
   resolveProfileForGame,
-  resolveRenderableProfileForGame,
 };

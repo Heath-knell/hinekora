@@ -137,7 +137,7 @@ test("uses the persisted active game source for global aura profiles", async ({
     .poll(async () => {
       const calls = await getAuraOverlayE2ECalls(page);
 
-      return calls.captureConstraintSourceIds.at(-1);
+      return calls.preparedDisplayMediaSourceIds.at(-1);
     })
     .toBe("window:poe2:game");
 });

@@ -70,7 +70,7 @@ function CaptureGuidePage() {
           <Tabs
             ariaLabel="Capture guide sections"
             items={captureGuideTabs}
-            size="sm"
+            size="xs"
             value={activeTab}
             onChange={handleTabChange}
           />

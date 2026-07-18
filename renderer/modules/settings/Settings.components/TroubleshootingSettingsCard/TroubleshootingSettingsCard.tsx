@@ -12,17 +12,12 @@ function TroubleshootingSettingsCard() {
   const [devToolsStatus, setDevToolsStatus] = useState<DevToolsStatus>("idle");
   const isOpeningDiagnosticLog = diagnosticLogStatus === "opening";
   const isOpeningDevTools = devToolsStatus === "opening";
-  const {
-    editorLogError,
-    isEditorLogEnabled,
-    isSavingEditorLog,
-    updatePreference,
-  } = useSettingsShallow((settings) => ({
-    editorLogError: settings.preferenceErrors.editorLogEnabled ?? null,
-    isEditorLogEnabled: settings.value?.editorLogEnabled ?? false,
-    isSavingEditorLog: settings.pendingPreferences.editorLogEnabled === true,
-    updatePreference: settings.updatePreference,
-  }));
+  const { editorLogError, isEditorLogEnabled, updatePreference } =
+    useSettingsShallow((settings) => ({
+      editorLogError: settings.preferenceErrors.editorLogEnabled ?? null,
+      isEditorLogEnabled: settings.value?.editorLogEnabled ?? false,
+      updatePreference: settings.updatePreference,
+    }));
 
   const handleOpenDiagnosticLog = useCallback(async () => {
     setDiagnosticLogStatus("opening");
@@ -102,7 +97,6 @@ function TroubleshootingSettingsCard() {
             aria-label="Editor log"
             checked={isEditorLogEnabled}
             className="toggle toggle-primary toggle-sm shrink-0"
-            disabled={isSavingEditorLog}
             type="checkbox"
             onChange={handleEditorLogChange}
           />
