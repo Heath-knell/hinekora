@@ -20,7 +20,7 @@ function ClientLogPanel() {
   const handleSavePath = () => void savePath();
   const handleBrowsePath = async () => {
     const filePath = await window.electron.app.selectPath({
-      title: "Select Path of Exile Client.txt",
+      title: "Select Path of Exile client log",
       filters: [{ name: "Text Files", extensions: ["txt"] }],
       properties: ["openFile"],
     });
@@ -33,7 +33,7 @@ function ClientLogPanel() {
   return (
     <section className="grid gap-3 rounded-lg border border-base-content/10 bg-neutral p-3 shadow-lg">
       <div className="flex items-start justify-between gap-3">
-        <h2 className="m-0 font-bold text-primary text-sm">Client.txt</h2>
+        <h2 className="m-0 font-bold text-primary text-sm">Client log</h2>
         <StatusPill
           label={status?.watching ? "Watching" : "Idle"}
           tone={status?.watching ? "good" : "neutral"}

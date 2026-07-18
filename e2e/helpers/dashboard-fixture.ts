@@ -1,6 +1,11 @@
 import { expect, type Page } from "@playwright/test";
 
-import type { SetupState } from "../../main/modules/app-setup/AppSetup.types";
+import type { AppSelectPathInput } from "../../main/modules/app/App.dto";
+import type {
+  AppSetupResult,
+  SetupState,
+  StepValidationResult,
+} from "../../main/modules/app-setup/AppSetup.types";
 import type {
   ActivitySessionLibraryItem,
   ActivitySessionLibraryPage,
@@ -15,6 +20,7 @@ import type {
   RecordingBookmarksPage,
   RecordingBookmarksQuery,
 } from "../../main/modules/bookmarks";
+import type { ClientLogPathInput } from "../../main/modules/client-log/ClientLog.dto";
 import {
   type ManagedRecorderAudioDevices,
   type ManagedRecorderCaptureMode,
@@ -84,10 +90,12 @@ interface DashboardE2ECalls {
   captureSourceRequests: boolean[];
   captureSourceResponses: string[][];
   clientLogActiveGames: Array<{ game: "poe1" | "poe2" }>;
+  clientLogPathUpdates: ClientLogPathInput[];
   clipboardWrites: string[];
   duplicatePoeStateEmissions: number;
   getUserMediaConstraints: unknown[];
   mainWindowActions: string[];
+  pathSelectionRequests: AppSelectPathInput[];
   profileCreates: Array<{ game: GameId | null; id: string; name: string }>;
   profileDeletes: string[];
   profileSelects: string[];
@@ -133,12 +141,25 @@ interface DashboardE2EApi {
     progress: number;
   }) => void;
   emitRecorderOverlayVisibility: (visible: boolean) => void;
+  setAppSetupValidation: (validation: StepValidationResult) => void;
   setCaptureSources: (sources: CapturePreviewSource[]) => void;
+}
+
+type AppSetupE2EAction =
+  | "advanceStep"
+  | "completeSetup"
+  | `goToStep:${SetupState["currentStep"]}`;
+
+interface AppSetupE2ETransition {
+  action: AppSetupE2EAction;
+  state: Partial<SetupState>;
 }
 
 interface DashboardE2EFixture {
   activitySessions: ActivitySessionLibraryItem[];
   activitySessionTimelines: Record<string, ActivitySessionTimeline>;
+  appSetupTransitions: AppSetupE2ETransition[];
+  appSetupValidation: StepValidationResult;
   audioDevices: ManagedRecorderAudioDevices;
   auraLocked: boolean;
   bookmarks: BookmarkLibraryItem[];
@@ -160,6 +181,7 @@ interface DashboardE2EFixture {
   replayClipDetails: Record<string, ReplayClipDetail>;
   replayClipOperationDelayMs: number;
   settings: AppSettings;
+  selectedPaths: Array<string | null>;
   setupState: SetupState;
   sources: CapturePreviewSource[];
   storageInfo: StorageInfo;
@@ -174,6 +196,8 @@ interface DashboardE2EOptions {
   activeGame?: GameId;
   activitySessions?: ActivitySessionLibraryItem[];
   activitySessionTimelines?: Record<string, ActivitySessionTimeline>;
+  appSetupTransitions?: AppSetupE2ETransition[];
+  appSetupValidation?: StepValidationResult;
   auraLocked?: boolean;
   bookmarks?: BookmarkLibraryItem[];
   recordingMaxStorageGb?: number;
@@ -183,6 +207,8 @@ interface DashboardE2EOptions {
   recorderOverlayVisible?: boolean;
   replayClipDetails?: Record<string, ReplayClipDetail>;
   replayClipOperationDelayMs?: number;
+  selectedPaths?: Array<string | null>;
+  setupState?: SetupState;
   skipDashboardShellChecks?: boolean;
   initialHash?: string;
 }
@@ -196,6 +222,13 @@ function getCurrentE2ELeagueName(
 function createDashboardE2EFixture(
   options: DashboardE2EOptions = {},
 ): DashboardE2EFixture {
+  const setupState = options.setupState ?? {
+    currentStep: 3,
+    isComplete: true,
+    poe1ClientPath: null,
+    poe2ClientPath: null,
+    selectedGames: ["poe1", "poe2"],
+  };
   const activeGame = options.activeGame ?? "poe2";
   const leagueCatalog = createE2EPoeLeagueCatalog();
   const selectedLeagues = {
@@ -212,7 +245,7 @@ function createDashboardE2EFixture(
     ...defaultSettings,
     activeGame,
     activeLeague,
-    installedGames: ["poe1", "poe2"],
+    installedGames: setupState.selectedGames,
     lastSeenAppVersion: "0.1.2",
     telemetryCrashReporting: false,
     poe1SelectedLeague: selectedLeagues.poe1,
@@ -223,8 +256,10 @@ function createDashboardE2EFixture(
     recordingMaxStorageGb:
       options.recordingMaxStorageGb ?? defaultSettings.recordingMaxStorageGb,
     recordingRunQuality: "moderate",
-    setupCompleted: true,
-    setupStep: 3,
+    poe1ClientTxtPath: setupState.poe1ClientPath ?? "",
+    poe2ClientTxtPath: setupState.poe2ClientPath ?? "",
+    setupCompleted: setupState.isComplete,
+    setupStep: setupState.currentStep,
     setupVersion: 1,
     selectedCaptureProfileId,
     selectedProfileId,
@@ -332,6 +367,11 @@ function createDashboardE2EFixture(
   return {
     activitySessions: options.activitySessions ?? [],
     activitySessionTimelines: options.activitySessionTimelines ?? {},
+    appSetupTransitions: options.appSetupTransitions ?? [],
+    appSetupValidation: options.appSetupValidation ?? {
+      errors: [],
+      isValid: true,
+    },
     audioDevices: {
       input: [{ id: "{mic-1}", label: "Microphone Array" }],
       output: [
@@ -384,14 +424,9 @@ function createDashboardE2EFixture(
     recorderStatus,
     replayClipDetails: options.replayClipDetails ?? {},
     replayClipOperationDelayMs: options.replayClipOperationDelayMs ?? 0,
+    selectedPaths: options.selectedPaths ?? [],
     settings,
-    setupState: {
-      currentStep: 3,
-      isComplete: true,
-      poe1ClientPath: null,
-      poe2ClientPath: null,
-      selectedGames: ["poe1", "poe2"],
-    },
+    setupState,
     sources,
     storageInfo,
   };
@@ -453,6 +488,17 @@ async function setupDashboardE2E(
       )() as () => E2EPoeProcessSnapshotFactory;
       const poeProcessSnapshotFactory = createPoeProcessSnapshotFactory();
       let settings = clone(fixture.settings);
+      let appSetupTransitionIndex = 0;
+      let appSetupValidation = clone(fixture.appSetupValidation);
+      let selectedPathIndex = 0;
+      const getCurrentSetupState = (): SetupState => ({
+        ...fixture.setupState,
+        currentStep: settings.setupStep,
+        isComplete: settings.setupCompleted,
+        poe1ClientPath: settings.poe1ClientTxtPath || null,
+        poe2ClientPath: settings.poe2ClientTxtPath || null,
+        selectedGames: clone(settings.installedGames),
+      });
       const activitySessions = clone(fixture.activitySessions);
       const activitySessionTimelines = clone(fixture.activitySessionTimelines);
       let bookmarks = clone(fixture.bookmarks);
@@ -555,12 +601,14 @@ async function setupDashboardE2E(
         captureSourceRequests: [],
         captureSourceResponses: [],
         clientLogActiveGames: [],
+        clientLogPathUpdates: [],
         clipboardWrites: [],
         duplicatePoeStateEmissions: 0,
         getUserMediaConstraints: [],
         clipPreviewOverlayWindowActions: [],
         mainWindowActions: [],
         mainWindowOpenEditorClipCalls: [],
+        pathSelectionRequests: [],
         profileCreates: [],
         profileDeletes: [],
         profileSelects: [],
@@ -581,6 +629,42 @@ async function setupDashboardE2E(
         stopBufferCount: 0,
         stopRunRecordingCount: 0,
         unexpectedBridgeCalls: [],
+      };
+      const applyAppSetupState = (state: SetupState) => {
+        settings = {
+          ...settings,
+          activeGame: state.isComplete
+            ? (state.selectedGames[0] ?? "poe1")
+            : settings.activeGame,
+          installedGames: clone(state.selectedGames),
+          poe1ClientTxtPath: state.poe1ClientPath ?? "",
+          poe2ClientTxtPath: state.poe2ClientPath ?? "",
+          setupCompleted: state.isComplete,
+          setupStep: state.currentStep,
+        };
+        syncPoeProcessSnapshot();
+        listeners.settingsChanged?.(clone(settings));
+      };
+      const applyNextAppSetupTransition = (
+        action: AppSetupE2EAction,
+      ): AppSetupResult => {
+        const transition = fixture.appSetupTransitions[appSetupTransitionIndex];
+        if (!transition || transition.action !== action) {
+          calls.unexpectedBridgeCalls.push(`appSetup.${action}:transition`);
+
+          return {
+            error: `Unexpected app setup transition: ${action}`,
+            success: false,
+          };
+        }
+
+        appSetupTransitionIndex += 1;
+        applyAppSetupState({
+          ...getCurrentSetupState(),
+          ...clone(transition.state),
+        });
+
+        return { success: true };
       };
       Object.defineProperty(window.navigator, "clipboard", {
         configurable: true,
@@ -838,11 +922,28 @@ async function setupDashboardE2E(
       const electron: DashboardE2EElectron = {
         app: createBridgeDomain<DashboardE2EElectron["app"]>("app", {
           getVersion: async () => "0.1.2",
+          selectPath: async (input: AppSelectPathInput) => {
+            calls.pathSelectionRequests.push(clone(input));
+            const selectedPath = fixture.selectedPaths[selectedPathIndex];
+            selectedPathIndex += 1;
+
+            return selectedPath ?? null;
+          },
         }),
         appSetup: createBridgeDomain<DashboardE2EElectron["appSetup"]>(
           "appSetup",
           {
-            getSetupState: async () => clone(fixture.setupState),
+            advanceStep: async () => applyNextAppSetupTransition("advanceStep"),
+            completeSetup: async () =>
+              applyNextAppSetupTransition("completeSetup"),
+            getSetupState: async () => clone(getCurrentSetupState()),
+            goToStep: async (step) => {
+              const action = `goToStep:${step}` as const;
+
+              return applyNextAppSetupTransition(action);
+            },
+            isSetupComplete: async () => settings.setupCompleted,
+            validateCurrentStep: async () => clone(appSetupValidation),
           },
         ),
         bookmarks: createBridgeDomain<DashboardE2EElectron["bookmarks"]>(
@@ -970,6 +1071,21 @@ async function setupDashboardE2E(
           {
             getStatus: async () => clone(clientLogStatus),
             onStatusChanged: () => unsubscribe,
+            setPath: async (input: ClientLogPathInput) => {
+              calls.clientLogPathUpdates.push(clone(input));
+              clientLogStatus.activeGame = input.game;
+              clientLogStatus.path = input.path;
+              clientLogStatus.watching = input.path.length > 0;
+              settings = {
+                ...settings,
+                [input.game === "poe1"
+                  ? "poe1ClientTxtPath"
+                  : "poe2ClientTxtPath"]: input.path,
+              };
+              listeners.settingsChanged?.(clone(settings));
+
+              return clone(clientLogStatus);
+            },
             setActiveGame: async (input: { game: "poe1" | "poe2" }) => {
               calls.clientLogActiveGames.push(clone(input));
               clientLogStatus.activeGame = input.game;
@@ -1529,6 +1645,9 @@ async function setupDashboardE2E(
         emitRecorderOverlayVisibility: (visible) => {
           emitRecorderVisibility(visible);
         },
+        setAppSetupValidation: (validation) => {
+          appSetupValidation = clone(validation);
+        },
         emitReplayClipProgress: (progress) => {
           calls.replayClipOperationProgressCalls.push(clone(progress));
           listeners.replayClipOperationProgress?.({
@@ -1686,6 +1805,21 @@ async function setDashboardCaptureSources(
   }, sources);
 }
 
+async function setDashboardAppSetupValidation(
+  page: Page,
+  validation: StepValidationResult,
+) {
+  await page.evaluate((nextValidation) => {
+    const e2eWindow = window as unknown as {
+      __HINEKORA_DASHBOARD_E2E_API__: DashboardE2EApi;
+    };
+
+    e2eWindow.__HINEKORA_DASHBOARD_E2E_API__.setAppSetupValidation(
+      nextValidation,
+    );
+  }, validation);
+}
+
 async function scheduleDashboardCaptureSources(
   page: Page,
   sources: CapturePreviewSource[],
@@ -1719,6 +1853,7 @@ async function expectNoUnexpectedDashboardBridgeCalls(page: Page) {
 }
 
 export {
+  type AppSetupE2ETransition,
   emitDashboardAuraLockChanged,
   emitDashboardPoeProcessStart,
   emitDashboardPoeProcessStop,
@@ -1729,6 +1864,7 @@ export {
   expectNoUnexpectedDashboardBridgeCalls,
   getDashboardE2ECalls,
   scheduleDashboardCaptureSources,
+  setDashboardAppSetupValidation,
   setDashboardCaptureSources,
   setupDashboardE2E,
 };

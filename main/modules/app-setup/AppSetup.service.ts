@@ -224,20 +224,20 @@ class AppSetupService {
 
     if (selectedGames.includes("poe1")) {
       if (!settings.poe1ClientTxtPath) {
-        errors.push("Please select Path of Exile 1 Client.txt path");
+        errors.push("Please select the Path of Exile 1 client log");
       } else if (!this.isValidClientPath(settings.poe1ClientTxtPath)) {
         errors.push(
-          "Path of Exile 1 Client.txt path is invalid or file does not exist",
+          "Path of Exile 1 client log must be an existing Client.txt or KakaoClient.txt file",
         );
       }
     }
 
     if (selectedGames.includes("poe2")) {
       if (!settings.poe2ClientTxtPath) {
-        errors.push("Please select Path of Exile 2 Client.txt path");
+        errors.push("Please select the Path of Exile 2 client log");
       } else if (!this.isValidClientPath(settings.poe2ClientTxtPath)) {
         errors.push(
-          "Path of Exile 2 Client.txt path is invalid or file does not exist",
+          "Path of Exile 2 client log must be an existing Client.txt or KakaoClient.txt file",
         );
       }
     }
@@ -264,8 +264,12 @@ class AppSetupService {
         filePath.lastIndexOf("\\"),
       );
       const fileName = filePath.slice(separatorIndex + 1);
+      const normalizedFileName = fileName.toLowerCase();
 
-      return fileName.toLowerCase() === "client.txt";
+      return (
+        normalizedFileName === "client.txt" ||
+        normalizedFileName === "kakaoclient.txt"
+      );
     } catch {
       return false;
     }

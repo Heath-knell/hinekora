@@ -77,12 +77,12 @@ describe("GameStatusBadge", () => {
     ).toBe(true);
   });
 
-  it("explains when Client.txt is not configured", async () => {
+  it("explains when the client log is not configured", async () => {
     mocks.path = "";
     await renderBadge();
 
     expect(container.querySelector("span")?.title).toContain(
-      "Client.txt is not configured",
+      "client log is not configured",
     );
   });
 });

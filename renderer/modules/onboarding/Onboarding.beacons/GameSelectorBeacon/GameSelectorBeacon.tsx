@@ -29,7 +29,7 @@ function GameSelectorBeacon(props: PopoverComponentProps) {
             <li className="flex items-start gap-2">
               <span className="mt-0.5 text-accent">•</span>
               <span>
-                The selected game controls Client.txt watching and recorder
+                The selected game controls client log watching and recorder
                 state.
               </span>
             </li>

@@ -32,7 +32,7 @@ function GameStatusBadge({ game }: GameStatusBadgeProps) {
       ? Boolean(settings?.poe1ClientTxtPath)
       : Boolean(settings?.poe2ClientTxtPath);
   const label = isFetching ? "Fetching" : isRunning ? "Running" : "Offline";
-  const title = hasPath ? label : `${label}; Client.txt is not configured`;
+  const title = hasPath ? label : `${label}; client log is not configured`;
 
   return (
     <span

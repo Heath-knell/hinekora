@@ -111,7 +111,7 @@ function AppSetupGameStep() {
           <span className="font-medium text-base-content/70">
             Playing both?
           </span>{" "}
-          You will configure Client.txt paths for each game.
+          You will configure a client log for each game.
         </p>
       )}
     </div>

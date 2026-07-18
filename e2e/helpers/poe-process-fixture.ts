@@ -130,6 +130,12 @@ const poeProcessVariants: PoeProcessVariant[] = [
     processName: "PathOfExile.exe",
   },
   {
+    game: "poe1",
+    id: "poe1-kakao",
+    name: "Path of Exile 1 Kakao Games",
+    processName: "PathOfExile_KG.exe",
+  },
+  {
     game: "poe2",
     id: "poe2-steam",
     name: "Path of Exile 2 Steam",
@@ -140,6 +146,12 @@ const poeProcessVariants: PoeProcessVariant[] = [
     id: "poe2-standalone",
     name: "Path of Exile 2 standalone",
     processName: "PathOfExile.exe",
+  },
+  {
+    game: "poe2",
+    id: "poe2-kakao",
+    name: "Path of Exile 2 Kakao Games",
+    processName: "PathOfExile_KG.exe",
   },
 ];
 

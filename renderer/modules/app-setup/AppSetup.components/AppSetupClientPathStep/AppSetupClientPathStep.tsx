@@ -14,7 +14,7 @@ function AppSetupClientPathStep() {
 
   const handlePoe1FileSelect = async () => {
     const filePath = await window.electron.app.selectPath({
-      title: "Select Path of Exile 1 Client.txt",
+      title: "Select Path of Exile 1 client log",
       filters: [{ name: "Text Files", extensions: ["txt"] }],
       properties: ["openFile"],
     });
@@ -26,7 +26,7 @@ function AppSetupClientPathStep() {
 
   const handlePoe2FileSelect = async () => {
     const filePath = await window.electron.app.selectPath({
-      title: "Select Path of Exile 2 Client.txt",
+      title: "Select Path of Exile 2 client log",
       filters: [{ name: "Text Files", extensions: ["txt"] }],
       properties: ["openFile"],
     });
@@ -39,11 +39,11 @@ function AppSetupClientPathStep() {
   return (
     <div>
       <h2 className="mb-1 text-xl font-semibold text-base-content">
-        Select Client.txt location
+        Select client log location
       </h2>
       <p className="mb-3 text-sm text-base-content/60">
-        Hinekora uses this file to detect deaths and game focus changes, so
-        overlays can appear only while Path of Exile is active.
+        Select Client.txt, or KakaoClient.txt if you use Kakao Games. Hinekora
+        uses the client log to detect deaths and game focus changes.
       </p>
 
       <div className="mb-3 space-y-1 rounded-lg border border-base-content/10 bg-base-100 p-2 text-xs">
@@ -64,6 +64,14 @@ function AppSetupClientPathStep() {
             {!hasBoth && hasPoe2 && " 2"}\logs\Client.txt
           </code>
         </p>
+        <p>
+          <span className="text-base-content/40">Kakao Games:</span>{" "}
+          <code className="rounded bg-base-300 px-1 py-0.5 text-base-content/60">
+            ...\Path of Exile
+            {hasBoth && <span className="font-medium text-primary"> (2)</span>}
+            {!hasBoth && hasPoe2 && " 2"}\logs\KakaoClient.txt
+          </code>
+        </p>
         {hasBoth && (
           <p className="mt-1 italic text-base-content/40">
             (2) = Path of Exile 2 folder
@@ -74,7 +82,7 @@ function AppSetupClientPathStep() {
       {hasPoe1 && (
         <AppSetupClientPathSelector
           currentPath={setupState?.poe1ClientPath ?? ""}
-          label="Path of Exile 1 Client.txt"
+          label="Path of Exile 1 client log"
           onSelectPath={handlePoe1FileSelect}
         />
       )}
@@ -82,7 +90,7 @@ function AppSetupClientPathStep() {
       {hasPoe2 && (
         <AppSetupClientPathSelector
           currentPath={setupState?.poe2ClientPath ?? ""}
-          label="Path of Exile 2 Client.txt"
+          label="Path of Exile 2 client log"
           onSelectPath={handlePoe2FileSelect}
         />
       )}

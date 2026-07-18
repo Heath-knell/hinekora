@@ -73,7 +73,7 @@ describe("AppSetupService", () => {
 
     expect(service.advanceStep()).toEqual({
       success: false,
-      error: "Please select Path of Exile 1 Client.txt path",
+      error: "Please select the Path of Exile 1 client log",
     });
 
     settingsStore.update({
@@ -88,7 +88,7 @@ describe("AppSetupService", () => {
     expect(settingsStore.get().telemetryCrashReporting).toBe(false);
   });
 
-  it("validates selected Client.txt paths for each selected game", () => {
+  it("validates selected client log paths for each selected game", () => {
     settingsStore.update({
       installedGames: ["poe1", "poe2"],
       setupStep: SETUP_STEPS.SELECT_CLIENT_PATH,
@@ -97,7 +97,7 @@ describe("AppSetupService", () => {
 
     expect(service.validateCurrentStep()).toEqual({
       isValid: false,
-      errors: ["Please select Path of Exile 2 Client.txt path"],
+      errors: ["Please select the Path of Exile 2 client log"],
     });
 
     settingsStore.update({
@@ -108,7 +108,18 @@ describe("AppSetupService", () => {
     expect(service.validateCurrentStep()).toEqual({
       isValid: false,
       errors: [
-        "Path of Exile 2 Client.txt path is invalid or file does not exist",
+        "Path of Exile 2 client log must be an existing Client.txt or KakaoClient.txt file",
+      ],
+    });
+
+    const unrelatedTextPath = join(tempDir, "Other.txt");
+    writeFileSync(unrelatedTextPath, "not a client log", "utf8");
+    settingsStore.update({ poe2ClientTxtPath: unrelatedTextPath });
+
+    expect(service.validateCurrentStep()).toEqual({
+      isValid: false,
+      errors: [
+        "Path of Exile 2 client log must be an existing Client.txt or KakaoClient.txt file",
       ],
     });
 
@@ -117,7 +128,7 @@ describe("AppSetupService", () => {
     expect(service.validateCurrentStep()).toEqual({
       isValid: false,
       errors: [
-        "Path of Exile 2 Client.txt path is invalid or file does not exist",
+        "Path of Exile 2 client log must be an existing Client.txt or KakaoClient.txt file",
       ],
     });
 
@@ -125,6 +136,20 @@ describe("AppSetupService", () => {
     mkdirSync(join(tempDir, "poe2"));
     writeFileSync(poe2ClientTxtPath, "client log", "utf8");
     settingsStore.update({ poe2ClientTxtPath });
+
+    expect(service.validateCurrentStep()).toEqual({
+      isValid: true,
+      errors: [],
+    });
+  });
+
+  it("accepts the Kakao Games client log filename case-insensitively", () => {
+    const kakaoClientTxtPath = join(tempDir, "kAkAoClIeNt.TxT");
+    writeFileSync(kakaoClientTxtPath, "client log", "utf8");
+    settingsStore.update({
+      setupStep: SETUP_STEPS.SELECT_CLIENT_PATH,
+      poe1ClientTxtPath: kakaoClientTxtPath,
+    });
 
     expect(service.validateCurrentStep()).toEqual({
       isValid: true,
@@ -160,7 +185,7 @@ describe("AppSetupService", () => {
     expect(service.validateCurrentStep()).toEqual({
       isValid: false,
       errors: [
-        "Path of Exile 1 Client.txt path is invalid or file does not exist",
+        "Path of Exile 1 client log must be an existing Client.txt or KakaoClient.txt file",
       ],
     });
 
@@ -172,7 +197,7 @@ describe("AppSetupService", () => {
     expect(service.validateCurrentStep()).toEqual({
       isValid: false,
       errors: [
-        "Path of Exile 1 Client.txt path is invalid or file does not exist",
+        "Path of Exile 1 client log must be an existing Client.txt or KakaoClient.txt file",
       ],
     });
 
@@ -247,7 +272,7 @@ describe("AppSetupService", () => {
   it("refuses to complete when required setup data is missing", () => {
     expect(service.completeSetup()).toEqual({
       success: false,
-      error: "Setup incomplete: Please select Path of Exile 1 Client.txt path",
+      error: "Setup incomplete: Please select the Path of Exile 1 client log",
     });
   });
 

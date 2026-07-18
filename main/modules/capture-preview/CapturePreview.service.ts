@@ -372,9 +372,10 @@ function detectCapturePreviewSourceGame(
     return titleGame;
   }
 
-  // Electron can sometimes expose only `PathOfExile.exe`/`PathOfExileSteam.exe`
-  // as the source name. Running PoE1 and PoE2 at the same time with the same exe
-  // name is intentionally unsupported; exact window titles remain authoritative.
+  // Electron can sometimes expose only the running Path of Exile executable
+  // name as the source name. Running PoE1 and PoE2 at the same time with the
+  // same executable name is intentionally unsupported; exact window titles
+  // remain authoritative.
   for (const game of POE_PROCESS_GAMES) {
     const state = getPoeProcessStateForGame(poeProcessSnapshot, game);
     if (

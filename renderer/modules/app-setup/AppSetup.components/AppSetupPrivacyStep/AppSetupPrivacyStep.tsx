@@ -53,7 +53,7 @@ function AppSetupPrivacyStep() {
               <p className="mt-1 text-xs text-base-content/60">
                 Hinekora refreshes current Path of Exile league names using a
                 persistent pseudonymous session. Requests include the game and
-                app version, but never recordings, clips, Client.txt contents,
+                app version, but never recordings, clips, client log contents,
                 or other local media.
               </p>
             </div>

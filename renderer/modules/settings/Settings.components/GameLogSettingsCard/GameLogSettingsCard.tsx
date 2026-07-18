@@ -11,8 +11,8 @@ import { useClientLogShallow, useSettingsShallow } from "~/renderer/store";
 import { type GameId, maskPath } from "~/types";
 
 const clientLogFields: Array<{ game: GameId; label: string }> = [
-  { game: "poe1", label: "Path of Exile 1 Client.txt" },
-  { game: "poe2", label: "Path of Exile 2 Client.txt" },
+  { game: "poe1", label: "Path of Exile 1 client log" },
+  { game: "poe2", label: "Path of Exile 2 client log" },
 ];
 const clientLogPathAnchors = ["Path of Exile", "Path of Exile 2"] as const;
 
@@ -47,7 +47,7 @@ function GameLogSettingsCard() {
 
   const handleBrowsePath = async (game: GameId) => {
     const filePath = await window.electron.app.selectPath({
-      title: "Select Path of Exile Client.txt",
+      title: "Select Path of Exile client log",
       filters: [{ name: "Text Files", extensions: ["txt"] }],
       properties: ["openFile"],
     });
@@ -92,7 +92,7 @@ function GameLogSettingsCard() {
                 {field.label}
               </h3>
               <p className="m-0 text-base-content/50 text-xs">
-                Client.txt location
+                Client.txt or KakaoClient.txt location
               </p>
             </div>
             <div className="join w-full">

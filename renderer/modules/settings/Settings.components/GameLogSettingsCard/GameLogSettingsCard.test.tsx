@@ -67,10 +67,13 @@ describe("GameLogSettingsCard", () => {
     vi.clearAllMocks();
   });
 
-  it("shows optional character name inputs after Client.txt paths", async () => {
+  it("shows optional character name inputs after client log paths", async () => {
     await renderGameLogSettings();
 
-    expect(container.textContent).toContain("Path of Exile 2 Client.txt");
+    expect(container.textContent).toContain("Path of Exile 2 client log");
+    expect(container.textContent).toContain(
+      "Client.txt or KakaoClient.txt location",
+    );
     expect(container.textContent).toContain("Character names");
     expect(container.textContent).toContain(
       "Optional. This is mainly used for group play.",

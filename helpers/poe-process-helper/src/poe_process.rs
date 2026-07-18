@@ -6,9 +6,13 @@
 //! - `Vec<PoeProcess>` elsewhere is closest to `PoeProcess[]`.
 //! - `Option<T>` is closest to `T | null`.
 
-// `[&str; 2]` is an array of exactly two read-only strings.
-// TS mental model: readonly [string, string].
-pub(crate) const POE_PROCESS_NAMES: [&str; 2] = ["PathOfExileSteam.exe", "PathOfExile.exe"];
+// `[&str; 3]` is an array of exactly three read-only strings.
+// TS mental model: readonly [string, string, string].
+pub(crate) const POE_PROCESS_NAMES: [&str; 3] = [
+    "PathOfExileSteam.exe",
+    "PathOfExile.exe",
+    "PathOfExile_KG.exe",
+];
 pub(crate) const POE1_WINDOW_TITLE: &str = "Path of Exile";
 pub(crate) const POE2_WINDOW_TITLE: &str = "Path of Exile 2";
 
@@ -88,6 +92,10 @@ mod tests {
         assert_eq!(
             canonical_poe_process_name("pathofexilesteam.exe"),
             Some("PathOfExileSteam.exe"),
+        );
+        assert_eq!(
+            canonical_poe_process_name("pathofexile_kg.exe"),
+            Some("PathOfExile_KG.exe"),
         );
         assert_eq!(canonical_poe_process_name("PathOfExile_x64Steam.exe"), None);
     }
