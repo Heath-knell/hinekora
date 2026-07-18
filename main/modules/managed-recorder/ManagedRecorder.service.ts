@@ -133,6 +133,7 @@ const REPLAY_CLIP_OUTPUT_RESOLUTION: ManagedRecorderResolution = {
 };
 const REPLAY_CLIP_MAX_FPS = 60;
 const MANAGED_RECORDER_LOG_SCOPE = "managed-recorder";
+const startupGameCheckGraceMs = 3_000;
 type ManagedRecordingMode = "buffer" | "run";
 
 interface RecordingFileSnapshot {
@@ -238,6 +239,8 @@ class ManagedRecorderService {
   private autoStartRequestNeedsRecheck = false;
   private autoStartRetryTimer: ReturnType<typeof setTimeout> | null = null;
   private previousAutoStartConfigurationKey = "";
+  private startupGameCheckActive = true;
+  private startupGameCheckTimer: ReturnType<typeof setTimeout> | null = null;
 
   static getInstance(): ManagedRecorderService {
     if (!ManagedRecorderService.instance) {
@@ -252,6 +255,7 @@ class ManagedRecorderService {
     this.setupAutoStartSettingsListener();
     this.setupAutoStartCaptureProfilesListener();
     this.setupHandlers();
+    this.syncRecordingStorageActivity();
   }
 
   getStatus(): ManagedRecorderStatus {
@@ -285,13 +289,20 @@ class ManagedRecorderService {
   }
 
   initializeAutoStart(): void {
-    void this.attemptConfiguredAutoStartWhenGameRunning("startup", {
-      refreshGameRunning: true,
-    }).catch((error) => {
-      logWarn(MANAGED_RECORDER_LOG_SCOPE, "Automatic recorder startup failed", {
-        error: safeErrorMessage(error),
+    void this.refreshGameRunningStatus({ forceRefresh: true })
+      .then(() => this.attemptConfiguredAutoStartWhenGameRunning("startup"))
+      .catch((error) => {
+        logWarn(
+          MANAGED_RECORDER_LOG_SCOPE,
+          "Automatic recorder startup failed",
+          {
+            error: safeErrorMessage(error),
+          },
+        );
+      })
+      .finally(() => {
+        this.scheduleStartupGameCheckRelease();
       });
-    });
   }
 
   async listAudioDevices(
@@ -1254,6 +1265,10 @@ class ManagedRecorderService {
       rateControl: videoEncoderSettings.rate_control,
       crf: videoEncoderSettings.crf ?? null,
       cqp: videoEncoderSettings.cqp ?? null,
+      adaptiveQuantization: videoEncoderSettings.adaptive_quantization ?? null,
+      preset: videoEncoderSettings.preset ?? null,
+      multipass: videoEncoderSettings.multipass ?? null,
+      lookahead: videoEncoderSettings.lookahead ?? null,
     });
     this.noobs?.SetVideoEncoder?.(videoEncoder, {
       ...videoEncoderSettings,
@@ -1273,6 +1288,10 @@ class ManagedRecorderService {
       rateControl: videoEncoderSettings.rate_control,
       crf: videoEncoderSettings.crf ?? null,
       cqp: videoEncoderSettings.cqp ?? null,
+      adaptiveQuantization: videoEncoderSettings.adaptive_quantization ?? null,
+      preset: videoEncoderSettings.preset ?? null,
+      multipass: videoEncoderSettings.multipass ?? null,
+      lookahead: videoEncoderSettings.lookahead ?? null,
       fps: outputFps,
       width: outputResolution.width,
       height: outputResolution.height,
@@ -2560,15 +2579,43 @@ class ManagedRecorderService {
 
   private setStatus(update: Partial<ManagedRecorderStatus>): void {
     this.status = { ...this.status, ...update };
+    if (this.status.gameRunning) {
+      this.clearStartupGameCheck();
+    }
+    this.syncRecordingStorageActivity();
+    this.publishStatus();
+  }
+
+  private scheduleStartupGameCheckRelease(): void {
+    if (!this.startupGameCheckActive || this.startupGameCheckTimer) {
+      return;
+    }
+    this.startupGameCheckTimer = setTimeout(() => {
+      this.startupGameCheckTimer = null;
+      this.startupGameCheckActive = false;
+      this.syncRecordingStorageActivity();
+    }, startupGameCheckGraceMs);
+    this.startupGameCheckTimer.unref?.();
+  }
+
+  private clearStartupGameCheck(): void {
+    if (this.startupGameCheckTimer) {
+      clearTimeout(this.startupGameCheckTimer);
+      this.startupGameCheckTimer = null;
+    }
+    this.startupGameCheckActive = false;
+  }
+
+  private syncRecordingStorageActivity(): void {
     RecordingStorageService.setPerformanceSensitiveActivityActive(
-      this.status.gameRunning ||
+      this.startupGameCheckActive ||
+        this.status.gameRunning ||
         this.status.recording ||
         this.status.bufferActive ||
         this.status.runRecordingActive ||
         this.status.isStartingRecording ||
         this.status.isStoppingRecording,
     );
-    this.publishStatus();
   }
 
   private beginRecordingStart(mode: ManagedRecordingMode): boolean {

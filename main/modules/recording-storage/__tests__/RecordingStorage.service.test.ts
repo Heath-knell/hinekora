@@ -43,6 +43,7 @@ import { ReplayClipsRepository } from "../../replay-clips/ReplayClips.repository
 import { SettingsStoreService } from "../../settings-store";
 import { StorageFileDeletionService } from "../../storage/StorageFileDeletion.service";
 import { RecordingStorageChannel } from "../RecordingStorage.channels";
+import type { RecordingStorageUsage } from "../RecordingStorage.dto";
 import { RecordingStorageRepository } from "../RecordingStorage.repository";
 import { RecordingStorageService } from "../RecordingStorage.service";
 
@@ -169,6 +170,228 @@ describe("RecordingStorageService", () => {
       expect.objectContaining({ clipsSizeBytes: 0, recordingsSizeBytes: 0 }),
       expect.objectContaining({ clipsSizeBytes: 0, recordingsSizeBytes: 0 }),
     ]);
+  });
+
+  it("defers an uncached usage scan during performance-sensitive activity", async () => {
+    const listClips = vi.spyOn(
+      ReplayClipsRepository.prototype,
+      "listStorageEntriesPage",
+    );
+    const internals = service as unknown as {
+      waitForPerformanceSensitiveActivityToEnd(): Promise<void>;
+    };
+    RecordingStorageService.setPerformanceSensitiveActivityActive(true);
+
+    const firstWait = internals.waitForPerformanceSensitiveActivityToEnd();
+    expect(internals.waitForPerformanceSensitiveActivityToEnd()).toBe(
+      firstWait,
+    );
+    const usage = service.getUsage();
+    await new Promise<void>((resolvePromise) => setImmediate(resolvePromise));
+
+    expect(listClips).not.toHaveBeenCalled();
+
+    RecordingStorageService.setPerformanceSensitiveActivityActive(false);
+
+    await expect(usage).resolves.toMatchObject({
+      clipsSizeBytes: 0,
+      recordingsSizeBytes: 0,
+    });
+    expect(listClips).toHaveBeenCalled();
+  });
+
+  it("uses newer cached usage when invalidated while waiting for activity", async () => {
+    const calculateUsage = vi.spyOn(
+      await import("../RecordingStorage.usage"),
+      "calculateRecordingStorageUsage",
+    );
+    const knownUsage = {
+      clipsSizeBytes: 4,
+      diskFreeBytes: 5,
+      lowDiskSpace: false,
+      recordingsSizeBytes: 6,
+    };
+    RecordingStorageService.setPerformanceSensitiveActivityActive(true);
+
+    const usage = service.getUsage();
+    await new Promise<void>((resolvePromise) => setImmediate(resolvePromise));
+    service.publishUsageChanged(knownUsage, root);
+    RecordingStorageService.setPerformanceSensitiveActivityActive(false);
+
+    await expect(usage).resolves.toBe(knownUsage);
+    expect(calculateUsage).not.toHaveBeenCalled();
+  });
+
+  it("returns stale cached usage while scheduling a deferred refresh", async () => {
+    const cachedUsage = await service.getUsage();
+    const internals = service as unknown as {
+      usageCache: { calculatedAtMs: number } | null;
+    };
+    internals.usageCache!.calculatedAtMs = 0;
+    const listClips = vi.spyOn(
+      ReplayClipsRepository.prototype,
+      "listStorageEntriesPage",
+    );
+    RecordingStorageService.setPerformanceSensitiveActivityActive(true);
+
+    expect(service.getUsageSnapshot()).toBe(cachedUsage);
+
+    expect(listClips).not.toHaveBeenCalled();
+    RecordingStorageService.setPerformanceSensitiveActivityActive(false);
+    await vi.waitFor(() => {
+      expect(listClips).toHaveBeenCalled();
+    });
+  });
+
+  it("returns a fresh usage snapshot without scheduling another scan", async () => {
+    const usage = await service.getUsage();
+    const getUsage = vi.spyOn(service, "getUsage");
+
+    expect(service.getUsageSnapshot()).toBe(usage);
+    expect(getUsage).not.toHaveBeenCalled();
+  });
+
+  it("deduplicates deferred usage broadcasts for the same root", async () => {
+    let resolveUsage!: (usage: RecordingStorageUsage) => void;
+    const deferredUsage = new Promise<RecordingStorageUsage>(
+      (resolvePromise) => {
+        resolveUsage = resolvePromise;
+      },
+    );
+    const getUsage = vi
+      .spyOn(service, "getUsage")
+      .mockReturnValue(deferredUsage);
+
+    expect(service.getUsageSnapshot()).toBeNull();
+    expect(service.getUsageSnapshot()).toBeNull();
+    expect(getUsage).toHaveBeenCalledTimes(1);
+
+    resolveUsage({
+      clipsSizeBytes: 0,
+      diskFreeBytes: 1,
+      lowDiskSpace: false,
+      recordingsSizeBytes: 0,
+    });
+    await deferredUsage;
+  });
+
+  it("restarts a usage scan when sensitive activity begins mid-scan", async () => {
+    const listClips = vi.spyOn(
+      ReplayClipsRepository.prototype,
+      "listStorageEntriesPage",
+    );
+    const listRecordings = vi.spyOn(
+      RecordingStorageRepository.prototype,
+      "listStorageEntriesPage",
+    );
+    listClips.mockImplementationOnce(() => {
+      RecordingStorageService.setPerformanceSensitiveActivityActive(true);
+      return [];
+    });
+
+    const usage = service.getUsage();
+    await vi.waitFor(() => {
+      expect(listClips).toHaveBeenCalledTimes(1);
+    });
+
+    expect(listRecordings).not.toHaveBeenCalled();
+    RecordingStorageService.setPerformanceSensitiveActivityActive(false);
+
+    await expect(usage).resolves.toMatchObject({
+      clipsSizeBytes: 0,
+      recordingsSizeBytes: 0,
+    });
+    expect(listClips).toHaveBeenCalledTimes(2);
+  });
+
+  it("logs a deferred usage broadcast failure and allows retry", async () => {
+    const send = vi.fn();
+    const webContents = { id: 904, send };
+    registerIpcWindowRole(webContents, WindowName.Main);
+    electronMocks.getAllWindows.mockReturnValue([
+      {
+        isDestroyed: () => false,
+        webContents,
+      } as unknown as Electron.BrowserWindow,
+    ]);
+    const logWarn = vi.spyOn(AppLog, "logWarn").mockImplementation(() => {});
+    vi.spyOn(service, "getUsage").mockRejectedValueOnce(
+      new Error("usage scan failed"),
+    );
+
+    expect(service.getUsageSnapshot()).toBeNull();
+
+    await vi.waitFor(() => {
+      expect(logWarn).toHaveBeenCalledWith(
+        "recording-storage",
+        "Deferred storage usage refresh failed",
+        { error: "usage scan failed" },
+      );
+    });
+    expect(send).toHaveBeenCalledWith(
+      RecordingStorageChannel.UsageRefreshFailed,
+      "usage scan failed",
+    );
+    expect(service.getUsageSnapshot()).toBeNull();
+  });
+
+  it("ignores a deferred usage result superseded by known usage", async () => {
+    let resolveUsage!: (usage: RecordingStorageUsage) => void;
+    const deferredUsage = new Promise<RecordingStorageUsage>(
+      (resolvePromise) => {
+        resolveUsage = resolvePromise;
+      },
+    );
+    vi.spyOn(service, "getUsage").mockReturnValueOnce(deferredUsage);
+    const internals = service as unknown as {
+      sendUsageChanged(usage: RecordingStorageUsage): void;
+    };
+    const sendUsageChanged = vi.spyOn(internals, "sendUsageChanged");
+    const knownUsage = {
+      clipsSizeBytes: 1,
+      diskFreeBytes: 2,
+      lowDiskSpace: false,
+      recordingsSizeBytes: 3,
+    };
+
+    expect(service.getUsageSnapshot()).toBeNull();
+    service.publishUsageChanged(knownUsage, root);
+    resolveUsage({ ...knownUsage, clipsSizeBytes: 99 });
+    await deferredUsage;
+    await Promise.resolve();
+
+    expect(sendUsageChanged).not.toHaveBeenCalled();
+  });
+
+  it("ignores a deferred usage failure superseded by known usage", async () => {
+    let rejectUsage!: (error: Error) => void;
+    const deferredUsage = new Promise<RecordingStorageUsage>(
+      (_resolvePromise, rejectPromise) => {
+        rejectUsage = rejectPromise;
+      },
+    );
+    vi.spyOn(service, "getUsage").mockReturnValueOnce(deferredUsage);
+    const logWarn = vi.spyOn(AppLog, "logWarn").mockImplementation(() => {});
+
+    expect(service.getUsageSnapshot()).toBeNull();
+    service.publishUsageChanged(
+      {
+        clipsSizeBytes: 1,
+        diskFreeBytes: 2,
+        lowDiskSpace: false,
+        recordingsSizeBytes: 3,
+      },
+      root,
+    );
+    rejectUsage(new Error("obsolete failure"));
+    await expect(deferredUsage).rejects.toThrow("obsolete failure");
+    await Promise.resolve();
+
+    expect(logWarn).not.toHaveBeenCalledWith(
+      "recording-storage",
+      "Deferred storage usage refresh failed",
+      expect.anything(),
+    );
   });
 
   it("restores pre-commit staged files regardless of storage metadata", async () => {
@@ -626,6 +849,7 @@ describe("RecordingStorageService", () => {
     const send = vi.fn();
     const isDestroyed = vi
       .fn()
+      .mockReturnValueOnce(false)
       .mockReturnValueOnce(false)
       .mockReturnValueOnce(true);
     const webContents = { id: 903, send };
@@ -2507,7 +2731,7 @@ describe("RecordingStorageService", () => {
   it("registers IPC handlers with validation", async () => {
     const { handlers } = mockIpcMainHandlers();
     const ipcService = new RecordingStorageService();
-    const getUsage = vi.spyOn(ipcService, "getUsage").mockResolvedValue({
+    const getUsage = vi.spyOn(ipcService, "getUsageSnapshot").mockReturnValue({
       clipsSizeBytes: 0,
       diskFreeBytes: 0,
       lowDiskSpace: false,
@@ -2569,15 +2793,21 @@ describe("RecordingStorageService", () => {
       lowDiskSpace: false,
       recordingsSizeBytes: 0,
     });
-    getUsage.mockRejectedValueOnce(
-      new Error(`Unable to scan ${join(root, "private", "recordings")}`),
-    );
+    getUsage.mockReturnValueOnce(null);
+    expect(
+      await handlers.get(RecordingStorageChannel.GetUsage)?.({}),
+    ).toBeNull();
+    getUsage.mockImplementationOnce(() => {
+      throw new Error(`Unable to scan ${join(root, "private", "recordings")}`);
+    });
     expect(await handlers.get(RecordingStorageChannel.GetUsage)?.({})).toEqual({
       ok: false,
       error: "Recording storage usage is unavailable",
     });
 
-    getUsage.mockRejectedValueOnce("native failure");
+    getUsage.mockImplementationOnce(() => {
+      throw "native failure";
+    });
     expect(await handlers.get(RecordingStorageChannel.GetUsage)?.({})).toEqual({
       ok: false,
       error: "Recording storage usage is unavailable",

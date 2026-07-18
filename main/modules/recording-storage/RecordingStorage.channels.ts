@@ -9,6 +9,7 @@ enum RecordingStorageChannel {
   DeleteRecording = "recording-storage:delete-recording",
   DeleteManyRecordings = "recording-storage:delete-many-recordings",
   UsageChanged = "recording-storage:usage-changed",
+  UsageRefreshFailed = "recording-storage:usage-refresh-failed",
 }
 
 export { RecordingStorageChannel };

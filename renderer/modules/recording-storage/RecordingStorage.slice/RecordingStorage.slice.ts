@@ -12,6 +12,9 @@ export const createRecordingStorageSlice: BoundStoreStateCreator<
     if (usageRequest) {
       return usageRequest;
     }
+    if (get().recordingStorage.isUsageLoading) {
+      return Promise.resolve();
+    }
 
     usageRequest = (async () => {
       set((state) => {
@@ -22,8 +25,10 @@ export const createRecordingStorageSlice: BoundStoreStateCreator<
       try {
         const usage = await window.electron.recordingStorage.getUsage();
         set((state) => {
-          state.recordingStorage.usage = usage;
-          state.recordingStorage.isUsageLoading = false;
+          if (usage) {
+            state.recordingStorage.usage = usage;
+          }
+          state.recordingStorage.isUsageLoading = usage === null;
         });
       } catch (error) {
         set((state) => {
@@ -94,6 +99,13 @@ export const createRecordingStorageSlice: BoundStoreStateCreator<
               state.recordingStorage.usageError = null;
             });
           });
+        const stopUsageRefreshFailedListener =
+          window.electron.recordingStorage.onUsageRefreshFailed((error) => {
+            set((state) => {
+              state.recordingStorage.isUsageLoading = false;
+              state.recordingStorage.usageError = error;
+            });
+          });
         const stopRecordingsListener =
           window.electron.recordingStorage.onRecordingsChanged(() => {
             if (get().recordingStorage.recordingsQuery !== null) {
@@ -103,6 +115,7 @@ export const createRecordingStorageSlice: BoundStoreStateCreator<
 
         return () => {
           stopUsageListener();
+          stopUsageRefreshFailedListener();
           stopRecordingsListener();
         };
       },

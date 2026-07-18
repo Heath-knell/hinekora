@@ -7,6 +7,8 @@ import {
   emitDashboardPoeProcessStart,
   emitDashboardPoeProcessStop,
   emitDashboardRecorderOverlayVisibility,
+  emitDashboardRecordingStorageUsageChanged,
+  emitDashboardRecordingStorageUsageRefreshFailed,
   expectNoUnexpectedDashboardBridgeCalls,
   getDashboardE2ECalls,
   setupDashboardE2E,
@@ -18,6 +20,7 @@ interface AppBarE2EOptions {
   auraLocked?: boolean;
   poeProcessState?: Parameters<typeof emitDashboardPoeProcessStart>[1];
   recordingMaxStorageGb?: number;
+  recordingStorageUsageDeferred?: boolean;
   recordingStorageUsage?: Partial<RecordingStorageUsage>;
   recorderGameRunning?: boolean;
   recorderOverlayIgnoreGameFocus?: boolean;
@@ -55,6 +58,8 @@ export {
   emitDashboardPoeProcessStart as emitAppBarPoeProcessStart,
   emitDashboardPoeProcessStop as emitAppBarPoeProcessStop,
   emitDashboardRecorderOverlayVisibility as emitAppBarRecorderOverlayVisibility,
+  emitDashboardRecordingStorageUsageChanged as emitAppBarRecordingStorageUsageChanged,
+  emitDashboardRecordingStorageUsageRefreshFailed as emitAppBarRecordingStorageUsageRefreshFailed,
   expectNoUnexpectedDashboardBridgeCalls as expectNoUnexpectedAppBarBridgeCalls,
   getAppBarGameButton,
   getDashboardE2ECalls as getAppBarE2ECalls,

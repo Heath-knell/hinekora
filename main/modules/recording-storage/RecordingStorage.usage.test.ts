@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DatabaseService } from "~/main/modules/database";
 import { ReplayClipsRepository } from "~/main/modules/replay-clips/ReplayClips.repository";
@@ -25,6 +25,70 @@ afterEach(async () => {
 });
 
 describe("calculateRecordingStorageUsage", () => {
+  it("cancels before reading repository pages", async () => {
+    const replayClipsRepository = {
+      listStorageEntriesPage: vi.fn(),
+    } as unknown as ReplayClipsRepository;
+    const recordingRepository = {
+      listStorageEntriesPage: vi.fn(),
+    } as unknown as RecordingStorageRepository;
+
+    await expect(
+      calculateRecordingStorageUsage({
+        recordingRepository,
+        replayClipsRepository,
+        root,
+        shouldAbort: () => true,
+      }),
+    ).resolves.toBeNull();
+    expect(replayClipsRepository.listStorageEntriesPage).not.toHaveBeenCalled();
+    expect(recordingRepository.listStorageEntriesPage).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["path ownership", 2],
+    ["group construction", 3],
+    ["group sizing", 4],
+    ["file stat hydration", 5],
+  ])("cancels during replay clip %s", async (_stage, abortOnCall) => {
+    const sharedPath = join(root, "shared.mp4");
+    const replayClipsRepository = {
+      listStorageEntriesPage: () => [
+        {
+          createdAt: "2026-07-17T00:00:00.000Z",
+          id: "multi-path",
+          originalObsPath: sharedPath,
+          processedClipPath: join(root, "processed.mp4"),
+          sizeBytes: 8,
+        },
+        {
+          createdAt: "2026-07-17T00:00:01.000Z",
+          id: "shared-path",
+          originalObsPath: null,
+          processedClipPath: sharedPath,
+          sizeBytes: 5,
+        },
+      ],
+    } as unknown as ReplayClipsRepository;
+    const recordingRepository = {
+      listStorageEntriesPage: vi.fn(),
+    } as unknown as RecordingStorageRepository;
+    let abortCheckCount = 0;
+
+    await expect(
+      calculateRecordingStorageUsage({
+        recordingRepository,
+        replayClipsRepository,
+        root,
+        shouldAbort: () => {
+          abortCheckCount += 1;
+          return abortCheckCount === abortOnCall;
+        },
+      }),
+    ).resolves.toBeNull();
+    expect(recordingRepository.listStorageEntriesPage).not.toHaveBeenCalled();
+  });
+
   it("streams libraries larger than one page without double-counting paths", async () => {
     const replayClipsRepository = new ReplayClipsRepository(database);
     const recordingRepository = new RecordingStorageRepository(database);

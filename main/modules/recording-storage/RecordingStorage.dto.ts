@@ -8,10 +8,16 @@ const RecordingStorageUsageSchema = z.object({
   lowDiskSpace: z.boolean(),
   recordingsSizeBytes: z.number().finite().nonnegative(),
 });
+const RecordingStorageUsageSnapshotSchema =
+  RecordingStorageUsageSchema.nullable();
+const RecordingStorageUsageErrorSchema = z.string().min(1).max(2_048);
 const RecordingStorageChangedIdsSchema = z
   .array(z.string().min(1).max(2_048))
   .max(100);
 export type RecordingStorageUsage = z.infer<typeof RecordingStorageUsageSchema>;
+export type RecordingStorageUsageSnapshot = z.infer<
+  typeof RecordingStorageUsageSnapshotSchema
+>;
 
 export interface RunRecordingMetadata {
   id: string;
@@ -24,7 +30,12 @@ export interface RunRecordingMetadata {
   updatedAt: string;
 }
 
-export { RecordingStorageChangedIdsSchema, RecordingStorageUsageSchema };
+export {
+  RecordingStorageChangedIdsSchema,
+  RecordingStorageUsageErrorSchema,
+  RecordingStorageUsageSchema,
+  RecordingStorageUsageSnapshotSchema,
+};
 
 export interface RunRecordingItem extends RunRecordingMetadata {
   fileName: string;

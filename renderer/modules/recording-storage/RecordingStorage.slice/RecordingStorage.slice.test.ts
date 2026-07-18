@@ -66,17 +66,20 @@ describe("RecordingStorage slice", () => {
   const listRecordingLibrary = vi.fn();
   const openRecording = vi.fn();
   const onUsageChanged = vi.fn();
+  const onUsageRefreshFailed = vi.fn();
   const onRecordingsChanged = vi.fn();
   const revealRecording = vi.fn();
   const deleteRecording = vi.fn();
   const deleteManyRecordings = vi.fn();
   let recordingsChangedListener: ((ids: string[]) => void) | null;
   let usageChangedListener: ((usage: RecordingStorageUsage) => void) | null;
+  let usageRefreshFailedListener: ((error: string) => void) | null;
 
   beforeEach(() => {
     vi.clearAllMocks();
     recordingsChangedListener = null;
     usageChangedListener = null;
+    usageRefreshFailedListener = null;
     getUsage.mockResolvedValue(createUsage());
     listRecordingLibrary.mockResolvedValue(createLibraryPage());
     openRecording.mockResolvedValue({ ok: true, error: null });
@@ -91,6 +94,13 @@ describe("RecordingStorage slice", () => {
     onUsageChanged.mockImplementation(
       (listener: (usage: RecordingStorageUsage) => void) => {
         usageChangedListener = listener;
+
+        return vi.fn();
+      },
+    );
+    onUsageRefreshFailed.mockImplementation(
+      (listener: (error: string) => void) => {
+        usageRefreshFailedListener = listener;
 
         return vi.fn();
       },
@@ -110,6 +120,7 @@ describe("RecordingStorage slice", () => {
           getUsage,
           listRecordingLibrary,
           onUsageChanged,
+          onUsageRefreshFailed,
           onRecordingsChanged,
           openRecording,
           revealRecording,
@@ -165,6 +176,42 @@ describe("RecordingStorage slice", () => {
     expect(getUsage).toHaveBeenCalledTimes(1);
     resolveUsage?.(createUsage());
     await Promise.all([firstRefresh, secondRefresh]);
+  });
+
+  it("waits for the usage event when main defers the calculation", async () => {
+    getUsage.mockResolvedValueOnce(null);
+    const store = createTestStore();
+    store.getState().recordingStorage.startListening();
+
+    await store.getState().recordingStorage.refreshUsage();
+
+    expect(store.getState().recordingStorage).toMatchObject({
+      isUsageLoading: true,
+      usage: null,
+    });
+    await store.getState().recordingStorage.refreshUsage();
+    expect(getUsage).toHaveBeenCalledTimes(1);
+
+    const usage = createUsage();
+    usageChangedListener?.(usage);
+    expect(store.getState().recordingStorage).toMatchObject({
+      isUsageLoading: false,
+      usage,
+    });
+  });
+
+  it("leaves deferred loading state when main reports a refresh failure", async () => {
+    getUsage.mockResolvedValueOnce(null);
+    const store = createTestStore();
+    store.getState().recordingStorage.startListening();
+
+    await store.getState().recordingStorage.refreshUsage();
+    usageRefreshFailedListener?.("usage scan failed");
+
+    expect(store.getState().recordingStorage).toMatchObject({
+      isUsageLoading: false,
+      usageError: "usage scan failed",
+    });
   });
 
   it("refreshes after single recording cleanup warnings and keeps the warning", async () => {

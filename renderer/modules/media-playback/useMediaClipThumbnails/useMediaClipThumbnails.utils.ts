@@ -10,8 +10,9 @@ async function createClipThumbnails(
     mediaUrl: string;
     outSeconds: number;
   },
-  isCancelled: () => boolean,
+  signal?: AbortSignal,
 ): Promise<string[]> {
+  throwIfThumbnailGenerationAborted(signal);
   const video = document.createElement("video");
   video.crossOrigin = "anonymous";
   video.muted = true;
@@ -20,9 +21,9 @@ async function createClipThumbnails(
   video.src = input.mediaUrl;
 
   try {
-    await waitForMediaEvent(video, "loadedmetadata");
+    await waitForMediaEvent(video, "loadedmetadata", signal);
     if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-      await waitForMediaEvent(video, "loadeddata");
+      await waitForMediaEvent(video, "loadeddata", signal);
     }
 
     const canvas = document.createElement("canvas");
@@ -44,9 +45,7 @@ async function createClipThumbnails(
     const thumbnails: string[] = [];
 
     for (let index = 0; index < input.count; index += 1) {
-      if (isCancelled()) {
-        break;
-      }
+      throwIfThumbnailGenerationAborted(signal);
 
       const ratio = input.count === 1 ? 0.5 : index / (input.count - 1);
       const sampleSeconds = clampSeconds(
@@ -54,7 +53,7 @@ async function createClipThumbnails(
         minSeconds,
         Math.max(minSeconds, maxSeconds - 0.001),
       );
-      await seekVideo(video, sampleSeconds);
+      await seekVideo(video, sampleSeconds, signal);
       drawVideoFrame(video, context);
       thumbnails.push(canvas.toDataURL("image/jpeg", 0.68));
     }
@@ -118,6 +117,7 @@ function drawVideoFrame(
 async function seekVideo(
   video: HTMLVideoElement,
   seconds: number,
+  signal?: AbortSignal,
 ): Promise<void> {
   if (
     Math.abs(video.currentTime - seconds) <= 0.001 &&
@@ -127,14 +127,20 @@ async function seekVideo(
   }
 
   video.currentTime = seconds;
-  await waitForMediaEvent(video, "seeked");
+  await waitForMediaEvent(video, "seeked", signal);
 }
 
 function waitForMediaEvent(
   video: HTMLVideoElement,
   eventName: "loadeddata" | "loadedmetadata" | "seeked",
+  signal?: AbortSignal,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(createThumbnailGenerationAbortError());
+      return;
+    }
+
     const timeoutId = window.setTimeout(() => {
       cleanup();
       reject(new Error(`${eventName} timed out`));
@@ -150,15 +156,32 @@ function waitForMediaEvent(
       reject(new Error("Failed to load media thumbnail"));
     };
 
+    const handleAbort = () => {
+      cleanup();
+      reject(createThumbnailGenerationAbortError());
+    };
+
     const cleanup = () => {
       window.clearTimeout(timeoutId);
       video.removeEventListener(eventName, handleEvent);
       video.removeEventListener("error", handleError);
+      signal?.removeEventListener("abort", handleAbort);
     };
 
     video.addEventListener(eventName, handleEvent, { once: true });
     video.addEventListener("error", handleError, { once: true });
+    signal?.addEventListener("abort", handleAbort, { once: true });
   });
+}
+
+function throwIfThumbnailGenerationAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw createThumbnailGenerationAbortError();
+  }
+}
+
+function createThumbnailGenerationAbortError(): DOMException {
+  return new DOMException("Thumbnail generation canceled", "AbortError");
 }
 
 function clampSeconds(value: number, min: number, max: number): number {

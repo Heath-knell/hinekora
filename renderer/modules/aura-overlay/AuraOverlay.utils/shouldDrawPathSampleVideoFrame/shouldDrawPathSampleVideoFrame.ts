@@ -1,12 +1,14 @@
-const pathSampleVideoMaxFps = 60;
-const pathSampleVideoFrameIntervalMs = 1_000 / pathSampleVideoMaxFps;
+import { auraOverlayFrameIntervalMs } from "../../AuraOverlay.constants";
+
+const frameTimingToleranceMs = 0.1;
 
 function shouldDrawPathSampleVideoFrame(
   nowMs: number,
   lastDrawMs: number | null,
 ): boolean {
   return (
-    lastDrawMs === null || nowMs - lastDrawMs >= pathSampleVideoFrameIntervalMs
+    lastDrawMs === null ||
+    nowMs - lastDrawMs + frameTimingToleranceMs >= auraOverlayFrameIntervalMs
   );
 }
 

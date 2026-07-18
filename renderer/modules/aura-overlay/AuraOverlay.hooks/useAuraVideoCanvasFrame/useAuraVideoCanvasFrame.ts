@@ -1,5 +1,7 @@
 import { type RefObject, useEffect } from "react";
 
+import { auraOverlayFrameIntervalMs } from "../../AuraOverlay.constants";
+
 type VideoFrameCallback = (now: number, metadata: unknown) => void;
 type RequestVideoFrameCallback = (callback: VideoFrameCallback) => number;
 type CancelVideoFrameCallback = (handle: number) => void;
@@ -17,12 +19,10 @@ interface UseAuraVideoCanvasFrameInput<Geometry> {
   videoRef: RefObject<HTMLVideoElement | null>;
 }
 
-const defaultFallbackFrameIntervalMs = 1_000 / 60;
-
 function useAuraVideoCanvasFrame<Geometry>({
   canvasRef,
   drawFrame,
-  fallbackFrameIntervalMs = defaultFallbackFrameIntervalMs,
+  fallbackFrameIntervalMs = auraOverlayFrameIntervalMs,
   geometry,
   shouldDrawFrame,
   videoRef,

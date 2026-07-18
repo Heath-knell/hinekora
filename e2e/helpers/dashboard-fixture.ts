@@ -132,6 +132,8 @@ interface DashboardE2EApi {
   emitAuraLockChanged: (locked: boolean) => void;
   emitPoeProcessStart: (state: PoeProcessState) => void;
   emitPoeProcessStop: (state?: PoeProcessState) => void;
+  emitRecordingStorageUsageChanged: (usage: RecordingStorageUsage) => void;
+  emitRecordingStorageUsageRefreshFailed: (error: string) => void;
   emitReplayClipStatusChanged: (clip: ReplayClipDetail["clip"]) => void;
   emitReplayClipProgress: (progress: {
     operationRequestId: string;
@@ -170,7 +172,7 @@ interface DashboardE2EFixture {
   poeProcessState: PoeProcessState;
   captureProfile: CaptureProfile;
   profile: Profile;
-  recordingStorageUsage: RecordingStorageUsage;
+  recordingStorageUsage: RecordingStorageUsage | null;
   recordingStorageEstimateDelayMs: number;
   recordingStorageEstimateError: string | null;
   recordingStorageEstimateDurations: number[];
@@ -205,6 +207,7 @@ interface DashboardE2EOptions {
   auraLocked?: boolean;
   bookmarks?: BookmarkLibraryItem[];
   recordingMaxStorageGb?: number;
+  recordingStorageUsageDeferred?: boolean;
   recordingStorageUsage?: Partial<RecordingStorageUsage>;
   recordingStorageEstimateDelayMs?: number;
   recordingStorageEstimateError?: string;
@@ -418,13 +421,16 @@ function createDashboardE2EFixture(
       options.recorderOverlayVisible ??
       false,
     recorderOverlayVisible: options.recorderOverlayVisible ?? false,
-    recordingStorageUsage: {
-      clipsSizeBytes: 0,
-      diskFreeBytes: 900_000_000_000,
-      lowDiskSpace: false,
-      recordingsSizeBytes: 0,
-      ...options.recordingStorageUsage,
-    },
+    recordingStorageUsage:
+      options.recordingStorageUsageDeferred === true
+        ? null
+        : {
+            clipsSizeBytes: 0,
+            diskFreeBytes: 900_000_000_000,
+            lowDiskSpace: false,
+            recordingsSizeBytes: 0,
+            ...options.recordingStorageUsage,
+          },
     recordingStorageEstimateDelayMs:
       options.recordingStorageEstimateDelayMs ?? 0,
     recordingStorageEstimateError:
@@ -580,6 +586,7 @@ async function setupDashboardE2E(
           );
       };
       let captureSources = clone(fixture.sources);
+      let recordingStorageUsage = clone(fixture.recordingStorageUsage);
       const listeners: {
         auraLock?: (locked: boolean) => void;
         captureMode?: (mode: ManagedRecorderCaptureMode) => void;
@@ -603,6 +610,7 @@ async function setupDashboardE2E(
         }) => void;
         replayClipStatusChanged?: (clip: ReplayClipDetail["clip"]) => void;
         recordingStorageUsageChanged?: (usage: RecordingStorageUsage) => void;
+        recordingStorageUsageRefreshFailed?: (error: string) => void;
         updateAvailable?: (info: UpdateInfo) => void;
         updateProgress?: (progress: DownloadProgress) => void;
       } = {};
@@ -1435,10 +1443,15 @@ async function setupDashboardE2E(
               },
             };
           },
-          getUsage: async () => clone(fixture.recordingStorageUsage),
+          getUsage: async () => clone(recordingStorageUsage),
           listRecordingLibrary: async () => clone(emptyRecordingPage),
           onUsageChanged: (callback) => {
             listeners.recordingStorageUsageChanged = callback;
+
+            return unsubscribe;
+          },
+          onUsageRefreshFailed: (callback) => {
+            listeners.recordingStorageUsageRefreshFailed = callback;
 
             return unsubscribe;
           },
@@ -1665,6 +1678,13 @@ async function setupDashboardE2E(
           listeners.poeStop?.(clone(poeProcessSnapshot));
           listeners.captureRefreshRequested?.();
         },
+        emitRecordingStorageUsageChanged: (usage) => {
+          recordingStorageUsage = clone(usage);
+          listeners.recordingStorageUsageChanged?.(clone(usage));
+        },
+        emitRecordingStorageUsageRefreshFailed: (error) => {
+          listeners.recordingStorageUsageRefreshFailed?.(error);
+        },
         emitRecorderOverlayVisibility: (visible) => {
           emitRecorderVisibility(visible);
         },
@@ -1720,6 +1740,36 @@ async function emitDashboardAuraLockChanged(page: Page, locked: boolean) {
 
     e2eWindow.__HINEKORA_DASHBOARD_E2E_API__.emitAuraLockChanged(nextLocked);
   }, locked);
+}
+
+async function emitDashboardRecordingStorageUsageChanged(
+  page: Page,
+  usage: RecordingStorageUsage,
+) {
+  await page.evaluate((nextUsage) => {
+    const e2eWindow = window as unknown as {
+      __HINEKORA_DASHBOARD_E2E_API__: DashboardE2EApi;
+    };
+
+    e2eWindow.__HINEKORA_DASHBOARD_E2E_API__.emitRecordingStorageUsageChanged(
+      nextUsage,
+    );
+  }, usage);
+}
+
+async function emitDashboardRecordingStorageUsageRefreshFailed(
+  page: Page,
+  error: string,
+) {
+  await page.evaluate((nextError) => {
+    const e2eWindow = window as unknown as {
+      __HINEKORA_DASHBOARD_E2E_API__: DashboardE2EApi;
+    };
+
+    e2eWindow.__HINEKORA_DASHBOARD_E2E_API__.emitRecordingStorageUsageRefreshFailed(
+      nextError,
+    );
+  }, error);
 }
 
 async function getDashboardE2ECalls(page: Page): Promise<DashboardE2ECalls> {
@@ -1898,6 +1948,8 @@ export {
   emitDashboardPoeProcessStop,
   emitDashboardRecorderOverlayVisibility,
   emitDashboardRecorderStatus,
+  emitDashboardRecordingStorageUsageChanged,
+  emitDashboardRecordingStorageUsageRefreshFailed,
   emitDashboardReplayClipPreviewProgress,
   emitDashboardReplayClipProgress,
   emitDashboardReplayClipStatusChanged,

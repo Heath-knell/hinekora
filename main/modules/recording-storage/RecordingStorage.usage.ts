@@ -26,18 +26,27 @@ interface ReplayClipUsageEntry {
   sizeBytes: number;
 }
 
-async function calculateRecordingStorageUsage(input: {
+interface RecordingStorageUsageCalculationInput {
   recordingRepository: RecordingStorageRepository;
   replayClipsRepository: ReplayClipsRepository;
   root: string;
-}): Promise<RecordingStorageUsageTotals> {
+  shouldAbort?: () => boolean;
+}
+
+async function calculateRecordingStorageUsage(
+  input: RecordingStorageUsageCalculationInput,
+): Promise<RecordingStorageUsageTotals | null> {
   const root = resolve(input.root);
+  const shouldAbort = input.shouldAbort ?? (() => false);
 
   const clipPathKeys = new Set<string>();
   const clipEntries: ReplayClipUsageEntry[] = [];
   let clipCursor: { createdAt: string; id: string } | null = null;
   for (;;) {
     await yieldToEventLoop();
+    if (shouldAbort()) {
+      return null;
+    }
     const clips = input.replayClipsRepository.listStorageEntriesPage(
       clipCursor,
       storageUsagePageSize,
@@ -63,12 +72,21 @@ async function calculateRecordingStorageUsage(input: {
     clipCursor = { createdAt: lastClip.createdAt, id: lastClip.id };
   }
 
-  const clipsSizeBytes = await calculateReplayClipUsage(clipEntries);
+  const clipsSizeBytes = await calculateReplayClipUsage(
+    clipEntries,
+    shouldAbort,
+  );
+  if (clipsSizeBytes === null) {
+    return null;
+  }
 
   let recordingsSizeBytes = 0;
   let recordingCursor: { mtimeMs: number; path: string } | null = null;
   for (;;) {
     await yieldToEventLoop();
+    if (shouldAbort()) {
+      return null;
+    }
     const recordings = input.recordingRepository.listStorageEntriesPage(
       recordingCursor,
       storageUsagePageSize,
@@ -101,10 +119,14 @@ async function calculateRecordingStorageUsage(input: {
 
 async function calculateReplayClipUsage(
   clips: ReplayClipUsageEntry[],
-): Promise<number> {
+  shouldAbort: () => boolean,
+): Promise<number | null> {
   const parents = clips.map((_, index) => index);
   const ownerByPath = new Map<string, number>();
   for (let index = 0; index < clips.length; index += 1) {
+    if (await shouldAbortAtChunkBoundary(index, shouldAbort)) {
+      return null;
+    }
     for (const pathKey of clips[index]!.pathKeys) {
       const owner = ownerByPath.get(pathKey);
       if (owner === undefined) {
@@ -117,6 +139,9 @@ async function calculateReplayClipUsage(
 
   const groups = new Map<number, ReplayClipUsageEntry[]>();
   for (let index = 0; index < clips.length; index += 1) {
+    if (await shouldAbortAtChunkBoundary(index, shouldAbort)) {
+      return null;
+    }
     const root = findClipGroup(parents, index);
     const group = groups.get(root) ?? [];
     group.push(clips[index]!);
@@ -124,7 +149,12 @@ async function calculateReplayClipUsage(
   }
 
   let total = 0;
+  let groupIndex = 0;
   for (const group of groups.values()) {
+    if (await shouldAbortAtChunkBoundary(groupIndex, shouldAbort)) {
+      return null;
+    }
+    groupIndex += 1;
     const pathSignatures = new Set(
       group.map((clip) => [...clip.pathKeys].sort().join("\0")),
     );
@@ -149,11 +179,29 @@ async function calculateReplayClipUsage(
         );
       }
     }
-    await hydrateStoragePathSizes(pathSizes, pathSizes.keys());
+    const hydrated = await hydrateStoragePathSizes(
+      pathSizes,
+      pathSizes.keys(),
+      shouldAbort,
+    );
+    if (!hydrated) {
+      return null;
+    }
     total += sumPositiveValues(pathSizes.values(), (entry) => entry.size);
   }
 
   return total;
+}
+
+async function shouldAbortAtChunkBoundary(
+  index: number,
+  shouldAbort: () => boolean,
+): Promise<boolean> {
+  if (index % storageUsagePageSize !== 0) {
+    return false;
+  }
+  await yieldToEventLoop();
+  return shouldAbort();
 }
 
 function findClipGroup(parents: number[], index: number): number {

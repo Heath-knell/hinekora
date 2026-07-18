@@ -15,7 +15,7 @@ import { RECORDING_STORAGE_LOG_SCOPE } from "./RecordingStorage.constants";
 import type {
   RecordingStorageBatchFileActionResult,
   RecordingStorageFileActionResult,
-  RecordingStorageUsage,
+  RecordingStorageUsageSnapshot,
   RunRecordingDetail,
   RunRecordingLibraryPage,
   RunRecordingLibraryQuery,
@@ -45,7 +45,9 @@ interface RecordingStorageIpcDependencies {
   ) => Promise<RecordingStorageBatchFileActionResult>;
   deleteRecording: (path: string) => Promise<RecordingStorageFileActionResult>;
   getRecording: (id: string) => RunRecordingDetail | null;
-  getUsage: () => Promise<RecordingStorageUsage>;
+  getUsage: () =>
+    | RecordingStorageUsageSnapshot
+    | Promise<RecordingStorageUsageSnapshot>;
   listRecordingLibrary: (
     query: RunRecordingLibraryQuery,
   ) => RunRecordingLibraryPage;

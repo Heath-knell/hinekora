@@ -56,7 +56,8 @@ function getManagedStoragePaths(
 async function hydrateStoragePathSizes(
   paths: Map<string, RecordingStoragePathSize>,
   keys: Iterable<string>,
-): Promise<void> {
+  shouldAbort: () => boolean = () => false,
+): Promise<boolean> {
   const entries = [...keys]
     .map((key) => [key, paths.get(key)] as const)
     .filter(
@@ -68,6 +69,9 @@ async function hydrateStoragePathSizes(
     index < entries.length;
     index += storagePathStatConcurrency
   ) {
+    if (shouldAbort()) {
+      return false;
+    }
     const batch = entries.slice(index, index + storagePathStatConcurrency);
     await Promise.all(
       batch.map(async ([, entry]) => {
@@ -80,6 +84,8 @@ async function hydrateStoragePathSizes(
       }),
     );
   }
+
+  return !shouldAbort();
 }
 
 function sumPositiveValues<T>(

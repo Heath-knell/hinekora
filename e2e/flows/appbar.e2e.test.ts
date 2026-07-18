@@ -5,6 +5,8 @@ import {
   emitAppBarPoeProcessStart,
   emitAppBarPoeProcessStop,
   emitAppBarRecorderOverlayVisibility,
+  emitAppBarRecordingStorageUsageChanged,
+  emitAppBarRecordingStorageUsageRefreshFailed,
   expectNoUnexpectedAppBarBridgeCalls,
   getAppBarE2ECalls,
   getAppBarGameButton,
@@ -58,6 +60,50 @@ test("shows storage usage and opens data storage settings on click", async ({
 
   await storageMeter.click();
 
+  await expectDataStorageSettings(page);
+});
+
+test("updates deferred storage usage without blocking app startup", async ({
+  page,
+}) => {
+  await setupAppBarE2E(page, { recordingStorageUsageDeferred: true });
+
+  const pendingStorageMeter = page.getByRole("button", {
+    name: "Loading recording storage usage. Open data and storage settings",
+  });
+  await expect(pendingStorageMeter).toHaveText("-- / 50 GB");
+  await expect(pendingStorageMeter).toHaveAttribute("aria-busy", "true");
+
+  await emitAppBarRecordingStorageUsageChanged(page, {
+    clipsSizeBytes: 1 * GIGABYTE,
+    diskFreeBytes: 89 * GIGABYTE,
+    lowDiskSpace: false,
+    recordingsSizeBytes: 10 * GIGABYTE,
+  });
+
+  const storageMeter = page.getByRole("button", {
+    name: "11 GB used of 50 GB. Open data and storage settings",
+  });
+  await expect(storageMeter).toHaveText("11 GB / 50 GB");
+  await expect(storageMeter).toHaveAttribute("aria-busy", "false");
+});
+
+test("reports a deferred storage refresh failure without breaking the AppBar", async ({
+  page,
+}) => {
+  await setupAppBarE2E(page, { recordingStorageUsageDeferred: true });
+
+  await emitAppBarRecordingStorageUsageRefreshFailed(
+    page,
+    "Recording storage usage could not be refreshed",
+  );
+
+  const storageMeter = page.getByRole("button", {
+    name: "Recording storage usage is unavailable. Open data and storage settings",
+  });
+  await expect(storageMeter).toHaveText("-- / 50 GB");
+  await expect(storageMeter).toHaveAttribute("aria-busy", "false");
+  await storageMeter.click();
   await expectDataStorageSettings(page);
 });
 

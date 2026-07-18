@@ -1012,6 +1012,7 @@ async function setupEditorE2E(page: Page, options: SetupEditorE2EOptions = {}) {
             recordingsSizeBytes: 0,
           }),
           onUsageChanged: () => unsubscribe,
+          onUsageRefreshFailed: () => unsubscribe,
           onRecordingsChanged: () => unsubscribe,
         }),
         replayClips: createBridgeDomain<EditorE2EElectron["replayClips"]>(

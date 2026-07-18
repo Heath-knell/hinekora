@@ -395,9 +395,23 @@ describe("ManagedRecorder utils", () => {
     ).toBe("h264_texture_amf");
   });
 
-  it("uses CQP quality control for hardware encoders", () => {
+  it("uses throughput-first CQP settings for NVIDIA hardware encoders", () => {
     expect(
       resolveManagedVideoEncoderSettings("obs_nvenc_h264_tex", "moderate"),
+    ).toEqual({
+      keyint_sec: 1,
+      rate_control: "CQP",
+      cqp: 30,
+      adaptive_quantization: false,
+      lookahead: false,
+      multipass: "disabled",
+      preset: "p1",
+    });
+  });
+
+  it("does not apply NVIDIA performance controls to other hardware encoders", () => {
+    expect(
+      resolveManagedVideoEncoderSettings("h264_texture_amf", "moderate"),
     ).toEqual({
       keyint_sec: 1,
       rate_control: "CQP",
@@ -412,6 +426,10 @@ describe("ManagedRecorder utils", () => {
       keyint_sec: 1,
       rate_control: "CQP",
       cqp: 24,
+      adaptive_quantization: false,
+      lookahead: false,
+      multipass: "disabled",
+      preset: "p1",
     });
     expect(
       resolveManagedVideoEncoderSettings("obs_nvenc_av1_tex", "ultra"),
@@ -419,6 +437,10 @@ describe("ManagedRecorder utils", () => {
       keyint_sec: 1,
       rate_control: "CQP",
       cqp: 20,
+      adaptive_quantization: false,
+      lookahead: false,
+      multipass: "disabled",
+      preset: "p1",
     });
     expect(
       resolveManagedVideoEncoderSettings("obs_nvenc_av1_tex", "moderate"),
@@ -426,6 +448,10 @@ describe("ManagedRecorder utils", () => {
       keyint_sec: 1,
       rate_control: "CQP",
       cqp: 28,
+      adaptive_quantization: false,
+      lookahead: false,
+      multipass: "disabled",
+      preset: "p1",
     });
     expect(
       resolveManagedVideoEncoderSettings("obs_nvenc_av1_tex", "low"),
@@ -433,6 +459,10 @@ describe("ManagedRecorder utils", () => {
       keyint_sec: 1,
       rate_control: "CQP",
       cqp: 32,
+      adaptive_quantization: false,
+      lookahead: false,
+      multipass: "disabled",
+      preset: "p1",
     });
     expect(
       resolveManagedVideoEncoderSettings("obs_nvenc_h264_tex", "ultra"),
@@ -440,6 +470,10 @@ describe("ManagedRecorder utils", () => {
       keyint_sec: 1,
       rate_control: "CQP",
       cqp: 22,
+      adaptive_quantization: false,
+      lookahead: false,
+      multipass: "disabled",
+      preset: "p1",
     });
     expect(
       resolveManagedVideoEncoderSettings("obs_nvenc_h264_tex", "low"),
@@ -447,6 +481,10 @@ describe("ManagedRecorder utils", () => {
       keyint_sec: 1,
       rate_control: "CQP",
       cqp: 34,
+      adaptive_quantization: false,
+      lookahead: false,
+      multipass: "disabled",
+      preset: "p1",
     });
   });
 

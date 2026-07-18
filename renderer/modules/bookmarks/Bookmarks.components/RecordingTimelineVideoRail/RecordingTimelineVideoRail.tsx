@@ -7,17 +7,20 @@ import {
 
 interface RecordingTimelineVideoRailProps {
   durationSeconds: number;
+  isPlaying: boolean;
   mediaUrl: string | null;
   railWidthPixels: number;
 }
 
 function RecordingTimelineVideoRail({
   durationSeconds,
+  isPlaying,
   mediaUrl,
   railWidthPixels,
 }: RecordingTimelineVideoRailProps) {
   const thumbnails = useMediaClipThumbnails({
     durationSeconds,
+    enabled: !isPlaying,
     inSeconds: 0,
     mediaUrl,
     outSeconds: durationSeconds,

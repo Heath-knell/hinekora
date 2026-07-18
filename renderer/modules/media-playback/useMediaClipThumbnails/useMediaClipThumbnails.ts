@@ -11,11 +11,11 @@ const maxThumbnailCacheEntries = 80;
 const thumbnailLoadDelayMs = 250;
 
 const thumbnailCache = new Map<string, string[]>();
-const thumbnailRequests = new Map<string, Promise<string[]>>();
 let thumbnailQueue: Promise<unknown> = Promise.resolve();
 
 interface UseMediaClipThumbnailsInput {
   durationSeconds: number;
+  enabled?: boolean;
   inSeconds: number;
   mediaUrl: string | null;
   outSeconds: number;
@@ -24,6 +24,7 @@ interface UseMediaClipThumbnailsInput {
 
 function useMediaClipThumbnails({
   durationSeconds,
+  enabled = true,
   inSeconds,
   mediaUrl,
   outSeconds,
@@ -40,6 +41,9 @@ function useMediaClipThumbnails({
       setThumbnails([]);
       return;
     }
+    if (!enabled) {
+      return;
+    }
 
     const cacheKey = createThumbnailCacheKey({
       count: thumbnailCount,
@@ -53,37 +57,44 @@ function useMediaClipThumbnails({
       return;
     }
 
-    let isCancelled = false;
+    const abortController = new AbortController();
+    const { signal } = abortController;
     const timeoutId = window.setTimeout(() => {
       const loadThumbnails = async () => {
         const nextThumbnails = await queueClipThumbnails(
-          cacheKey,
           {
             count: thumbnailCount,
             inSeconds,
             mediaUrl,
             outSeconds,
           },
-          () => isCancelled,
+          signal,
         );
-        if (!isCancelled && nextThumbnails.length > 0) {
+        if (!signal.aborted && nextThumbnails.length > 0) {
           cacheThumbnails(cacheKey, nextThumbnails);
           setThumbnails(nextThumbnails);
         }
       };
 
       void loadThumbnails().catch(() => {
-        if (!isCancelled) {
+        if (!signal.aborted) {
           setThumbnails([]);
         }
       });
     }, thumbnailLoadDelayMs);
 
     return () => {
-      isCancelled = true;
+      abortController.abort();
       window.clearTimeout(timeoutId);
     };
-  }, [durationSeconds, inSeconds, mediaUrl, outSeconds, thumbnailCount]);
+  }, [
+    durationSeconds,
+    enabled,
+    inSeconds,
+    mediaUrl,
+    outSeconds,
+    thumbnailCount,
+  ]);
 
   return thumbnails;
 }
@@ -100,27 +111,17 @@ function calculateMediaThumbnailCount(widthPixels: number): number {
 }
 
 function queueClipThumbnails(
-  cacheKey: string,
   input: {
     count: number;
     inSeconds: number;
     mediaUrl: string;
     outSeconds: number;
   },
-  isCancelled: () => boolean,
+  signal: AbortSignal,
 ): Promise<string[]> {
-  const currentRequest = thumbnailRequests.get(cacheKey);
-  if (currentRequest) {
-    return currentRequest;
-  }
-
   const task = thumbnailQueue
     .catch(() => undefined)
-    .then(() => (isCancelled() ? [] : createClipThumbnails(input, isCancelled)))
-    .finally(() => {
-      thumbnailRequests.delete(cacheKey);
-    });
-  thumbnailRequests.set(cacheKey, task);
+    .then(() => (signal.aborted ? [] : createClipThumbnails(input, signal)));
   thumbnailQueue = task.catch(() => undefined);
 
   return task;

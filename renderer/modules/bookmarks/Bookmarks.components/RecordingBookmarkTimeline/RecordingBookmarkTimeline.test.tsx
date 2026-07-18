@@ -6,11 +6,13 @@ import type { RecordingBookmark } from "~/main/modules/bookmarks";
 
 import { RecordingBookmarkTimeline } from "./RecordingBookmarkTimeline";
 
+const mediaPlaybackMocks = vi.hoisted(() => ({
+  useMediaClipThumbnails: vi.fn(() => []),
+}));
+
 vi.mock(
   "~/renderer/modules/media-playback/useMediaClipThumbnails/useMediaClipThumbnails",
-  () => ({
-    useMediaClipThumbnails: () => [],
-  }),
+  () => mediaPlaybackMocks,
 );
 
 function createBookmark(
@@ -51,6 +53,7 @@ describe("RecordingBookmarkTimeline", () => {
   let root: Root;
 
   beforeEach(() => {
+    mediaPlaybackMocks.useMediaClipThumbnails.mockClear();
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -220,6 +223,9 @@ describe("RecordingBookmarkTimeline", () => {
     });
 
     expect(visualPlaybackListeners.size).toBe(2);
+    expect(mediaPlaybackMocks.useMediaClipThumbnails).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: false }),
+    );
     expect(container.textContent).toContain("0:25.00 / 1:40.00");
 
     act(() => {

@@ -205,6 +205,7 @@ function RecordingBookmarkTimeline({
           />
           <RecordingTimelineVideoRail
             durationSeconds={duration}
+            isPlaying={isPlaying}
             mediaUrl={mediaUrl}
             railWidthPixels={timelineRailWidthPixels}
           />

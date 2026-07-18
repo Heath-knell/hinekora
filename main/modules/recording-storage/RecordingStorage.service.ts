@@ -132,6 +132,7 @@ interface RecordingFileDurationState extends ExistingFileStats {
 class RecordingStorageService {
   private static instance: RecordingStorageService | null = null;
   private static performanceSensitiveActivityActive = false;
+  private static performanceSensitiveActivityGeneration = 0;
 
   private readonly durationProbeFailureLoggedPaths = new Set<string>();
   private readonly durationVerifiedFileStateByPath = new Map<string, string>();
@@ -141,6 +142,13 @@ class RecordingStorageService {
   private usageRequest: {
     promise: Promise<RecordingStorageUsage>;
     root: string;
+  } | null = null;
+  private usageBroadcastRequest: {
+    root: string;
+  } | null = null;
+  private performanceSensitiveActivityEndRequest: {
+    promise: Promise<void>;
+    resolve: () => void;
   } | null = null;
   private stagedDeletionRecoveryRequest: {
     promise: Promise<{ hasMore: boolean }>;
@@ -175,7 +183,13 @@ class RecordingStorageService {
   }
 
   static setPerformanceSensitiveActivityActive(active: boolean): void {
+    if (RecordingStorageService.performanceSensitiveActivityActive === active) {
+      return;
+    }
     RecordingStorageService.performanceSensitiveActivityActive = active;
+    if (active) {
+      RecordingStorageService.performanceSensitiveActivityGeneration += 1;
+    }
     RecordingStorageService.instance?.handlePerformanceSensitiveActivity(
       active,
     );
@@ -188,6 +202,7 @@ class RecordingStorageService {
     RecordingStorageService.instance?.pendingStagedDeletionRecoveryRoots.clear();
     RecordingStorageService.instance = null;
     RecordingStorageService.performanceSensitiveActivityActive = false;
+    RecordingStorageService.performanceSensitiveActivityGeneration = 0;
   }
 
   constructor() {
@@ -229,7 +244,7 @@ class RecordingStorageService {
       deleteManyRecordings: (paths) => this.deleteManyRecordings(paths),
       deleteRecording: (path) => this.deleteRecording(path),
       getRecording: (id) => this.getRecording(id),
-      getUsage: () => this.getUsage(),
+      getUsage: () => this.getUsageSnapshot(),
       listRecordingLibrary: (query) => this.listRecordingLibrary(query),
       openRecording: (path) => this.openRecording(path),
       revealRecording: (path) => this.revealRecording(path),
@@ -251,16 +266,33 @@ class RecordingStorageService {
 
     const generation = this.usageGeneration;
     const promise = (async () => {
-      await yieldToEventLoop();
-      const totals = await calculateRecordingStorageUsage({
-        recordingRepository: this.repository,
-        replayClipsRepository: this.replayClipsRepository,
-        root,
-      });
-      if (generation !== this.usageGeneration) {
-        return this.getUsage();
+      let totals = null;
+      while (!totals) {
+        await yieldToEventLoop();
+        await this.waitForPerformanceSensitiveActivityToEnd();
+        if (generation !== this.usageGeneration) {
+          return this.getUsage();
+        }
+        const activityGeneration =
+          RecordingStorageService.performanceSensitiveActivityGeneration;
+        const shouldAbort = () =>
+          RecordingStorageService.performanceSensitiveActivityActive ||
+          generation !== this.usageGeneration ||
+          activityGeneration !==
+            RecordingStorageService.performanceSensitiveActivityGeneration;
+        totals = await calculateRecordingStorageUsage({
+          recordingRepository: this.repository,
+          replayClipsRepository: this.replayClipsRepository,
+          root,
+          shouldAbort,
+        });
+        if (generation !== this.usageGeneration) {
+          return this.getUsage();
+        }
+        if (shouldAbort()) {
+          totals = null;
+        }
       }
-
       const usage = this.createUsage(
         root,
         totals.clipsSizeBytes,
@@ -281,6 +313,18 @@ class RecordingStorageService {
     return promise;
   }
 
+  getUsageSnapshot(): RecordingStorageUsage | null {
+    const settings = SettingsStoreService.getInstance().get();
+    const root = this.resolveStorageRoot(settings.recordingStoragePath);
+    const cache = this.usageCache?.root === root ? this.usageCache : null;
+    if (cache && Date.now() - cache.calculatedAtMs < storageUsageCacheMs) {
+      return cache.usage;
+    }
+
+    this.scheduleUsageBroadcast(root);
+    return cache?.usage ?? null;
+  }
+
   publishUsageChanged(usage?: RecordingStorageUsage, usageRoot?: string): void {
     const settings = SettingsStoreService.getInstance().get();
     const root = this.resolveStorageRoot(settings.recordingStoragePath);
@@ -290,26 +334,20 @@ class RecordingStorageService {
     if (usage) {
       this.usageGeneration += 1;
       this.usageRequest = null;
+      this.usageBroadcastRequest = null;
       this.usageCache = { calculatedAtMs: Date.now(), root, usage };
       this.cleanupScheduler.resetEstimatedUsageGrowth();
     } else {
       this.invalidateUsageCache();
+      this.usageBroadcastRequest = null;
     }
-    const targetWindows = this.getMainWindows();
-    if (targetWindows.length === 0) {
+    if (this.getMainWindows().length === 0) {
       return;
     }
 
     void (usage ? Promise.resolve(usage) : this.getUsage()).then(
       (nextUsage) => {
-        for (const window of targetWindows) {
-          if (!window.isDestroyed()) {
-            window.webContents.send(
-              RecordingStorageChannel.UsageChanged,
-              nextUsage,
-            );
-          }
-        }
+        this.sendUsageChanged(nextUsage);
       },
       (error) => {
         logWarn(RECORDING_STORAGE_LOG_SCOPE, "Storage usage refresh failed", {
@@ -1285,7 +1323,35 @@ class RecordingStorageService {
       this.clearStagedDeletionRecoveryTimer();
       return;
     }
+    this.releasePerformanceSensitiveActivityWaiters();
     this.schedulePendingStagedDeletionRecovery();
+  }
+
+  private waitForPerformanceSensitiveActivityToEnd(): Promise<void> {
+    if (!RecordingStorageService.performanceSensitiveActivityActive) {
+      return Promise.resolve();
+    }
+    if (!this.performanceSensitiveActivityEndRequest) {
+      let resolveRequest!: () => void;
+      const promise = new Promise<void>((resolvePromise) => {
+        resolveRequest = resolvePromise;
+      });
+      this.performanceSensitiveActivityEndRequest = {
+        promise,
+        resolve: resolveRequest,
+      };
+    }
+
+    return this.performanceSensitiveActivityEndRequest.promise;
+  }
+
+  private releasePerformanceSensitiveActivityWaiters(): void {
+    const request = this.performanceSensitiveActivityEndRequest;
+    if (!request) {
+      return;
+    }
+    this.performanceSensitiveActivityEndRequest = null;
+    request.resolve();
   }
 
   private async loadStorageEntries<T, TCursor>(
@@ -1367,6 +1433,55 @@ class RecordingStorageService {
     this.usageGeneration += 1;
     this.usageCache = null;
     this.usageRequest = null;
+  }
+
+  private scheduleUsageBroadcast(root: string): void {
+    if (this.usageBroadcastRequest?.root === root) {
+      return;
+    }
+    const promise = this.getUsage();
+    const request = { root };
+    this.usageBroadcastRequest = request;
+    void promise.then(
+      (usage) => {
+        if (this.usageBroadcastRequest !== request) {
+          return;
+        }
+        this.usageBroadcastRequest = null;
+        this.sendUsageChanged(usage);
+      },
+      (error) => {
+        if (this.usageBroadcastRequest !== request) {
+          return;
+        }
+        this.usageBroadcastRequest = null;
+        const errorMessage = safeErrorMessage(error);
+        logWarn(
+          RECORDING_STORAGE_LOG_SCOPE,
+          "Deferred storage usage refresh failed",
+          { error: errorMessage },
+        );
+        this.sendToMainWindows(
+          RecordingStorageChannel.UsageRefreshFailed,
+          errorMessage,
+        );
+      },
+    );
+  }
+
+  private sendUsageChanged(usage: RecordingStorageUsage): void {
+    this.sendToMainWindows(RecordingStorageChannel.UsageChanged, usage);
+  }
+
+  private sendToMainWindows(
+    channel: RecordingStorageChannel,
+    payload: unknown,
+  ): void {
+    for (const window of this.getMainWindows()) {
+      if (!window.isDestroyed()) {
+        window.webContents.send(channel, payload);
+      }
+    }
   }
 
   private getCleanupSchedulerSnapshot(): {

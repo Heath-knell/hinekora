@@ -98,6 +98,10 @@ interface ManagedVideoEncoderSettings {
   rate_control: "CRF" | "CQP";
   crf?: number;
   cqp?: number;
+  adaptive_quantization?: boolean;
+  lookahead?: boolean;
+  multipass?: "disabled";
+  preset?: "p1";
 }
 
 interface ManagedRecorderSceneItemPosition {
@@ -312,10 +316,22 @@ export function resolveManagedVideoEncoderSettings(
     };
   }
 
-  return {
+  const hardwareSettings: ManagedVideoEncoderSettings = {
     ...baseSettings,
     rate_control: "CQP",
     cqp: qualityValue,
+  };
+
+  if (!encoder.startsWith("obs_nvenc_")) {
+    return hardwareSettings;
+  }
+
+  return {
+    ...hardwareSettings,
+    adaptive_quantization: false,
+    lookahead: false,
+    multipass: "disabled",
+    preset: "p1",
   };
 }
 

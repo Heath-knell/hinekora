@@ -17,6 +17,7 @@ interface NoobsApi {
     logPath: string,
     callback: (signal: NoobsSignal) => void,
   ) => void;
+  Shutdown?: () => void;
   SetBuffering: (enabled: boolean) => void;
   StartBuffer: () => void;
   StartRecording: (offsetSeconds: number) => void;

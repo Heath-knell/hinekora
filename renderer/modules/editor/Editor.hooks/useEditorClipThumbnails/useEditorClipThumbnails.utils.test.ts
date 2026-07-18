@@ -25,6 +25,38 @@ describe("createClipThumbnails", () => {
       return originalCreateElement(tagName);
     });
 
+    const thumbnails = createClipThumbnails({
+      count: 1,
+      inSeconds: 0,
+      mediaUrl: "hinekora-media://clip/1",
+      outSeconds: 1,
+    });
+    const assertion = expect(thumbnails).rejects.toThrow(
+      "loadedmetadata timed out",
+    );
+    await vi.advanceTimersByTimeAsync(3_000);
+
+    await assertion;
+    expect(video.removeAttribute).toHaveBeenCalledWith("src");
+    expect(video.load).toHaveBeenCalledTimes(1);
+  });
+
+  it("releases the hidden video immediately when thumbnail loading is canceled", async () => {
+    const originalCreateElement = document.createElement.bind(document);
+    const video = createMockVideoElement();
+    const createElementSpy = vi.spyOn(document, "createElement") as unknown as {
+      mockImplementation: (
+        implementation: (tagName: string) => HTMLElement,
+      ) => void;
+    };
+    createElementSpy.mockImplementation((tagName) => {
+      if (tagName === "video") {
+        return video;
+      }
+
+      return originalCreateElement(tagName);
+    });
+    const abortController = new AbortController();
     const thumbnails = createClipThumbnails(
       {
         count: 1,
@@ -32,14 +64,12 @@ describe("createClipThumbnails", () => {
         mediaUrl: "hinekora-media://clip/1",
         outSeconds: 1,
       },
-      () => false,
+      abortController.signal,
     );
-    const assertion = expect(thumbnails).rejects.toThrow(
-      "loadedmetadata timed out",
-    );
-    await vi.advanceTimersByTimeAsync(3_000);
 
-    await assertion;
+    abortController.abort();
+
+    await expect(thumbnails).rejects.toMatchObject({ name: "AbortError" });
     expect(video.removeAttribute).toHaveBeenCalledWith("src");
     expect(video.load).toHaveBeenCalledTimes(1);
   });

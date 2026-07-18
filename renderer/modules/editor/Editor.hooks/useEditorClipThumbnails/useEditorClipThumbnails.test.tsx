@@ -101,7 +101,7 @@ describe("useEditorClipThumbnails", () => {
         mediaUrl: "hinekora-media://clip/cache",
         outSeconds: 10,
       },
-      expect.any(Function),
+      expect.any(AbortSignal),
     );
     expect(container.querySelectorAll("[data-thumbnail]")).toHaveLength(3);
 
@@ -160,21 +160,21 @@ describe("useEditorClipThumbnails", () => {
   });
 
   it("passes cancellation into in-flight thumbnail creation", async () => {
-    let isCancelled: (() => boolean) | null = null;
+    let abortSignal: AbortSignal | null = null;
     let resolveThumbnails: (thumbnails: string[]) => void = () => undefined;
     thumbnailUtilsMocks.createClipThumbnails.mockImplementationOnce(
-      (_input: unknown, nextIsCancelled: () => boolean) =>
+      (_input: unknown, nextAbortSignal: AbortSignal) =>
         new Promise((resolve) => {
-          isCancelled = nextIsCancelled;
+          abortSignal = nextAbortSignal;
           resolveThumbnails = resolve;
         }),
     );
-    const getIsCancelled = () => {
-      if (!isCancelled) {
-        throw new Error("Expected thumbnail cancellation callback");
+    const getAbortSignal = () => {
+      if (!abortSignal) {
+        throw new Error("Expected thumbnail cancellation signal");
       }
 
-      return isCancelled;
+      return abortSignal;
     };
 
     await renderHarness({ mediaUrl: "hinekora-media://clip/in-flight" });
@@ -182,14 +182,14 @@ describe("useEditorClipThumbnails", () => {
       await vi.advanceTimersByTimeAsync(250);
     });
 
-    expect(getIsCancelled()()).toBe(false);
+    expect(getAbortSignal().aborted).toBe(false);
 
     await act(async () => {
       root.unmount();
       isRootMounted = false;
     });
 
-    expect(getIsCancelled()()).toBe(true);
+    expect(getAbortSignal().aborted).toBe(true);
 
     await act(async () => {
       resolveThumbnails(["thumb-cancelled"]);

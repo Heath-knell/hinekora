@@ -212,11 +212,19 @@ function createNoobsApi() {
 
 describe("ManagedRecorderService", () => {
   it("signals performance-sensitive game activity to storage maintenance", async () => {
+    vi.useFakeTimers();
     const activityChanged = vi.spyOn(
       RecordingStorageService,
       "setPerformanceSensitiveActivityActive",
     );
+    pollerMocks.refreshPoeProcessState.mockResolvedValueOnce({
+      game: null,
+      isRunning: false,
+      processName: "",
+    });
     const service = createService();
+    service.initializeAutoStart();
+    await vi.advanceTimersByTimeAsync(0);
 
     await service.setGameRunningState(true);
     expect(activityChanged).toHaveBeenLastCalledWith(true);
@@ -1619,6 +1627,42 @@ describe("ManagedRecorderService", () => {
     });
   });
 
+  it("gates storage usage while the startup game check is pending", async () => {
+    vi.useFakeTimers();
+    let resolveProcessState!: (state: {
+      isRunning: boolean;
+      processName: string;
+    }) => void;
+    pollerMocks.refreshPoeProcessState.mockReturnValue(
+      new Promise((resolvePromise) => {
+        resolveProcessState = resolvePromise;
+      }),
+    );
+    const settings: AppSettings = {
+      ...createDefaultSettings(),
+      recordingAutoStartMode: "off",
+      recordingStoragePath: directory,
+    };
+    vi.spyOn(SettingsStoreService, "getInstance").mockReturnValue({
+      get: () => settings,
+    } as unknown as SettingsStoreService);
+    const activityChanged = vi.spyOn(
+      RecordingStorageService,
+      "setPerformanceSensitiveActivityActive",
+    );
+
+    const service = createService();
+    expect(activityChanged).toHaveBeenLastCalledWith(true);
+
+    service.initializeAutoStart();
+    resolveProcessState({ isRunning: false, processName: "" });
+
+    await vi.advanceTimersByTimeAsync(2_999);
+    expect(activityChanged).toHaveBeenLastCalledWith(true);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(activityChanged).toHaveBeenLastCalledWith(false);
+  });
+
   it("waits for the process monitor instead of starting on app startup when the game is missing", async () => {
     pollerMocks.refreshPoeProcessState.mockResolvedValue({
       isRunning: false,
@@ -1634,6 +1678,7 @@ describe("ManagedRecorderService", () => {
     } as unknown as SettingsStoreService);
     const service = createService();
     const internals = service as unknown as {
+      clearStartupGameCheck(): void;
       status: ManagedRecorderStatus;
     };
     const startBuffer = vi
@@ -1648,6 +1693,7 @@ describe("ManagedRecorderService", () => {
     expect(startBuffer).not.toHaveBeenCalled();
     expect(internals.status.gameRunning).toBe(false);
     expect(internals.status.error).not.toBe("Path of Exile 1 is not running");
+    internals.clearStartupGameCheck();
   });
 
   it("starts the configured full recording when the active game appears", async () => {

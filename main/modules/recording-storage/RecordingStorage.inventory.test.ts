@@ -31,7 +31,20 @@ describe("recording storage inventory helpers", () => {
     const directoryPath = join(root, "directory.mp4");
     await mkdir(directoryPath);
     const sizes = new Map([["directory", { path: directoryPath, size: 10 }]]);
-    await hydrateStoragePathSizes(sizes, sizes.keys());
+    await expect(hydrateStoragePathSizes(sizes, sizes.keys())).resolves.toBe(
+      true,
+    );
     expect(sizes.get("directory")?.size).toBe(0);
+  });
+
+  it("stops hydrating path sizes when background work is canceled", async () => {
+    const sizes = new Map([
+      ["missing", { path: join(root, "missing.mp4"), size: 10 }],
+    ]);
+
+    await expect(
+      hydrateStoragePathSizes(sizes, sizes.keys(), () => true),
+    ).resolves.toBe(false);
+    expect(sizes.get("missing")?.size).toBe(10);
   });
 });

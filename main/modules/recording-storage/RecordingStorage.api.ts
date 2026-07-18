@@ -7,13 +7,16 @@ import type {
   RecordingStorageBatchFileActionResult,
   RecordingStorageFileActionResult,
   RecordingStorageUsage,
+  RecordingStorageUsageSnapshot,
   RunRecordingDetail,
   RunRecordingLibraryPage,
   RunRecordingLibraryQuery,
 } from "./RecordingStorage.dto";
 import {
   RecordingStorageChangedIdsSchema,
+  RecordingStorageUsageErrorSchema,
   RecordingStorageUsageSchema,
+  RecordingStorageUsageSnapshotSchema,
 } from "./RecordingStorage.dto";
 
 const RecordingStorageAPI = {
@@ -21,11 +24,11 @@ const RecordingStorageAPI = {
     ipcRenderer
       .invoke(RecordingStorageChannel.GetRecording, id)
       .then(unwrapIpcResult),
-  getUsage: (): Promise<RecordingStorageUsage> =>
+  getUsage: (): Promise<RecordingStorageUsageSnapshot> =>
     ipcRenderer
       .invoke(RecordingStorageChannel.GetUsage)
       .then(unwrapIpcResult)
-      .then((usage) => RecordingStorageUsageSchema.parse(usage)),
+      .then((usage) => RecordingStorageUsageSnapshotSchema.parse(usage)),
   onUsageChanged: (
     callback: (usage: RecordingStorageUsage) => void,
   ): (() => void) => {
@@ -44,6 +47,21 @@ const RecordingStorageAPI = {
     return () =>
       ipcRenderer.removeListener(
         RecordingStorageChannel.UsageChanged,
+        listener,
+      );
+  },
+  onUsageRefreshFailed: (callback: (error: string) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, error: unknown) => {
+      const parsedError = RecordingStorageUsageErrorSchema.safeParse(error);
+      if (parsedError.success) {
+        callback(parsedError.data);
+      }
+    };
+
+    ipcRenderer.on(RecordingStorageChannel.UsageRefreshFailed, listener);
+    return () =>
+      ipcRenderer.removeListener(
+        RecordingStorageChannel.UsageRefreshFailed,
         listener,
       );
   },
