@@ -197,6 +197,7 @@ describe("RecorderControlsOverlayPage", () => {
       selectedProfileId: "profile-1",
       startListening: vi.fn(() => vi.fn()),
       update: vi.fn().mockResolvedValue(undefined),
+      updateFromCurrent: vi.fn().mockResolvedValue(undefined),
     };
     replayClipsState = {
       activeClip: null,

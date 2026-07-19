@@ -3,6 +3,7 @@ import {
   type ChangeEvent,
   type FocusEvent,
   type KeyboardEvent,
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -10,6 +11,7 @@ import {
 
 import type { OverlayPlacement } from "~/types";
 import styles from "../AuraOverlayPlacement/AuraOverlayPlacement.module.css";
+import { AuraPlacementNameField } from "../AuraPlacementNameField/AuraPlacementNameField";
 import { AuraPlacementNumberField } from "../AuraPlacementNumberField/AuraPlacementNumberField";
 import { AuraPlacementPointPropertiesFields } from "../AuraPlacementPointPropertiesFields/AuraPlacementPointPropertiesFields";
 import { AuraPlacementPropertiesActions } from "../AuraPlacementPropertiesActions/AuraPlacementPropertiesActions";
@@ -29,6 +31,7 @@ import {
 interface AuraPlacementPropertiesPanelProps {
   displayHeight: number;
   displayWidth: number;
+  label: string;
   placement: OverlayPlacement;
   pointControls?: boolean;
   side: AuraPlacementPropertiesPanelSide;
@@ -46,6 +49,7 @@ const panelSideClassNames: Record<AuraPlacementPropertiesPanelSide, string> = {
 function AuraPlacementPropertiesPanel({
   displayHeight,
   displayWidth,
+  label,
   placement,
   pointControls = false,
   side,
@@ -55,19 +59,20 @@ function AuraPlacementPropertiesPanel({
   const thickness = visibleThickness ? Math.round(visibleThickness) : null;
   const activeFieldRef = useRef<NumberFieldName | null>(null);
   const historyRecordedFieldRef = useRef<NumberFieldName | null>(null);
-  const [draft, setDraft] = useState(() =>
-    createPropertiesDraft(displayWidth, displayHeight, placement, thickness),
+  const createDraft = useCallback(
+    () =>
+      createPropertiesDraft(displayWidth, displayHeight, placement, thickness),
+    [displayHeight, displayWidth, placement, thickness],
   );
+  const [draft, setDraft] = useState(createDraft);
 
   useEffect(() => {
     if (activeFieldRef.current !== null) {
       return;
     }
 
-    setDraft(
-      createPropertiesDraft(displayWidth, displayHeight, placement, thickness),
-    );
-  }, [displayHeight, displayWidth, placement, thickness]);
+    setDraft(createDraft());
+  }, [createDraft]);
 
   const handleNumberChange = (event: ChangeEvent<HTMLInputElement>) => {
     const fieldName = readNumberFieldName(event.currentTarget.name);
@@ -127,14 +132,7 @@ function AuraPlacementPropertiesPanel({
     }
 
     if (event.key === "Escape") {
-      setDraft(
-        createPropertiesDraft(
-          displayWidth,
-          displayHeight,
-          placement,
-          thickness,
-        ),
-      );
+      setDraft(createDraft());
       event.currentTarget.blur();
     }
   };
@@ -151,6 +149,10 @@ function AuraPlacementPropertiesPanel({
     onChange(placement.id, {
       rotationDegrees: resolveNextRotationDegrees(placement.rotationDegrees),
     });
+  };
+
+  const handleNameCommit = (nextLabel: string) => {
+    onChange(placement.id, { label: nextLabel });
   };
 
   const commitNumberField = (
@@ -174,14 +176,7 @@ function AuraPlacementPropertiesPanel({
         Math.abs(normalizedValue - currentValue) < Number.EPSILON)
     ) {
       if (resetDraftOnNoop) {
-        setDraft(
-          createPropertiesDraft(
-            displayWidth,
-            displayHeight,
-            placement,
-            thickness,
-          ),
-        );
+        setDraft(createDraft());
       }
       return false;
     }
@@ -198,6 +193,7 @@ function AuraPlacementPropertiesPanel({
       aria-label="Aura placement properties"
       className={clsx(styles.propertiesPanel, panelSideClassNames[side])}
     >
+      <AuraPlacementNameField label={label} onCommit={handleNameCommit} />
       {auraPlacementBaseNumberFields.map((field) => (
         <AuraPlacementNumberField
           key={field.name}

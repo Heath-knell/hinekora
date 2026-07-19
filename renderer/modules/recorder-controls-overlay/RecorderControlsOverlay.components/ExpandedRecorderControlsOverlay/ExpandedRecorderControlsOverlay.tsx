@@ -4,9 +4,9 @@ import {
   FiSquare as Square,
 } from "react-icons/fi";
 import { HiViewGrid } from "react-icons/hi";
-import { PiBezierCurve, PiFilmSlate, PiSelection } from "react-icons/pi";
-import { TbRouteSquare2 } from "react-icons/tb";
+import { PiFilmSlate } from "react-icons/pi";
 
+import { getAuraSelectionTypeHelp } from "~/renderer/modules/aura-selection/AuraSelection.utils/AuraSelection.utils";
 import { CaptureModeTabs } from "~/renderer/modules/recorder-controls-overlay/RecorderControlsOverlay.components/CaptureModeTabs/CaptureModeTabs";
 import { RecorderOverlayTimer } from "~/renderer/modules/recorder-controls-overlay/RecorderControlsOverlay.components/RecorderOverlayTimer/RecorderOverlayTimer";
 import { RecorderPreviewQualityChip } from "~/renderer/modules/recorder-controls-overlay/RecorderControlsOverlay.components/RecorderPreviewQualityChip/RecorderPreviewQualityChip";
@@ -20,6 +20,11 @@ import { closeRecorderOverlay } from "./ExpandedRecorderControlsOverlay.utils";
 import { useExpandedRecorderAuraControls } from "./useExpandedRecorderAuraControls/useExpandedRecorderAuraControls";
 
 type ExpandedRecorderControlsOverlayProps = { onMinimize: () => void };
+
+const { Icon: DefaultAuraIcon } = getAuraSelectionTypeHelp("rect");
+const { Icon: ArchedAuraIcon, iconClassName: archedAuraIconClassName } =
+  getAuraSelectionTypeHelp("arc");
+const { Icon: PointerAuraIcon } = getAuraSelectionTypeHelp("points");
 
 function ExpandedRecorderControlsOverlay({
   onMinimize,
@@ -161,7 +166,7 @@ function ExpandedRecorderControlsOverlay({
           <RecorderAuraActionButton
             ariaLabel="Add default aura"
             disabled={!canUnlockAuras}
-            icon={PiSelection}
+            icon={DefaultAuraIcon}
             label="Default"
             title={
               !gameRunning
@@ -173,8 +178,8 @@ function ExpandedRecorderControlsOverlay({
           <RecorderAuraActionButton
             ariaLabel="Add arc aura"
             disabled={!canUnlockAuras}
-            icon={PiBezierCurve}
-            iconClassName="rotate-90"
+            icon={ArchedAuraIcon}
+            iconClassName={archedAuraIconClassName ?? ""}
             label="Arc"
             title={
               !gameRunning
@@ -186,7 +191,7 @@ function ExpandedRecorderControlsOverlay({
           <RecorderAuraActionButton
             ariaLabel="Add pointer aura"
             disabled={!canUnlockAuras}
-            icon={TbRouteSquare2}
+            icon={PointerAuraIcon}
             label="Pointer"
             title={
               !gameRunning

@@ -5,6 +5,7 @@ import { AuraTabs } from "~/renderer/modules/crop-editor/CropEditor.components/A
 import { CropEditorActions } from "~/renderer/modules/crop-editor/CropEditor.components/CropEditorActions/CropEditorActions";
 import { CropEditorPanel } from "~/renderer/modules/crop-editor/CropEditor.components/CropEditorPanel/CropEditorPanel";
 import { CropEditorSidebarPanel } from "~/renderer/modules/crop-editor/CropEditor.components/CropEditorSidebarPanel/CropEditorSidebarPanel";
+import { ProfileMutationError } from "~/renderer/modules/profiles/Profiles.components/ProfileMutationError/ProfileMutationError";
 
 function CropOverlayPage() {
   return (
@@ -15,6 +16,7 @@ function CropOverlayPage() {
         actions={<CropEditorActions />}
       />
       <PageContent className="grid content-start grid-cols-12 items-start gap-3">
+        <ProfileMutationError className="col-span-12" />
         <AuraTabs />
         <CropEditorSidebarPanel />
         <CropEditorPanel />

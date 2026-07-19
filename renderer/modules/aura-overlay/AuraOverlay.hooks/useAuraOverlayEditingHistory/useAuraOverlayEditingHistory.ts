@@ -124,7 +124,7 @@ export function useAuraOverlayEditingHistory({
       setSelectedPlacementId(snapshot.overlayPlacements[0]?.id ?? null);
       void updateProfile(
         createAuraProfileUpdateFromSnapshot(profile.id, snapshot),
-      );
+      ).catch(() => undefined);
     },
     [profile, updateProfile],
   );
@@ -144,7 +144,7 @@ export function useAuraOverlayEditingHistory({
 
     recordAuraHistory();
     setSelectedPlacementId(profileUpdate.overlayPlacements?.[0]?.id ?? null);
-    void updateProfile(profileUpdate);
+    void updateProfile(profileUpdate).catch(() => undefined);
   }, [
     canEditAuras,
     profile,

@@ -1,10 +1,13 @@
 import clsx from "clsx";
 import type { PointerEvent } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
-import { resolveActiveAuraCropRegionId } from "~/renderer/modules/crop-editor/CropEditor.utils/CropEditor.utils";
+import { useCropEditorThumbnailSource } from "~/renderer/modules/crop-editor/CropEditor.hooks/useCropEditorThumbnailSource/useCropEditorThumbnailSource";
 import {
-  useCapturePreviewShallow,
+  getSelectedProfile,
+  resolveActiveAuraCropRegionId,
+} from "~/renderer/modules/crop-editor/CropEditor.utils/CropEditor.utils";
+import {
   useCropEditorShallow,
   useProfilesShallow,
   useSettingsSelector,
@@ -18,9 +21,7 @@ import {
   createCropLayoutPreview,
   createCropPreviewStageStyle,
   cropResizeCorners,
-  getSelectedCropLayoutProfile,
-  resizeCropRegionFromCorner,
-  resolveCropPreviewSourceBounds,
+  resizeCropRegionFromPreviewDelta,
 } from "./CropLayoutPreview.utils";
 import { CropPreviewAuraVisibilityToggle } from "./CropPreviewAuraVisibilityToggle/CropPreviewAuraVisibilityToggle";
 import { CropPreviewBoxLayer } from "./CropPreviewBoxLayer/CropPreviewBoxLayer";
@@ -31,6 +32,8 @@ interface ResizeState {
   startX: number;
   startY: number;
   bounds: CropPreviewBounds;
+  referenceBounds: CropPreviewBounds;
+  viewportBounds: CropPreviewBounds;
   initialRegion: CropRegion;
   draftRegion: CropRegion;
 }
@@ -42,34 +45,12 @@ function isCropResizeCorner(
 }
 
 function CropLayoutPreview() {
-  const { profileItems, selectedProfileId, updateProfile } = useProfilesShallow(
-    (profiles) => ({
+  const { profileItems, selectedProfileId, updateProfileFromCurrent } =
+    useProfilesShallow((profiles) => ({
       profileItems: profiles.items,
       selectedProfileId: profiles.selectedProfileId,
-      updateProfile: profiles.update,
-    }),
-  );
-  const {
-    getThumbnail,
-    selectedSourceId,
-    sourceImageState,
-    sourceImageUrl,
-    sources,
-  } = useCapturePreviewShallow((capturePreview) => ({
-    getThumbnail: capturePreview.getThumbnail,
-    selectedSourceId: capturePreview.selectedSourceId,
-    sourceImageState:
-      capturePreview.selectedSourceId !== null
-        ? capturePreview.thumbnailsBySourceId[capturePreview.selectedSourceId]
-        : null,
-    sourceImageUrl:
-      capturePreview.selectedSourceId !== null
-        ? (capturePreview.thumbnailsBySourceId[
-            capturePreview.selectedSourceId
-          ] ?? null)
-        : null,
-    sources: capturePreview.sources,
-  }));
+      updateProfileFromCurrent: profiles.updateFromCurrent,
+    }));
   const { selectedAuraCropRegionId, showAllAurasInPreview } =
     useCropEditorShallow((cropEditor) => ({
       selectedAuraCropRegionId: cropEditor.selectedAuraCropRegionId,
@@ -80,11 +61,13 @@ function CropLayoutPreview() {
   );
   const stageRef = useRef<HTMLDivElement | null>(null);
   const [resizeState, setResizeState] = useState<ResizeState | null>(null);
-  const profile = getSelectedCropLayoutProfile(
+  const profile = getSelectedProfile(
     profileItems,
     selectedProfileId,
     activeGame,
   );
+  const { sourceBounds, sourceImageUrl } =
+    useCropEditorThumbnailSource(profile);
   const activeAuraCropRegionId = resolveActiveAuraCropRegionId(
     profile,
     selectedAuraCropRegionId,
@@ -108,23 +91,15 @@ function CropLayoutPreview() {
 
     return createCropLayoutPreview(
       previewProfile,
-      resolveCropPreviewSourceBounds(previewProfile, sources, selectedSourceId),
+      sourceBounds,
       showAllAurasInPreview ? null : activeAuraCropRegionId,
     );
   }, [
     activeAuraCropRegionId,
     previewProfile,
-    selectedSourceId,
     showAllAurasInPreview,
-    sources,
+    sourceBounds,
   ]);
-  useEffect(() => {
-    if (!selectedSourceId || sourceImageState !== undefined) {
-      return;
-    }
-
-    void getThumbnail(selectedSourceId).catch(() => undefined);
-  }, [getThumbnail, selectedSourceId, sourceImageState]);
 
   const handleResizePointerDown = (event: PointerEvent<HTMLElement>) => {
     if (!profile || !preview || event.button !== 0) {
@@ -149,33 +124,23 @@ function CropLayoutPreview() {
       startX: event.clientX,
       startY: event.clientY,
       bounds: preview.bounds,
+      referenceBounds: preview.referenceBounds,
+      viewportBounds: preview.viewportBounds,
       initialRegion,
       draftRegion: initialRegion,
     });
   };
 
   const handleResizePointerMove = (event: PointerEvent<HTMLElement>) => {
-    if (!resizeState || !stageRef.current) {
-      return;
-    }
-
-    const rect = stageRef.current.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) {
-      return;
-    }
-
-    const deltaX =
-      ((event.clientX - resizeState.startX) / rect.width) *
-      resizeState.bounds.width;
-    const deltaY =
-      ((event.clientY - resizeState.startY) / rect.height) *
-      resizeState.bounds.height;
-    const draftRegion = resizeCropRegionFromCorner(
-      resizeState.initialRegion,
-      resizeState.corner,
-      deltaX,
-      deltaY,
+    const draftRegion = resolveResizeDraftRegion(
+      event.clientX,
+      event.clientY,
+      resizeState,
+      stageRef.current,
     );
+    if (!resizeState || !draftRegion) {
+      return;
+    }
 
     setResizeState({ ...resizeState, draftRegion });
   };
@@ -188,14 +153,20 @@ function CropLayoutPreview() {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-    const { draftRegion, regionId } = resizeState;
+    const finalRegion =
+      resolveResizeDraftRegion(
+        event.clientX,
+        event.clientY,
+        resizeState,
+        stageRef.current,
+      ) ?? resizeState.draftRegion;
+    const { regionId } = resizeState;
     setResizeState(null);
-    void updateProfile({
-      id: profile.id,
-      cropRegions: profile.cropRegions.map((region) =>
-        region.id === regionId ? draftRegion : region,
+    void updateProfileFromCurrent(profile.id, (currentProfile) => ({
+      cropRegions: currentProfile.cropRegions.map((region) =>
+        region.id === regionId ? finalRegion : region,
       ),
-    });
+    })).catch(() => undefined);
   };
 
   const handleResizePointerCancel = () => {
@@ -225,6 +196,7 @@ function CropLayoutPreview() {
       </div>
       <div
         className={styles.stage}
+        data-testid="aura-layout-preview-stage"
         ref={stageRef}
         style={createCropPreviewStageStyle(preview.bounds)}
       >
@@ -242,6 +214,36 @@ function CropLayoutPreview() {
         />
       </div>
     </div>
+  );
+}
+
+function resolveResizeDraftRegion(
+  clientX: number,
+  clientY: number,
+  resizeState: ResizeState | null,
+  stage: HTMLDivElement | null,
+): CropRegion | null {
+  if (!resizeState || !stage) {
+    return null;
+  }
+
+  const rect = stage.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) {
+    return null;
+  }
+
+  const deltaX =
+    ((clientX - resizeState.startX) / rect.width) * resizeState.bounds.width;
+  const deltaY =
+    ((clientY - resizeState.startY) / rect.height) * resizeState.bounds.height;
+
+  return resizeCropRegionFromPreviewDelta(
+    resizeState.initialRegion,
+    resizeState.corner,
+    deltaX,
+    deltaY,
+    resizeState.viewportBounds,
+    resizeState.referenceBounds,
   );
 }
 

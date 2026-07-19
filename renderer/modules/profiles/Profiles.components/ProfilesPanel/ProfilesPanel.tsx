@@ -36,7 +36,7 @@ function ProfilesPanel() {
     selectProfile(profileId);
   };
   const handleDeleteProfile = (profileId: string) => {
-    void deleteProfile(profileId);
+    void deleteProfile(profileId).catch(() => undefined);
   };
   function handleGameScopeChange(event: ChangeEvent<HTMLSelectElement>) {
     const profileId = event.currentTarget.dataset.profileId;
@@ -46,7 +46,7 @@ function ProfilesPanel() {
 
     const value = event.currentTarget.value;
     const game = value === "all" ? null : (value as GameId);
-    void updateProfile({ id: profileId, game });
+    void updateProfile({ id: profileId, game }).catch(() => undefined);
   }
   const panelItems: ProfileManagementPanelItem[] = sortProfilesForDisplay(
     items,

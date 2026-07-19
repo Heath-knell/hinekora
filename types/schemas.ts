@@ -104,11 +104,12 @@ export const AuraPlacementScaleSettings = {
 } as const;
 
 const minimumPersistedPointSampleSize = 1;
+export const AuraLabelSettings = { maxLength: 80 } as const;
 
 export const CropRegionSchema = z
   .object({
     id: z.string().min(1).max(128),
-    label: z.string().min(1).max(80),
+    label: z.string().min(1).max(AuraLabelSettings.maxLength),
     x: z.number().int().min(0).max(100_000),
     y: z.number().int().min(0).max(100_000),
     width: z.number().int().min(1).max(100_000),

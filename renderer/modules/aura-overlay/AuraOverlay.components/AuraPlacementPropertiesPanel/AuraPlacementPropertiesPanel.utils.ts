@@ -3,6 +3,11 @@ import {
   AuraPointPlacementSettings,
   type OverlayPlacement,
 } from "~/types";
+import {
+  type AuraRotationDegrees,
+  auraRotationDegrees,
+  normalizeAuraPlacementNumberValue,
+} from "../../AuraOverlay.page/AuraOverlay.page.utils";
 
 type AuraPlacementPropertiesPanelSide = "bottom" | "left" | "right" | "top";
 
@@ -11,28 +16,27 @@ interface AuraPlacementPropertiesPatch {
   arcVisibleThickness?: number;
   displayHeight?: number;
   displayWidth?: number;
+  label?: string;
   mirrored?: boolean;
+  opacity?: number;
   pointGap?: number;
   pointSampleSize?: number;
   recordHistory?: boolean;
-  rotationDegrees?: RotationDegrees;
+  rotationDegrees?: AuraRotationDegrees;
   scale?: number;
 }
 
 type NumberFieldName =
   | "height"
+  | "opacity"
   | "pointGap"
   | "pointSampleSize"
   | "scale"
   | "thickness"
   | "width";
 
-type RotationDegrees = 0 | 90 | 180 | 270;
-
 type AuraPlacementPropertiesDraft = Record<NumberFieldName, string>;
 
-const rotationSteps = [0, 90, 180, 270] as const;
-const minimumDisplayDimension = 10;
 const auraPlacementBaseNumberFields = [
   { label: "Width", min: "10", name: "width" },
   { label: "Height", min: "10", name: "height" },
@@ -43,6 +47,7 @@ const auraPlacementBaseNumberFields = [
     name: "scale",
     step: "0.1",
   },
+  { label: "Opacity", max: "1", min: "0", name: "opacity", step: "0.05" },
 ] as const;
 
 function resolvePointSampleSize(placement: OverlayPlacement): number {
@@ -63,6 +68,7 @@ function createPropertiesDraft(
 ): AuraPlacementPropertiesDraft {
   return {
     height: String(Math.round(displayHeight)),
+    opacity: String(Number(placement.opacity.toFixed(2))),
     pointGap: String(
       placement.pointGap ?? AuraPointPlacementSettings.defaultGap,
     ),
@@ -81,6 +87,7 @@ function createCurrentNumericValues(
 ): Record<NumberFieldName, number | null> {
   return {
     height: Math.round(displayHeight),
+    opacity: Number(placement.opacity.toFixed(2)),
     pointGap: placement.pointGap ?? AuraPointPlacementSettings.defaultGap,
     pointSampleSize: resolvePointSampleSize(placement),
     scale: Number(resolvePlacementScale(placement).toFixed(2)),
@@ -93,48 +100,7 @@ function normalizeNumberInputValue(
   fieldName: NumberFieldName,
   value: string,
 ): number | null {
-  if (value.trim() === "") {
-    return null;
-  }
-
-  const numericValue = Number(value);
-  if (!Number.isFinite(numericValue)) {
-    return null;
-  }
-
-  if (fieldName === "scale") {
-    return clamp(
-      Math.round(numericValue * 100) / 100,
-      AuraPlacementScaleSettings.minScale,
-      AuraPlacementScaleSettings.maxScale,
-    );
-  }
-
-  if (fieldName === "pointGap") {
-    return Math.round(
-      clamp(
-        numericValue,
-        AuraPointPlacementSettings.minGap,
-        AuraPointPlacementSettings.maxGap,
-      ),
-    );
-  }
-
-  if (fieldName === "pointSampleSize") {
-    return Math.round(
-      clamp(
-        numericValue,
-        AuraPointPlacementSettings.minSampleSize,
-        AuraPointPlacementSettings.maxSampleSize,
-      ),
-    );
-  }
-
-  if (fieldName === "height" || fieldName === "width") {
-    return Math.round(Math.max(minimumDisplayDimension, numericValue));
-  }
-
-  return Math.round(Math.max(1, numericValue));
+  return normalizeAuraPlacementNumberValue(fieldName, value);
 }
 
 function createNumberFieldPatch(
@@ -154,6 +120,10 @@ function createNumberFieldPatch(
     return { recordHistory, scale: value };
   }
 
+  if (fieldName === "opacity") {
+    return { opacity: value, recordHistory };
+  }
+
   if (fieldName === "pointSampleSize") {
     return { pointSampleSize: value, recordHistory };
   }
@@ -168,6 +138,7 @@ function createNumberFieldPatch(
 function readNumberFieldName(value: string): NumberFieldName | null {
   if (
     value === "height" ||
+    value === "opacity" ||
     value === "pointGap" ||
     value === "pointSampleSize" ||
     value === "scale" ||
@@ -181,11 +152,13 @@ function readNumberFieldName(value: string): NumberFieldName | null {
 }
 
 function resolveNextRotationDegrees(
-  rotation: RotationDegrees = 0,
-): RotationDegrees {
-  const rotationIndex = rotationSteps.indexOf(rotation);
+  rotation: AuraRotationDegrees = 0,
+): AuraRotationDegrees {
+  const rotationIndex = auraRotationDegrees.indexOf(rotation);
 
-  return rotationSteps[(rotationIndex + 1) % rotationSteps.length] ?? 0;
+  return (
+    auraRotationDegrees[(rotationIndex + 1) % auraRotationDegrees.length] ?? 0
+  );
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -205,7 +178,6 @@ export type {
   AuraPlacementPropertiesPanelSide,
   AuraPlacementPropertiesPatch,
   NumberFieldName,
-  RotationDegrees,
 };
 export {
   auraPlacementBaseNumberFields,

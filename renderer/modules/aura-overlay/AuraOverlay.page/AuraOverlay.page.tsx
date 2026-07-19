@@ -12,7 +12,8 @@ import { useAuraOverlayEditingHistory } from "~/renderer/modules/aura-overlay/Au
 import { useAuraOverlayLockState } from "~/renderer/modules/aura-overlay/AuraOverlay.hooks/useAuraOverlayLockState/useAuraOverlayLockState";
 import { useAuraOverlayPlacementEditor } from "~/renderer/modules/aura-overlay/AuraOverlay.hooks/useAuraOverlayPlacementEditor/useAuraOverlayPlacementEditor";
 import { useAuraOverlayVideoSizing } from "~/renderer/modules/aura-overlay/AuraOverlay.hooks/useAuraOverlayVideoSizing/useAuraOverlayVideoSizing";
-import { getSelectedCropLayoutProfile } from "~/renderer/modules/crop-editor/CropEditor.components/CropLayoutPreview/CropLayoutPreview.utils";
+import { getSelectedProfile } from "~/renderer/modules/crop-editor/CropEditor.utils/CropEditor.utils";
+import { ProfileMutationError } from "~/renderer/modules/profiles/Profiles.components/ProfileMutationError/ProfileMutationError";
 import { useProfilesShallow, useSettingsSelector } from "~/renderer/store";
 
 import {
@@ -43,7 +44,7 @@ function AuraOverlayPage() {
     (routeProfileId
       ? profileItems.find((item) => item.id === routeProfileId)
       : null) ??
-    getSelectedCropLayoutProfile(profileItems, selectedProfileId, activeGame);
+    getSelectedProfile(profileItems, selectedProfileId, activeGame);
   const { auraOverlayLocked, lockAuraOverlay, showLockHandoffHint } =
     useAuraOverlayLockState();
 
@@ -154,6 +155,7 @@ function AuraOverlayPage() {
       )}
       role="application"
     >
+      <ProfileMutationError className={styles.profileError ?? ""} />
       {profile?.overlayPlacements.map((placement) => {
         const crop = profile.cropRegions.find(
           (region) => region.id === placement.cropRegionId,

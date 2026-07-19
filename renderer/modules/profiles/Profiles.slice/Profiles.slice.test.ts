@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { BoundStore } from "~/renderer/store/store.types";
 import { createBoundStoreForTests } from "~/renderer/test/createBoundStoreForTests";
@@ -73,17 +73,20 @@ function createTestStoreWithSettings(settingsValue: AppSettings) {
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((resolvePromise) => {
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
+    reject = rejectPromise;
   });
 
-  return { promise, resolve };
+  return { promise, reject, resolve };
 }
 
 describe("Profiles slice", () => {
   const createdProfile = createProfile({ id: "created", name: "Created" });
   const profiles = [createProfile(), createProfile({ id: "profile-2" })];
   const createProfileApi = vi.fn();
+  const deleteProfile = vi.fn();
   const listProfiles = vi.fn();
   const selectProfile = vi.fn();
   const updateProfile = vi.fn();
@@ -91,9 +94,10 @@ describe("Profiles slice", () => {
   let changedListener: ((items: Profile[]) => void) | null = null;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     changedListener = null;
     createProfileApi.mockResolvedValue(createdProfile);
+    deleteProfile.mockResolvedValue(undefined);
     listProfiles.mockResolvedValue(profiles);
     selectProfile.mockResolvedValue(undefined);
     updateProfile.mockResolvedValue(profiles[1]);
@@ -104,6 +108,7 @@ describe("Profiles slice", () => {
       value: {
         profiles: {
           create: createProfileApi,
+          delete: deleteProfile,
           list: listProfiles,
           select: selectProfile,
           update: updateProfile,
@@ -117,6 +122,10 @@ describe("Profiles slice", () => {
         },
       },
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("hydrates profiles and preserves an existing selected profile", async () => {
@@ -336,6 +345,354 @@ describe("Profiles slice", () => {
       .profiles.update({ id: "profile-2", name: "Renamed" });
 
     expect(selectProfile).toHaveBeenCalledWith("profile-2");
+  });
+
+  it("composes rapid updates from the latest optimistic profile", async () => {
+    const initialProfile = createRenderableProfile();
+    let persistedProfile = initialProfile;
+    updateProfile.mockImplementation(async (input) => {
+      persistedProfile = { ...persistedProfile, ...input };
+      return persistedProfile;
+    });
+    listProfiles.mockImplementation(async () => [persistedProfile]);
+    const store = createTestStore();
+    store.setState((state) => ({
+      profiles: {
+        ...state.profiles,
+        items: [initialProfile],
+        selectedProfileId: initialProfile.id,
+      },
+    }));
+
+    const opacityRequest = store
+      .getState()
+      .profiles.updateFromCurrent(initialProfile.id, (currentProfile) => ({
+        overlayPlacements: currentProfile.overlayPlacements.map((placement) =>
+          placement.id === "placement-1"
+            ? { ...placement, opacity: 0.45 }
+            : placement,
+        ),
+      }));
+    const rotationRequest = store
+      .getState()
+      .profiles.updateFromCurrent(initialProfile.id, (currentProfile) => ({
+        overlayPlacements: currentProfile.overlayPlacements.map((placement) =>
+          placement.id === "placement-1"
+            ? { ...placement, rotationDegrees: 90 as const }
+            : placement,
+        ),
+      }));
+    await Promise.all([opacityRequest, rotationRequest]);
+
+    expect(updateProfile).toHaveBeenCalledOnce();
+    expect(updateProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        overlayPlacements: [
+          expect.objectContaining({ opacity: 0.45, rotationDegrees: 90 }),
+        ],
+      }),
+    );
+    expect(
+      store.getState().profiles.items[0]?.overlayPlacements[0],
+    ).toMatchObject({ opacity: 0.45, rotationDegrees: 90 });
+  });
+
+  it("coalesces paced profile edits within the trailing persistence window", async () => {
+    vi.useFakeTimers();
+    const initialProfile = createRenderableProfile();
+    updateProfile.mockImplementation(async (input) => ({
+      ...initialProfile,
+      ...input,
+    }));
+    const store = createTestStore();
+    store.setState((state) => ({
+      profiles: {
+        ...state.profiles,
+        items: [initialProfile],
+        selectedProfileId: initialProfile.id,
+      },
+    }));
+
+    const firstRequest = store
+      .getState()
+      .profiles.update({ id: initialProfile.id, name: "First" });
+    await vi.advanceTimersByTimeAsync(80);
+    const secondRequest = store
+      .getState()
+      .profiles.update({ id: initialProfile.id, targetFps: 45 });
+    await vi.advanceTimersByTimeAsync(80);
+    const thirdRequest = store
+      .getState()
+      .profiles.update({ id: initialProfile.id, name: "Final" });
+
+    await vi.advanceTimersByTimeAsync(119);
+    expect(updateProfile).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    await Promise.all([firstRequest, secondRequest, thirdRequest]);
+
+    expect(updateProfile).toHaveBeenCalledOnce();
+    expect(updateProfile).toHaveBeenCalledWith({
+      id: initialProfile.id,
+      name: "Final",
+      targetFps: 45,
+    });
+  });
+
+  it("flushes continuous profile edits at the bounded maximum latency", async () => {
+    vi.useFakeTimers();
+    const initialProfile = createRenderableProfile();
+    updateProfile.mockImplementation(async (input) => ({
+      ...initialProfile,
+      ...input,
+    }));
+    const store = createTestStore();
+    store.setState((state) => ({
+      profiles: {
+        ...state.profiles,
+        items: [initialProfile],
+      },
+    }));
+
+    const requests: Promise<void>[] = [];
+    for (let index = 0; index < 4; index += 1) {
+      requests.push(
+        store
+          .getState()
+          .profiles.update({ id: initialProfile.id, name: `Edit ${index}` }),
+      );
+      await vi.advanceTimersByTimeAsync(100);
+      if (index < 3) {
+        expect(updateProfile).not.toHaveBeenCalled();
+      }
+    }
+    await Promise.all(requests);
+
+    expect(updateProfile).toHaveBeenCalledOnce();
+    expect(updateProfile).toHaveBeenCalledWith({
+      id: initialProfile.id,
+      name: "Edit 3",
+    });
+  });
+
+  it("preserves another profile's optimistic edit when one update completes", async () => {
+    const firstProfile = createProfile();
+    const secondProfile = createProfile({ id: "profile-2", name: "Second" });
+    const firstUpdate = createDeferred<Profile>();
+    const secondUpdate = createDeferred<Profile>();
+    updateProfile.mockImplementation((input) =>
+      input.id === firstProfile.id ? firstUpdate.promise : secondUpdate.promise,
+    );
+    const store = createTestStore();
+    store.setState((state) => ({
+      profiles: {
+        ...state.profiles,
+        items: [firstProfile, secondProfile],
+      },
+    }));
+
+    const firstRequest = store
+      .getState()
+      .profiles.update({ id: firstProfile.id, name: "First edited" });
+    const secondRequest = store
+      .getState()
+      .profiles.update({ id: secondProfile.id, name: "Second edited" });
+    await vi.waitFor(() => {
+      expect(updateProfile).toHaveBeenCalledTimes(2);
+    });
+
+    firstUpdate.resolve({ ...firstProfile, name: "First edited" });
+    await firstRequest;
+
+    expect(
+      store
+        .getState()
+        .profiles.items.find((item) => item.id === secondProfile.id)?.name,
+    ).toBe("Second edited");
+    secondUpdate.resolve({ ...secondProfile, name: "Second edited" });
+    await secondRequest;
+    expect(listProfiles).not.toHaveBeenCalled();
+  });
+
+  it("preserves another profile's optimistic edit during failed update recovery", async () => {
+    const firstProfile = createProfile();
+    const secondProfile = createProfile({ id: "profile-2", name: "Second" });
+    const secondUpdate = createDeferred<Profile>();
+    updateProfile.mockImplementation((input) =>
+      input.id === firstProfile.id
+        ? Promise.reject(new Error("First failed"))
+        : secondUpdate.promise,
+    );
+    listProfiles.mockResolvedValue([firstProfile, secondProfile]);
+    const store = createTestStore();
+    store.setState((state) => ({
+      profiles: {
+        ...state.profiles,
+        items: [firstProfile, secondProfile],
+      },
+    }));
+
+    const firstRequest = store
+      .getState()
+      .profiles.update({ id: firstProfile.id, name: "First edited" });
+    const secondRequest = store
+      .getState()
+      .profiles.update({ id: secondProfile.id, name: "Second edited" });
+    await expect(firstRequest).rejects.toThrow("First failed");
+
+    expect(
+      store
+        .getState()
+        .profiles.items.find((item) => item.id === secondProfile.id)?.name,
+    ).toBe("Second edited");
+    secondUpdate.resolve({ ...secondProfile, name: "Second edited" });
+    await secondRequest;
+  });
+
+  it("preserves queued optimistic profiles when another profile is created", async () => {
+    const initialProfile = createProfile();
+    const pendingUpdate = createDeferred<Profile>();
+    updateProfile.mockReturnValueOnce(pendingUpdate.promise);
+    const store = createTestStore();
+    store.setState((state) => ({
+      profiles: {
+        ...state.profiles,
+        items: [initialProfile],
+      },
+    }));
+
+    const updateRequest = store
+      .getState()
+      .profiles.update({ id: initialProfile.id, name: "Optimistic" });
+    await store.getState().profiles.create("Created");
+
+    expect(store.getState().profiles.items).toEqual([
+      expect.objectContaining({ id: initialProfile.id, name: "Optimistic" }),
+      createdProfile,
+    ]);
+    pendingUpdate.resolve({ ...initialProfile, name: "Optimistic" });
+    await updateRequest;
+  });
+
+  it("waits for an in-flight edit before deleting its profile", async () => {
+    const initialProfile = createProfile();
+    const pendingUpdate = createDeferred<Profile>();
+    updateProfile.mockReturnValueOnce(pendingUpdate.promise);
+    const store = createTestStore();
+    store.setState((state) => ({
+      profiles: {
+        ...state.profiles,
+        items: [initialProfile],
+        selectedProfileId: initialProfile.id,
+      },
+    }));
+
+    const updateRequest = store
+      .getState()
+      .profiles.update({ id: initialProfile.id, name: "Edited" });
+    await vi.waitFor(() => {
+      expect(updateProfile).toHaveBeenCalledOnce();
+    });
+    const deleteRequest = store.getState().profiles.delete(initialProfile.id);
+
+    expect(deleteProfile).not.toHaveBeenCalled();
+    pendingUpdate.resolve({ ...initialProfile, name: "Edited" });
+    await Promise.all([updateRequest, deleteRequest]);
+
+    expect(deleteProfile).toHaveBeenCalledWith(initialProfile.id);
+    expect(store.getState().profiles.items).toEqual([]);
+    expect(store.getState().profiles.selectedProfileId).toBeNull();
+  });
+
+  it("cancels a scheduled edit when its profile is deleted", async () => {
+    vi.useFakeTimers();
+    const initialProfile = createProfile();
+    const store = createTestStore();
+    store.setState((state) => ({
+      profiles: {
+        ...state.profiles,
+        items: [initialProfile],
+      },
+    }));
+
+    const updateRequest = store
+      .getState()
+      .profiles.update({ id: initialProfile.id, name: "Edited" });
+    const deleteRequest = store.getState().profiles.delete(initialProfile.id);
+    await Promise.all([updateRequest, deleteRequest]);
+    await vi.advanceTimersByTimeAsync(400);
+
+    expect(updateProfile).not.toHaveBeenCalled();
+    expect(deleteProfile).toHaveBeenCalledWith(initialProfile.id);
+    expect(store.getState().profiles.items).toEqual([]);
+  });
+
+  it("preserves newer optimistic edits when an older update recovery is pending", async () => {
+    const initialProfile = createRenderableProfile();
+    const recovery = createDeferred<Profile[]>();
+    let persistedProfile = initialProfile;
+    updateProfile
+      .mockRejectedValueOnce(new Error("temporary failure"))
+      .mockImplementation(async (input) => {
+        persistedProfile = { ...persistedProfile, ...input };
+        return persistedProfile;
+      });
+    listProfiles
+      .mockReturnValueOnce(recovery.promise)
+      .mockImplementation(async () => [persistedProfile]);
+    const store = createTestStore();
+    store.setState((state) => ({
+      profiles: {
+        ...state.profiles,
+        items: [initialProfile],
+        selectedProfileId: initialProfile.id,
+      },
+    }));
+
+    const firstRequest = store
+      .getState()
+      .profiles.update({ id: initialProfile.id, name: "Renamed" });
+    await vi.waitFor(() => {
+      expect(listProfiles).toHaveBeenCalledOnce();
+    });
+    const secondRequest = store
+      .getState()
+      .profiles.update({ id: initialProfile.id, targetFps: 45 });
+    recovery.resolve([initialProfile]);
+
+    await expect(Promise.all([firstRequest, secondRequest])).resolves.toEqual([
+      undefined,
+      undefined,
+    ]);
+    expect(store.getState().profiles.items[0]).toMatchObject({
+      name: "Renamed",
+      targetFps: 45,
+    });
+    expect(store.getState().profiles.error).toBeNull();
+  });
+
+  it("restores server state and exposes profile update failures", async () => {
+    const initialProfile = createRenderableProfile();
+    updateProfile.mockRejectedValueOnce(new Error("update blocked"));
+    listProfiles.mockResolvedValue([initialProfile]);
+    const store = createTestStore();
+    store.setState((state) => ({
+      profiles: {
+        ...state.profiles,
+        items: [initialProfile],
+        selectedProfileId: initialProfile.id,
+      },
+    }));
+
+    const request = store
+      .getState()
+      .profiles.updateFromCurrent(initialProfile.id, () => ({
+        name: "Optimistic name",
+      }));
+    expect(store.getState().profiles.items[0]?.name).toBe("Optimistic name");
+    await expect(request).rejects.toThrow("update blocked");
+
+    expect(store.getState().profiles.items[0]?.name).toBe(initialProfile.name);
+    expect(store.getState().profiles.error).toBe("update blocked");
   });
 
   it("listens for profile changes and cleans up", () => {

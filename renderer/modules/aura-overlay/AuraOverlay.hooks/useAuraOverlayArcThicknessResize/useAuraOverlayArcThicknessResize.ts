@@ -153,11 +153,13 @@ function useAuraOverlayArcThicknessResize({
           ? draftPlacement
           : placement,
       ),
-    }).finally(() => {
-      if (arcThicknessResizeStateRef.current === releasedResizeState) {
-        commitArcThicknessResizeState(null);
-      }
-    });
+    })
+      .catch(() => undefined)
+      .finally(() => {
+        if (arcThicknessResizeStateRef.current === releasedResizeState) {
+          commitArcThicknessResizeState(null);
+        }
+      });
   };
 
   const handleThicknessPointerCancel = (event: PointerEvent<HTMLElement>) => {

@@ -1,7 +1,6 @@
 import { FiLock } from "react-icons/fi";
-import { PiBezierCurve, PiSelection } from "react-icons/pi";
-import { TbRouteSquare2 } from "react-icons/tb";
 
+import { getAuraSelectionTypeHelp } from "~/renderer/modules/aura-selection/AuraSelection.utils/AuraSelection.utils";
 import { useAuraOverlayShallow } from "~/renderer/store";
 
 import { AuraOverlayControlsHelp } from "../AuraOverlayControlsHelp/AuraOverlayControlsHelp";
@@ -14,6 +13,11 @@ interface AuraEditingNoticeProps {
   onAddPointerAura: () => void;
   onLockAuras: () => void;
 }
+
+const { Icon: DefaultAuraIcon } = getAuraSelectionTypeHelp("rect");
+const { Icon: ArchedAuraIcon, iconClassName: archedAuraIconClassName } =
+  getAuraSelectionTypeHelp("arc");
+const { Icon: PointerAuraIcon } = getAuraSelectionTypeHelp("points");
 
 function AuraEditingNotice({
   canAddAura,
@@ -43,7 +47,7 @@ function AuraEditingNotice({
             type="button"
             onClick={onAddAura}
           >
-            <PiSelection size={14} />
+            <DefaultAuraIcon size={14} />
             <span>
               {addingAuraShape === "rect" ? "Selecting..." : "Add new aura"}
             </span>
@@ -54,7 +58,7 @@ function AuraEditingNotice({
             type="button"
             onClick={onAddArchedAura}
           >
-            <PiBezierCurve className="rotate-90" size={14} />
+            <ArchedAuraIcon className={archedAuraIconClassName} size={14} />
             <span>
               {addingAuraShape === "arc" ? "Selecting..." : "Add arched aura"}
             </span>
@@ -65,7 +69,7 @@ function AuraEditingNotice({
             type="button"
             onClick={onAddPointerAura}
           >
-            <TbRouteSquare2 size={14} />
+            <PointerAuraIcon size={14} />
             <span>
               {addingAuraShape === "points"
                 ? "Selecting..."

@@ -176,11 +176,13 @@ function useAuraOverlayPlacementDrag({
             }
           : placement,
       ),
-    }).finally(() => {
-      if (dragStateRef.current === releasedDragState) {
-        commitDragState(null);
-      }
-    });
+    })
+      .catch(() => undefined)
+      .finally(() => {
+        if (dragStateRef.current === releasedDragState) {
+          commitDragState(null);
+        }
+      });
   };
 
   const handlePointerCancel = () => {

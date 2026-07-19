@@ -55,6 +55,8 @@ function CropPreviewBoxLayer({
               box.cropRegionId === activeAuraCropRegionId &&
               styles.selectedAuraBox,
           )}
+          data-preview-box-id={box.id}
+          data-preview-box-kind={box.kind}
           key={box.id}
           style={createCropPreviewBoxStyle(box, preview.bounds)}
         >

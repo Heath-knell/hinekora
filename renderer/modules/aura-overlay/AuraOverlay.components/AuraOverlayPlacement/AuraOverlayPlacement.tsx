@@ -218,6 +218,7 @@ function AuraOverlayPlacement({
         <AuraPlacementPropertiesPanel
           displayHeight={displayHeight}
           displayWidth={displayWidth}
+          label={crop.label}
           placement={effectivePlacement}
           pointControls={crop.shape === "points"}
           side={resolvePropertiesPanelSide(

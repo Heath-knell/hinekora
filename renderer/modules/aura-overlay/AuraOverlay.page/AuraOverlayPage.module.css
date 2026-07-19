@@ -14,6 +14,15 @@
     inset 0 0 44px color-mix(in oklch, var(--color-primary) 24%, transparent);
 }
 
+.profileError {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  z-index: 100;
+  width: min(420px, calc(100vw - 24px));
+  transform: translateX(-50%);
+}
+
 @keyframes auraEditingFramePulse {
   0%,
   100% {

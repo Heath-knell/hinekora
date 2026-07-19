@@ -300,6 +300,57 @@ describe("CapturePreview slice", () => {
     });
   });
 
+  it("coalesces concurrent thumbnail requests for the same source", async () => {
+    let resolveThumbnail!: (value: string | null) => void;
+    getSourceThumbnail.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveThumbnail = resolve;
+      }),
+    );
+    const store = createTestStore();
+
+    const firstRequest = store
+      .getState()
+      .capturePreview.getThumbnail("screen:1");
+    const secondRequest = store
+      .getState()
+      .capturePreview.getThumbnail("screen:1");
+
+    expect(getSourceThumbnail).toHaveBeenCalledOnce();
+    resolveThumbnail("data:image/png;base64,screen");
+    await expect(Promise.all([firstRequest, secondRequest])).resolves.toEqual([
+      "data:image/png;base64,screen",
+      "data:image/png;base64,screen",
+    ]);
+  });
+
+  it("starts a fresh thumbnail request after a forced source refresh", async () => {
+    let resolveStaleThumbnail!: (value: string | null) => void;
+    getSourceThumbnail
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveStaleThumbnail = resolve;
+        }),
+      )
+      .mockResolvedValueOnce("data:image/png;base64,fresh");
+    const store = createTestStore();
+
+    const staleRequest = store
+      .getState()
+      .capturePreview.getThumbnail("screen:1");
+    await store.getState().capturePreview.refresh({ force: true });
+    await expect(
+      store.getState().capturePreview.getThumbnail("screen:1"),
+    ).resolves.toBe("data:image/png;base64,fresh");
+    resolveStaleThumbnail("data:image/png;base64,stale");
+    await expect(staleRequest).resolves.toBe("data:image/png;base64,stale");
+
+    expect(getSourceThumbnail).toHaveBeenCalledTimes(2);
+    expect(store.getState().capturePreview.thumbnailsBySourceId).toEqual({
+      "screen:1": "data:image/png;base64,fresh",
+    });
+  });
+
   it("prunes cached thumbnails when refreshed sources no longer include them", async () => {
     const store = createTestStore();
 

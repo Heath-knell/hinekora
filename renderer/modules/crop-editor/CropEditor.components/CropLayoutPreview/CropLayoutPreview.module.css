@@ -108,8 +108,6 @@
 .box {
   position: absolute;
   overflow: hidden;
-  min-width: 24px;
-  min-height: 18px;
   border: var(--border) solid var(--crop-preview-accent);
   padding: 2px;
   color: var(--color-base-content);

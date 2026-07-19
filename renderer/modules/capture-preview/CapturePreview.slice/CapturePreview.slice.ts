@@ -38,6 +38,17 @@ export const createCapturePreviewSlice: BoundStoreStateCreator<
   CapturePreviewSlice
 > = (set, get) => {
   let recoveryRequest: Promise<void> | null = null;
+  const thumbnailRequests = new Map<string, Promise<string | null>>();
+  const thumbnailRequestVersions = new Map<string, number>();
+  const invalidateThumbnailRequests = (sourceIds: Iterable<string>) => {
+    for (const sourceId of sourceIds) {
+      thumbnailRequestVersions.set(
+        sourceId,
+        (thumbnailRequestVersions.get(sourceId) ?? 0) + 1,
+      );
+      thumbnailRequests.delete(sourceId);
+    }
+  };
   const recoverSources = (): Promise<void> => {
     if (recoveryRequest) {
       return recoveryRequest;
@@ -105,6 +116,14 @@ export const createCapturePreviewSlice: BoundStoreStateCreator<
             get().capturePreview.selectedSourceId,
             activeGame,
           );
+          const sourceIds = new Set(sources.map((source) => source.id));
+          invalidateThumbnailRequests(
+            options.force === true
+              ? thumbnailRequests.keys()
+              : [...thumbnailRequests.keys()].filter(
+                  (sourceId) => !sourceIds.has(sourceId),
+                ),
+          );
 
           set((state) => {
             state.capturePreview.sources = sources;
@@ -136,17 +155,40 @@ export const createCapturePreviewSlice: BoundStoreStateCreator<
           return cached;
         }
 
-        const thumbnailDataUrl =
-          await window.electron.capturePreview.getSourceThumbnail(sourceId);
-        set((state) => {
-          state.capturePreview.thumbnailsBySourceId[sourceId] =
-            thumbnailDataUrl;
-          pruneCapturePreviewThumbnails(
-            state.capturePreview.thumbnailsBySourceId,
-          );
-        });
+        const pendingRequest = thumbnailRequests.get(sourceId);
+        if (pendingRequest) {
+          return pendingRequest;
+        }
 
-        return thumbnailDataUrl;
+        const requestVersion =
+          (thumbnailRequestVersions.get(sourceId) ?? 0) + 1;
+        thumbnailRequestVersions.set(sourceId, requestVersion);
+        const request = window.electron.capturePreview
+          .getSourceThumbnail(sourceId)
+          .then((thumbnailDataUrl) => {
+            if (thumbnailRequestVersions.get(sourceId) === requestVersion) {
+              set((state) => {
+                state.capturePreview.thumbnailsBySourceId[sourceId] =
+                  thumbnailDataUrl;
+                pruneCapturePreviewThumbnails(
+                  state.capturePreview.thumbnailsBySourceId,
+                );
+              });
+            }
+
+            return thumbnailDataUrl;
+          })
+          .finally(() => {
+            if (thumbnailRequests.get(sourceId) === request) {
+              thumbnailRequests.delete(sourceId);
+              thumbnailRequestVersions.delete(sourceId);
+            } else if (!thumbnailRequests.has(sourceId)) {
+              thumbnailRequestVersions.delete(sourceId);
+            }
+          });
+        thumbnailRequests.set(sourceId, request);
+
+        return request;
       },
       select: (id: string) => {
         set((state) => {

@@ -59,7 +59,7 @@ function useAuraOverlayPlacementProperties({
       overlayPlacements: profile.overlayPlacements.map((item) =>
         item.id === placement.id ? update.placement : item,
       ),
-    });
+    }).catch(() => undefined);
   };
 
   return {

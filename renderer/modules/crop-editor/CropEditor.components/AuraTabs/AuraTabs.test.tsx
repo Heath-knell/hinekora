@@ -6,7 +6,6 @@ const storeMocks = vi.hoisted(() => ({
   useCropEditorShallow: vi.fn(),
   useProfilesShallow: vi.fn(),
   useSettingsSelector: vi.fn(),
-  updateProfile: vi.fn(),
 }));
 
 vi.mock("~/renderer/store", () => ({
@@ -52,7 +51,6 @@ describe("AuraTabs", () => {
       selector({
         items: [profile],
         selectedProfileId: "profile-1",
-        update: storeMocks.updateProfile,
       }),
     );
     storeMocks.useCropEditorShallow.mockImplementation((selector) =>
@@ -72,6 +70,23 @@ describe("AuraTabs", () => {
     expect(html).toContain("Flasks");
     expect(html).toContain("Buffs");
     expect(html).toContain('aria-selected="true"');
+    expect(html).not.toContain("<img");
+    expect(html).toContain("opacity-15");
+    expect(html).toContain("mix-blend-multiply");
+    expect(html).toContain("mix-blend-screen");
+    expect(html).toContain("right-[10px]");
+    expect(html).not.toContain("pr-11");
+  });
+
+  it("uses contrasting absolute icons behind every tab label", () => {
+    const html = renderToStaticMarkup(<AuraTabs />);
+
+    expect(html).toContain("right-[10px]");
+    expect(html).toContain("absolute inset-0");
+    expect(html).toContain("text-current");
+    expect(html).toContain("mix-blend-multiply");
+    expect(html).toContain("mix-blend-screen");
+    expect(html).toContain("opacity-15");
   });
 
   it("marks the only aura selected when no aura is stored yet", () => {
@@ -79,7 +94,6 @@ describe("AuraTabs", () => {
       selector({
         items: [{ ...profile, cropRegions: [profile.cropRegions[0]!] }],
         selectedProfileId: "profile-1",
-        update: storeMocks.updateProfile,
       }),
     );
     storeMocks.useCropEditorShallow.mockImplementation((selector) =>
@@ -100,7 +114,6 @@ describe("AuraTabs", () => {
       selector({
         items: [],
         selectedProfileId: null,
-        update: storeMocks.updateProfile,
       }),
     );
 

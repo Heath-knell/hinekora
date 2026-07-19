@@ -100,6 +100,10 @@ export interface ProfilesSlice {
     hydrate: () => Promise<void>;
     create: (name: string) => Promise<void>;
     update: (input: ProfileUpdateInput) => Promise<void>;
+    updateFromCurrent: (
+      id: string,
+      createInput: (profile: Profile) => Omit<ProfileUpdateInput, "id"> | null,
+    ) => Promise<void>;
     delete: (id: string) => Promise<void>;
     select: (id: string) => void;
     startListening: () => () => void;

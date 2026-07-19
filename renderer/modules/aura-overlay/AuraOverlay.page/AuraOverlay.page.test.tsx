@@ -223,6 +223,22 @@ describe("AuraOverlayPage", () => {
     });
   });
 
+  it("shows profile persistence failures in the overlay", () => {
+    storeMocks.useProfilesShallow.mockImplementation((selector) =>
+      selector({
+        error: "Profile update failed",
+        items: [profile],
+        selectedProfileId: "profile-1",
+        update: storeMocks.updateProfile,
+      }),
+    );
+
+    const html = renderToStaticMarkup(<AuraOverlayPage />);
+
+    expect(html).toContain('role="alert"');
+    expect(html).toContain("Profile update failed");
+  });
+
   afterEach(async () => {
     await act(async () => {
       for (const root of roots) {

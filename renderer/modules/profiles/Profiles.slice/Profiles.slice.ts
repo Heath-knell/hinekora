@@ -7,14 +7,220 @@ import type {
 
 import type { GameId, Profile, ProfileUpdateInput } from "~/types";
 
+interface ProfileUpdateCompletion {
+  isSettled: boolean;
+  promise: Promise<void>;
+  reject: (reason: unknown) => void;
+  resolve: () => void;
+}
+
+interface PendingProfileUpdate {
+  firstQueuedAt: number;
+  input: ProfileUpdateInput;
+}
+
+interface ProfileUpdateQueue {
+  completion: ProfileUpdateCompletion;
+  isCancelled: boolean;
+  isRunning: boolean;
+  pending: PendingProfileUpdate | null;
+  timer: ReturnType<typeof setTimeout> | null;
+}
+
+const PROFILE_UPDATE_DEBOUNCE_MS = 120;
+const PROFILE_UPDATE_MAX_LATENCY_MS = 400;
+
 export const createProfilesSlice: BoundStoreStateCreator<ProfilesSlice> = (
   set,
   get,
 ) => {
   const persistSelectedProfileId = createSelectedProfileIdPersister(set, get);
   let profilesChangeVersion = 0;
+  const deletingProfileIds = new Set<string>();
+  const updateQueues = new Map<string, ProfileUpdateQueue>();
   const markProfilesChanged = () => {
     profilesChangeVersion += 1;
+  };
+  const applyOptimisticUpdate = (input: ProfileUpdateInput) => {
+    set((state) => {
+      const profile = state.profiles.items.find((item) => item.id === input.id);
+      if (!profile) {
+        return;
+      }
+
+      Object.assign(profile, input, { id: profile.id });
+      state.profiles.error = null;
+    });
+  };
+  const mergeIntoPendingUpdate = (
+    queue: ProfileUpdateQueue,
+    input: ProfileUpdateInput,
+  ) => {
+    if (queue.pending) {
+      queue.pending.input = { ...queue.pending.input, ...input, id: input.id };
+      return;
+    }
+
+    queue.pending = { firstQueuedAt: Date.now(), input };
+  };
+  const mergeFailedBatchIntoPending = (
+    queue: ProfileUpdateQueue,
+    batch: PendingProfileUpdate,
+  ) => {
+    if (!queue.pending) {
+      queue.pending = {
+        firstQueuedAt: Date.now() - PROFILE_UPDATE_MAX_LATENCY_MS,
+        input: batch.input,
+      };
+      return;
+    }
+    queue.pending.input = {
+      ...batch.input,
+      ...queue.pending.input,
+      id: batch.input.id,
+    };
+    queue.pending.firstQueuedAt = Date.now() - PROFILE_UPDATE_MAX_LATENCY_MS;
+  };
+  const finishUpdateQueue = (
+    profileId: string,
+    queue: ProfileUpdateQueue,
+    failure?: { error: unknown },
+  ) => {
+    if (queue.timer) {
+      clearTimeout(queue.timer);
+      queue.timer = null;
+    }
+    queue.isRunning = false;
+    queue.pending = null;
+    if (updateQueues.get(profileId) === queue) {
+      updateQueues.delete(profileId);
+    }
+    if (queue.completion.isSettled) {
+      return;
+    }
+
+    queue.completion.isSettled = true;
+    if (!failure) {
+      queue.completion.resolve();
+    } else {
+      queue.completion.reject(failure.error);
+    }
+  };
+  const scheduleUpdateQueue = (
+    profileId: string,
+    queue: ProfileUpdateQueue,
+  ) => {
+    if (queue.isCancelled || queue.isRunning || !queue.pending) {
+      return;
+    }
+    if (queue.timer) {
+      clearTimeout(queue.timer);
+    }
+
+    const elapsed = Date.now() - queue.pending.firstQueuedAt;
+    const delay = Math.max(
+      0,
+      Math.min(
+        PROFILE_UPDATE_DEBOUNCE_MS,
+        PROFILE_UPDATE_MAX_LATENCY_MS - elapsed,
+      ),
+    );
+    queue.timer = setTimeout(() => {
+      void flushUpdateQueue(profileId, queue);
+    }, delay);
+  };
+  const flushUpdateQueue = async (
+    profileId: string,
+    queue: ProfileUpdateQueue,
+  ): Promise<void> => {
+    queue.timer = null;
+    if (queue.isCancelled || !queue.pending) {
+      finishUpdateQueue(profileId, queue);
+      return;
+    }
+
+    const batch = queue.pending;
+    queue.pending = null;
+    queue.isRunning = true;
+    let finalError: unknown;
+    let didFail = false;
+
+    try {
+      const updated = await window.electron.profiles.update(batch.input);
+      if (!queue.isCancelled && queue.pending === null) {
+        set((state) => {
+          state.profiles.items = replaceProfile(state.profiles.items, updated);
+          state.profiles.selectedProfileId = updated.id;
+          state.profiles.error = null;
+        });
+        persistSelectedProfileId(updated.id);
+      }
+    } catch (error) {
+      if (!queue.isCancelled && queue.pending) {
+        mergeFailedBatchIntoPending(queue, batch);
+      } else if (!queue.isCancelled) {
+        let recoveredItems: Profile[] | null = null;
+        try {
+          recoveredItems = await window.electron.profiles.list();
+        } catch {
+          // Keep the optimistic state when authoritative recovery also fails.
+        }
+
+        if (queue.pending) {
+          mergeFailedBatchIntoPending(queue, batch);
+        } else if (!queue.isCancelled) {
+          set((state) => {
+            if (recoveredItems) {
+              state.profiles.items = reconcileAuthoritativeProfiles(
+                state.profiles.items,
+                recoveredItems,
+                updateQueues.keys(),
+                new Set([profileId]),
+              );
+            }
+            state.profiles.error =
+              error instanceof Error ? error.message : "Profile update failed";
+          });
+          finalError = error;
+          didFail = true;
+        }
+      }
+    }
+
+    queue.isRunning = false;
+    if (queue.isCancelled) {
+      finishUpdateQueue(profileId, queue);
+    } else if (queue.pending) {
+      scheduleUpdateQueue(profileId, queue);
+    } else if (didFail) {
+      finishUpdateQueue(profileId, queue, { error: finalError });
+    } else {
+      finishUpdateQueue(profileId, queue);
+    }
+  };
+  const enqueueUpdate = (input: ProfileUpdateInput): Promise<void> => {
+    markProfilesChanged();
+    const existingQueue = updateQueues.get(input.id);
+    const queue = existingQueue ?? createProfileUpdateQueue();
+    updateQueues.set(input.id, queue);
+
+    mergeIntoPendingUpdate(queue, input);
+    scheduleUpdateQueue(input.id, queue);
+
+    return queue.completion.promise;
+  };
+  const cancelProfileUpdates = async (profileId: string): Promise<void> => {
+    const queue = updateQueues.get(profileId);
+    if (!queue) {
+      return;
+    }
+
+    queue.isCancelled = true;
+    queue.pending = null;
+    if (!queue.isRunning) {
+      finishUpdateQueue(profileId, queue);
+    }
+    await queue.completion.promise;
   };
 
   return {
@@ -69,40 +275,64 @@ export const createProfilesSlice: BoundStoreStateCreator<ProfilesSlice> = (
       create: async (name: string) => {
         markProfilesChanged();
         const created = await window.electron.profiles.create({ name });
-        const items = await window.electron.profiles.list();
         set((state) => {
-          state.profiles.items = items;
+          state.profiles.items = replaceProfile(state.profiles.items, created);
           state.profiles.selectedProfileId = created.id;
         });
         persistSelectedProfileId(created.id);
       },
       update: async (input: ProfileUpdateInput) => {
-        markProfilesChanged();
-        const updated = await window.electron.profiles.update(input);
-        const items = await window.electron.profiles.list();
-        set((state) => {
-          state.profiles.items = items;
-          state.profiles.selectedProfileId = updated.id;
-        });
-        persistSelectedProfileId(updated.id);
+        if (deletingProfileIds.has(input.id)) {
+          return;
+        }
+        applyOptimisticUpdate(input);
+        await enqueueUpdate(input);
+      },
+      updateFromCurrent: async (id, createInput) => {
+        if (deletingProfileIds.has(id)) {
+          return;
+        }
+        const profile = get().profiles.items.find((item) => item.id === id);
+        if (!profile) {
+          return;
+        }
+
+        const update = createInput(profile);
+        if (!update) {
+          return;
+        }
+
+        const input = { ...update, id };
+        applyOptimisticUpdate(input);
+        await enqueueUpdate(input);
       },
       delete: async (id: string) => {
         markProfilesChanged();
-        await window.electron.profiles.delete(id);
-        const items = await window.electron.profiles.list();
-        const selectedProfileId = resolveSelectedProfileId(
-          items,
-          get().profiles.selectedProfileId === id
-            ? null
-            : get().profiles.selectedProfileId,
-          getActiveGame(get),
-        );
-        set((state) => {
-          state.profiles.items = items;
-          state.profiles.selectedProfileId = selectedProfileId;
-          state.profiles.error = null;
-        });
-        persistSelectedProfileId(selectedProfileId);
+        deletingProfileIds.add(id);
+        try {
+          await cancelProfileUpdates(id);
+          await window.electron.profiles.delete(id);
+          const remainingItems = get().profiles.items.filter(
+            (item) => item.id !== id,
+          );
+          const selectedProfileId = resolveSelectedProfileId(
+            remainingItems,
+            get().profiles.selectedProfileId === id
+              ? null
+              : get().profiles.selectedProfileId,
+            getActiveGame(get),
+          );
+          set((state) => {
+            state.profiles.items = state.profiles.items.filter(
+              (item) => item.id !== id,
+            );
+            state.profiles.selectedProfileId = selectedProfileId;
+            state.profiles.error = null;
+          });
+          persistSelectedProfileId(selectedProfileId);
+        } finally {
+          deletingProfileIds.delete(id);
+        }
       },
       select: (id: string) => {
         markProfilesChanged();
@@ -118,12 +348,17 @@ export const createProfilesSlice: BoundStoreStateCreator<ProfilesSlice> = (
           const previousSelectedProfileId = get().profiles.selectedProfileId;
           let selectedProfileId: string | null = null;
           set((state) => {
-            selectedProfileId = resolveSelectedProfileId(
+            const nextItems = reconcileAuthoritativeProfiles(
+              state.profiles.items,
               items,
+              updateQueues.keys(),
+            );
+            selectedProfileId = resolveSelectedProfileId(
+              nextItems,
               state.profiles.selectedProfileId,
               getActiveGame(get),
             );
-            state.profiles.items = items;
+            state.profiles.items = nextItems;
             state.profiles.selectedProfileId = selectedProfileId;
           });
           if (
@@ -136,6 +371,67 @@ export const createProfilesSlice: BoundStoreStateCreator<ProfilesSlice> = (
     },
   };
 };
+
+function createProfileUpdateQueue(): ProfileUpdateQueue {
+  let resolve!: () => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<void>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+
+  return {
+    completion: { isSettled: false, promise, reject, resolve },
+    isCancelled: false,
+    isRunning: false,
+    pending: null,
+    timer: null,
+  };
+}
+
+function replaceProfile(
+  items: readonly Profile[],
+  updated: Profile,
+): Profile[] {
+  const existingIndex = items.findIndex((item) => item.id === updated.id);
+  if (existingIndex === -1) {
+    return [...items, updated];
+  }
+
+  return items.map((item) => (item.id === updated.id ? updated : item));
+}
+
+function reconcileAuthoritativeProfiles(
+  currentItems: readonly Profile[],
+  authoritativeItems: readonly Profile[],
+  queuedProfileIds: Iterable<string>,
+  authoritativeQueuedProfileIds: ReadonlySet<string> = new Set(),
+): Profile[] {
+  const queuedIds = new Set(queuedProfileIds);
+  const currentItemsById = new Map(
+    currentItems.map((item) => [item.id, item] as const),
+  );
+  const authoritativeIds = new Set(authoritativeItems.map((item) => item.id));
+  const reconciledItems = authoritativeItems.map((item) => {
+    if (queuedIds.has(item.id) && !authoritativeQueuedProfileIds.has(item.id)) {
+      return currentItemsById.get(item.id) ?? item;
+    }
+
+    return item;
+  });
+
+  for (const item of currentItems) {
+    if (
+      queuedIds.has(item.id) &&
+      !authoritativeQueuedProfileIds.has(item.id) &&
+      !authoritativeIds.has(item.id)
+    ) {
+      reconciledItems.push(item);
+    }
+  }
+
+  return reconciledItems;
+}
 
 function resolveSelectedProfileId(
   items: Profile[],

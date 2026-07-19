@@ -1,12 +1,19 @@
 import type { CSSProperties } from "react";
 
+import {
+  createAuraViewportProjection,
+  projectAuraCropRegion,
+  projectAuraOverlayPlacement,
+  resolveAuraPlacementDisplaySize,
+  resolveAuraReferenceViewport,
+} from "~/renderer/modules/aura-overlay/AuraOverlay.page/AuraOverlay.page.utils";
 import { findCapturePreviewSourceForTarget } from "~/renderer/modules/capture-preview/CapturePreview.utils/CapturePreview.utils";
-import { resolveActiveGameProfile } from "~/renderer/modules/profiles/Profiles.utils/Profiles.utils";
 
 import type {
   CapturePreviewSource,
+  CaptureTarget,
   CropRegion,
-  GameId,
+  OverlayPlacement,
   Profile,
 } from "~/types";
 
@@ -18,6 +25,7 @@ export interface CropPreviewBounds {
 }
 
 export interface CropPreviewBox {
+  // This model represents viewport geometry; compositing stays in AuraOverlay.
   id: string;
   cropRegionId?: string;
   label: string;
@@ -36,6 +44,8 @@ export interface CropPreviewBox {
 
 export interface CropLayoutPreviewModel {
   bounds: CropPreviewBounds;
+  referenceBounds: CropPreviewBounds;
+  viewportBounds: CropPreviewBounds;
   boxes: CropPreviewBox[];
 }
 
@@ -54,40 +64,48 @@ const auraAccentColors = [
 ] as const;
 export const cropResizeCorners: CropResizeCorner[] = ["nw", "ne", "sw", "se"];
 
-export function getSelectedCropLayoutProfile(
-  profiles: Profile[],
-  selectedProfileId: string | null,
-  activeGame: GameId,
-): Profile | null {
-  return resolveActiveGameProfile(profiles, selectedProfileId, activeGame);
-}
-
 export function createCropLayoutPreview(
   profile: Profile,
   sourceBounds: CropPreviewBounds | null = null,
   visibleCropRegionId: string | null = null,
 ): CropLayoutPreviewModel {
-  const sourceBoxes = profile.cropRegions.map((crop, index) => ({
-    ...crop,
-    cropRegionId: crop.id,
-    kind: "source" as const,
-    sourceX: crop.x,
-    sourceY: crop.y,
-    sourceWidth: crop.width,
-    sourceHeight: crop.height,
-    opacity: 1,
-    toneIndex: index,
-  }));
-  const auraBoxes = createAuraBoxes(profile);
+  const profileReferenceBounds =
+    resolveCropPreviewProfileBounds(profile, visibleCropRegionId) ??
+    layoutFallbackBounds;
+  const targetBounds = sourceBounds ?? profileReferenceBounds;
+  const sourceBoxes = createSourceBoxes(
+    profile,
+    targetBounds,
+    profileReferenceBounds,
+  );
+  const auraBoxes = createAuraBoxes(
+    profile,
+    targetBounds,
+    profileReferenceBounds,
+  );
   const boxes = [...sourceBoxes, ...auraBoxes].filter(
     (box) =>
       visibleCropRegionId === null || box.cropRegionId === visibleCropRegionId,
   );
 
   return {
-    bounds: getLayoutBounds(boxes, sourceBounds ?? layoutFallbackBounds),
+    bounds: targetBounds,
+    referenceBounds: profileReferenceBounds,
+    viewportBounds: targetBounds,
     boxes,
   };
+}
+
+export function resolveCropPreviewSource(
+  profile: Profile,
+  sources: CapturePreviewSource[],
+  selectedSourceId: string | null,
+): CapturePreviewSource | null {
+  return (
+    findCapturePreviewSourceForTarget(profile.captureTarget, sources) ??
+    sources.find((item) => item.id === selectedSourceId) ??
+    null
+  );
 }
 
 export function resolveCropPreviewSourceBounds(
@@ -95,13 +113,10 @@ export function resolveCropPreviewSourceBounds(
   sources: CapturePreviewSource[],
   selectedSourceId: string | null,
 ): CropPreviewBounds | null {
-  const source =
-    findCapturePreviewSourceForTarget(profile.captureTarget, sources) ??
-    sources.find((item) => item.id === selectedSourceId) ??
-    null;
+  const source = resolveCropPreviewSource(profile, sources, selectedSourceId);
 
   if (!source?.width || !source.height) {
-    return null;
+    return readCaptureTargetBounds(profile.captureTarget);
   }
 
   return { width: source.width, height: source.height };
@@ -115,8 +130,8 @@ export function createCropPreviewBoxStyle(
     "--crop-preview-accent": getCropPreviewAccentColor(box),
     left: `${(box.x / bounds.width) * 100}%`,
     top: `${(box.y / bounds.height) * 100}%`,
-    width: `${Math.max((box.width / bounds.width) * 100, 0.8)}%`,
-    height: `${Math.max((box.height / bounds.height) * 100, 0.8)}%`,
+    width: `${(box.width / bounds.width) * 100}%`,
+    height: `${(box.height / bounds.height) * 100}%`,
     opacity: box.opacity,
   };
 }
@@ -205,6 +220,31 @@ export function resizeCropRegionFromCorner(
   return { ...region, x, y, width, height };
 }
 
+export function resizeCropRegionFromPreviewDelta(
+  region: CropRegion,
+  corner: CropResizeCorner,
+  deltaX: number,
+  deltaY: number,
+  targetViewport: CropPreviewBounds,
+  fallbackReferenceViewport: CropPreviewBounds,
+): CropRegion {
+  const referenceViewport = resolveAuraReferenceViewport(
+    region,
+    fallbackReferenceViewport,
+  );
+  const projection = createAuraViewportProjection(
+    referenceViewport,
+    targetViewport,
+  );
+
+  return resizeCropRegionFromCorner(
+    region,
+    corner,
+    deltaX / projection.scale,
+    deltaY / projection.scale,
+  );
+}
+
 function getCropPreviewAccentColor(box: CropPreviewBox): string {
   return box.kind === "aura"
     ? getAuraAccentColor(box)
@@ -222,7 +262,42 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
-function createAuraBoxes(profile: Profile): CropPreviewBox[] {
+function createSourceBoxes(
+  profile: Profile,
+  targetBounds: CropPreviewBounds,
+  fallbackReferenceBounds: CropPreviewBounds,
+): CropPreviewBox[] {
+  return profile.cropRegions.map((crop, index) => {
+    const projectedCrop = projectAuraCropRegion(
+      crop,
+      targetBounds,
+      resolveCropReferenceViewport(crop, fallbackReferenceBounds),
+    );
+
+    return {
+      id: crop.id,
+      cropRegionId: crop.id,
+      label: crop.label,
+      kind: "source" as const,
+      x: projectedCrop.x,
+      y: projectedCrop.y,
+      width: projectedCrop.width,
+      height: projectedCrop.height,
+      sourceX: projectedCrop.x,
+      sourceY: projectedCrop.y,
+      sourceWidth: projectedCrop.width,
+      sourceHeight: projectedCrop.height,
+      opacity: 1,
+      toneIndex: index,
+    };
+  });
+}
+
+function createAuraBoxes(
+  profile: Profile,
+  targetBounds: CropPreviewBounds,
+  fallbackReferenceBounds: CropPreviewBounds,
+): CropPreviewBox[] {
   const cropsById = new Map(
     profile.cropRegions.map((crop) => [crop.id, crop] as const),
   );
@@ -232,6 +307,26 @@ function createAuraBoxes(profile: Profile): CropPreviewBox[] {
     if (!crop) {
       return [];
     }
+    const cropReferenceViewport = resolveCropReferenceViewport(
+      crop,
+      fallbackReferenceBounds,
+    );
+    const projectedCrop = projectAuraCropRegion(
+      crop,
+      targetBounds,
+      cropReferenceViewport,
+    );
+    const projectedPlacement = projectAuraOverlayPlacement(
+      placement,
+      targetBounds,
+      cropReferenceViewport,
+    );
+    const placementSize = resolveAuraPlacementDisplaySize(
+      crop,
+      placement,
+      targetBounds,
+      cropReferenceViewport,
+    );
 
     return [
       {
@@ -239,14 +334,14 @@ function createAuraBoxes(profile: Profile): CropPreviewBox[] {
         cropRegionId: placement.cropRegionId,
         label: crop.label,
         kind: "aura" as const,
-        x: placement.x,
-        y: placement.y,
-        width: crop.width * placement.scale,
-        height: crop.height * placement.scale,
-        sourceX: crop.x,
-        sourceY: crop.y,
-        sourceWidth: crop.width,
-        sourceHeight: crop.height,
+        x: projectedPlacement.x,
+        y: projectedPlacement.y,
+        width: placementSize.width,
+        height: placementSize.height,
+        sourceX: projectedCrop.x,
+        sourceY: projectedCrop.y,
+        sourceWidth: projectedCrop.width,
+        sourceHeight: projectedCrop.height,
         opacity: placement.opacity,
         toneIndex: index,
       },
@@ -254,15 +349,68 @@ function createAuraBoxes(profile: Profile): CropPreviewBox[] {
   });
 }
 
-function getLayoutBounds(
-  boxes: CropPreviewBox[],
-  fallbackBounds: CropPreviewBounds,
+function resolveCropReferenceViewport(
+  crop: CropRegion,
+  fallbackReferenceBounds: CropPreviewBounds,
 ): CropPreviewBounds {
-  return boxes.reduce(
-    (bounds, box) => ({
-      width: Math.max(bounds.width, box.x + box.width),
-      height: Math.max(bounds.height, box.y + box.height),
-    }),
-    fallbackBounds,
+  return resolveAuraReferenceViewport(crop, fallbackReferenceBounds);
+}
+
+function resolveCropPreviewProfileBounds(
+  profile: Profile,
+  visibleCropRegionId: string | null,
+): CropPreviewBounds | null {
+  const captureTargetBounds = readCaptureTargetBounds(profile.captureTarget);
+  if (captureTargetBounds) {
+    return captureTargetBounds;
+  }
+
+  const cropRegions = visibleCropRegionId
+    ? profile.cropRegions.filter((region) => region.id === visibleCropRegionId)
+    : profile.cropRegions;
+  const overlayPlacements = visibleCropRegionId
+    ? profile.overlayPlacements.filter(
+        (placement) => placement.cropRegionId === visibleCropRegionId,
+      )
+    : profile.overlayPlacements;
+
+  return (
+    cropRegions.map(readCoordinateReferenceBounds).find(isCropPreviewBounds) ??
+    overlayPlacements
+      .map(readCoordinateReferenceBounds)
+      .find(isCropPreviewBounds) ??
+    profile.cropRegions
+      .map(readCoordinateReferenceBounds)
+      .find(isCropPreviewBounds) ??
+    profile.overlayPlacements
+      .map(readCoordinateReferenceBounds)
+      .find(isCropPreviewBounds) ??
+    null
   );
+}
+
+function readCaptureTargetBounds(
+  captureTarget: CaptureTarget | null,
+): CropPreviewBounds | null {
+  if (!captureTarget?.width || !captureTarget.height) {
+    return null;
+  }
+
+  return { width: captureTarget.width, height: captureTarget.height };
+}
+
+function readCoordinateReferenceBounds(
+  value: CropRegion | OverlayPlacement,
+): CropPreviewBounds | null {
+  if (!value.referenceWidth || !value.referenceHeight) {
+    return null;
+  }
+
+  return { width: value.referenceWidth, height: value.referenceHeight };
+}
+
+function isCropPreviewBounds(
+  value: CropPreviewBounds | null,
+): value is CropPreviewBounds {
+  return value !== null;
 }

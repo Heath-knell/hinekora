@@ -18,10 +18,16 @@ export { createAuraProfileUpdateFromSnapshot } from "./createAuraProfileUpdateFr
 export { createAuraVideoStyle } from "./createAuraVideoStyle/createAuraVideoStyle";
 export { createAuraViewportProjection } from "./createAuraViewportProjection/createAuraViewportProjection";
 export { isAuraResizeCorner } from "./isAuraResizeCorner/isAuraResizeCorner";
+export { normalizeAuraPlacementNumberValue } from "./normalizeAuraPlacementNumberValue/normalizeAuraPlacementNumberValue";
 export { projectAuraBox } from "./projectAuraBox/projectAuraBox";
 export { projectAuraCropRegion } from "./projectAuraCropRegion/projectAuraCropRegion";
 export { projectAuraOverlayPlacement } from "./projectAuraOverlayPlacement/projectAuraOverlayPlacement";
 export { projectAuraPoint } from "./projectAuraPoint/projectAuraPoint";
+export {
+  type AuraRotationDegrees,
+  auraRotationDegrees,
+  readAuraRotationDegrees,
+} from "./readAuraRotationDegrees/readAuraRotationDegrees";
 export { readAuraRouteParams } from "./readAuraRouteParams/readAuraRouteParams";
 export { readAuraVideoSize } from "./readAuraVideoSize/readAuraVideoSize";
 export { resizeAuraPlacementFromCorner } from "./resizeAuraPlacementFromCorner/resizeAuraPlacementFromCorner";

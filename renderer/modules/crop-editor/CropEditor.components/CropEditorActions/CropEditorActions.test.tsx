@@ -1,5 +1,5 @@
 import { act } from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -40,6 +40,13 @@ const profile = {
   createdAt: new Date(0).toISOString(),
   updatedAt: new Date(0).toISOString(),
 };
+let roots: Root[] = [];
+
+function createTestRoot(container: Element): Root {
+  const root = createRoot(container);
+  roots.push(root);
+  return root;
+}
 
 function createRunningPoe1ProcessState() {
   return {
@@ -51,8 +58,19 @@ function createRunningPoe1ProcessState() {
   };
 }
 
+async function openAddAuraMenu(container: HTMLElement): Promise<void> {
+  const trigger = container.querySelector<HTMLElement>(
+    '[aria-haspopup="menu"]',
+  );
+  expect(trigger).toBeInstanceOf(HTMLButtonElement);
+  await act(async () => {
+    trigger?.click();
+  });
+}
+
 describe("CropEditorActions", () => {
   beforeEach(() => {
+    roots = [];
     vi.clearAllMocks();
     electronMocks.minimize.mockResolvedValue(undefined);
     electronMocks.selectCropRegion.mockResolvedValue({
@@ -112,6 +130,9 @@ describe("CropEditorActions", () => {
   });
 
   afterEach(() => {
+    for (const root of roots) {
+      root.unmount();
+    }
     document.body.replaceChildren();
     vi.restoreAllMocks();
   });
@@ -119,12 +140,74 @@ describe("CropEditorActions", () => {
   it("renders the disabled add aura page action with its explanation", () => {
     const html = renderToStaticMarkup(<CropEditorActions />);
 
-    expect(html).toContain("Add new aura");
-    expect(html).toContain("Add arched aura");
-    expect(html).toContain("Lock");
-    expect(html).toContain("Unlock");
+    expect(html).toContain("Add aura");
+    expect(html).not.toContain("Add new aura");
+    expect(html).not.toContain('role="menu"');
+    expect(html).toContain("select-sm");
+    expect(html).toContain("btn-sm");
+    expect(html).not.toContain("mt-2 flex");
+    expect(html).not.toContain("radiogroup");
+    expect(html).not.toContain("Unlock");
     expect(html).toContain("Start the selected Path of Exile game");
     expect(html).toContain("disabled");
+  });
+
+  it("renders the three add choices under one add aura trigger", async () => {
+    storeMocks.usePoeProcessSelector.mockImplementation((selector) =>
+      selector({
+        state: createRunningPoe1ProcessState(),
+      }),
+    );
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createTestRoot(container);
+
+    await act(async () => {
+      root.render(<CropEditorActions />);
+      await Promise.resolve();
+    });
+    await openAddAuraMenu(container);
+
+    expect(container.querySelectorAll('[aria-haspopup="menu"]')).toHaveLength(
+      1,
+    );
+    expect(container.querySelectorAll('[role="menuitem"]')).toHaveLength(3);
+  });
+
+  it("closes the add aura menu after choosing an action", async () => {
+    storeMocks.usePoeProcessSelector.mockImplementation((selector) =>
+      selector({ state: createRunningPoe1ProcessState() }),
+    );
+    electronMocks.selectCropRegion.mockResolvedValueOnce(null);
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createTestRoot(container);
+
+    await act(async () => {
+      root.render(<CropEditorActions />);
+    });
+    const menu = container.querySelector('[data-onboarding="aura-new-aura"]');
+    const trigger = container.querySelector<HTMLElement>(
+      '[aria-haspopup="menu"]',
+    );
+    expect(menu).toBeInstanceOf(HTMLDivElement);
+    expect(trigger).toBeInstanceOf(HTMLElement);
+
+    await act(async () => {
+      trigger?.click();
+    });
+    const addButton = [...container.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Add new aura"),
+    );
+    expect(addButton).toBeDefined();
+    expect(container.querySelectorAll('[role="menuitem"]')).toHaveLength(3);
+
+    await act(async () => {
+      addButton?.click();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelectorAll('[role="menuitem"]')).toHaveLength(0);
   });
 
   it("unlocks the aura overlay before selecting a new aura region", async () => {
@@ -138,12 +221,14 @@ describe("CropEditorActions", () => {
       .mockReturnValueOnce("00000000-0000-4000-8000-000000000002");
     const container = document.createElement("div");
     document.body.append(container);
-    const root = createRoot(container);
+    const root = createTestRoot(container);
 
     await act(async () => {
       root.render(<CropEditorActions />);
       await Promise.resolve();
     });
+
+    await openAddAuraMenu(container);
 
     const addButton = [...container.querySelectorAll("button")].find((button) =>
       button.textContent?.includes("Add new aura"),
@@ -222,12 +307,14 @@ describe("CropEditorActions", () => {
     electronMocks.selectCropRegion.mockResolvedValue(null);
     const container = document.createElement("div");
     document.body.append(container);
-    const root = createRoot(container);
+    const root = createTestRoot(container);
 
     await act(async () => {
       root.render(<CropEditorActions />);
       await Promise.resolve();
     });
+
+    await openAddAuraMenu(container);
 
     const addButton = [...container.querySelectorAll("button")].find((button) =>
       button.textContent?.includes("Add new aura"),
@@ -276,12 +363,14 @@ describe("CropEditorActions", () => {
       .mockReturnValueOnce("00000000-0000-4000-8000-000000000002");
     const container = document.createElement("div");
     document.body.append(container);
-    const root = createRoot(container);
+    const root = createTestRoot(container);
 
     await act(async () => {
       root.render(<CropEditorActions />);
       await Promise.resolve();
     });
+
+    await openAddAuraMenu(container);
 
     const addButton = [...container.querySelectorAll("button")].find((button) =>
       button.textContent?.includes("Add arched aura"),
@@ -312,5 +401,32 @@ describe("CropEditorActions", () => {
         ],
       }),
     );
+  });
+
+  it("shows add aura failures", async () => {
+    storeMocks.usePoeProcessSelector.mockImplementation((selector) =>
+      selector({ state: createRunningPoe1ProcessState() }),
+    );
+    storeMocks.updateProfile.mockRejectedValueOnce(new Error("Save failed"));
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createTestRoot(container);
+
+    await act(async () => {
+      root.render(<CropEditorActions />);
+    });
+    await openAddAuraMenu(container);
+    const addButton = [...container.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Add new aura"),
+    );
+    await act(async () => {
+      addButton?.click();
+    });
+
+    await vi.waitFor(() => {
+      expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+        "Save failed",
+      );
+    });
   });
 });

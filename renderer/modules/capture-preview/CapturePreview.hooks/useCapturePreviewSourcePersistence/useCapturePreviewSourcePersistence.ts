@@ -91,7 +91,7 @@ function useCapturePreviewSourcePersistence(
       void updateProfile({
         id: targetProfile.id,
         captureTarget,
-      });
+      }).catch(() => undefined);
     },
     [
       activeGame,

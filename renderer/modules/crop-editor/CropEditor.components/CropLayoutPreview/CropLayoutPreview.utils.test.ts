@@ -6,8 +6,8 @@ import {
   createCropPreviewStageStyle,
   createCropPreviewSurfaceStyle,
   formatCropPreviewBoxLabel,
-  getSelectedCropLayoutProfile,
   resizeCropRegionFromCorner,
+  resizeCropRegionFromPreviewDelta,
   resolveCropPreviewSourceBounds,
 } from "./CropLayoutPreview.utils";
 
@@ -45,6 +45,26 @@ describe("CropLayoutPreview utils", () => {
       y: 129,
       width: 1,
       height: 1,
+    });
+  });
+
+  it("converts preview resize deltas back to the crop reference viewport", () => {
+    expect(
+      resizeCropRegionFromPreviewDelta(
+        {
+          ...crop,
+          referenceHeight: 1440,
+          referenceWidth: 2560,
+        },
+        "se",
+        75,
+        30,
+        { width: 1920, height: 1080 },
+        { width: 2560, height: 1440 },
+      ),
+    ).toMatchObject({
+      width: 300,
+      height: 120,
     });
   });
 
@@ -173,32 +193,183 @@ describe("CropLayoutPreview utils", () => {
     ).toEqual({ width: 2560, height: 1440 });
   });
 
-  it("resolves the crop layout profile for the active game", () => {
-    const poe1Profile = {
-      id: "profile-1",
-      name: "Default",
-      game: "poe1" as const,
-      targetFps: 30,
-      captureTarget: null,
-      cropRegions: [crop],
-      overlayPlacements: [],
-      createdAt: new Date(0).toISOString(),
-      updatedAt: new Date(0).toISOString(),
-    };
-    const poe2Profile = {
-      ...poe1Profile,
-      game: "poe2" as const,
-      id: "profile-2",
-      name: "PoE 2",
-    };
+  it("keeps source bounds when aura placements extend outside the viewport", () => {
+    const preview = createCropLayoutPreview(
+      {
+        id: "profile-1",
+        name: "Default",
+        game: "poe1",
+        targetFps: 30,
+        captureTarget: null,
+        cropRegions: [crop],
+        overlayPlacements: [
+          {
+            id: "placement-1",
+            cropRegionId: crop.id,
+            opacity: 1,
+            scale: 1,
+            x: 2500,
+            y: -40,
+          },
+        ],
+        createdAt: new Date(0).toISOString(),
+        updatedAt: new Date(0).toISOString(),
+      },
+      { width: 2560, height: 1440 },
+    );
+
+    expect(preview.bounds).toEqual({ width: 2560, height: 1440 });
+    expect(createCropPreviewStageStyle(preview.bounds)).toEqual({
+      aspectRatio: "2560 / 1440",
+    });
+  });
+
+  it("projects 2560x1440 crop and placement coordinates into 1920x1080", () => {
+    const preview = createCropLayoutPreview(
+      {
+        id: "profile-1",
+        name: "Default",
+        game: "poe1",
+        targetFps: 30,
+        captureTarget: null,
+        cropRegions: [
+          {
+            ...crop,
+            referenceHeight: 1440,
+            referenceWidth: 2560,
+          },
+        ],
+        overlayPlacements: [
+          {
+            id: "placement-1",
+            cropRegionId: crop.id,
+            opacity: 1,
+            referenceHeight: 1440,
+            referenceWidth: 2560,
+            scale: 1,
+            x: 400,
+            y: 200,
+          },
+        ],
+        createdAt: new Date(0).toISOString(),
+        updatedAt: new Date(0).toISOString(),
+      },
+      { width: 1920, height: 1080 },
+    );
+
+    expect(preview).toMatchObject({
+      bounds: { width: 1920, height: 1080 },
+      referenceBounds: { width: 2560, height: 1440 },
+      viewportBounds: { width: 1920, height: 1080 },
+    });
+    expect(preview.boxes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "source",
+          x: 75,
+          y: 37.5,
+          width: 150,
+          height: 60,
+        }),
+        expect.objectContaining({
+          kind: "aura",
+          x: 300,
+          y: 150,
+        }),
+      ]),
+    );
+  });
+
+  it("keeps layout geometry independent of overlay compositing transforms", () => {
+    const createPreview = (placementOverrides = {}) =>
+      createCropLayoutPreview(
+        {
+          id: "profile-1",
+          name: "Default",
+          game: "poe1" as const,
+          targetFps: 30,
+          captureTarget: null,
+          cropRegions: [crop],
+          overlayPlacements: [
+            {
+              id: "placement-1",
+              cropRegionId: crop.id,
+              opacity: 1,
+              scale: 1,
+              x: 400,
+              y: 200,
+              ...placementOverrides,
+            },
+          ],
+          createdAt: new Date(0).toISOString(),
+          updatedAt: new Date(0).toISOString(),
+        },
+        { width: 1920, height: 1080 },
+      ).boxes;
 
     expect(
-      getSelectedCropLayoutProfile(
-        [poe1Profile, poe2Profile],
-        "profile-1",
-        "poe2",
-      ),
-    ).toBe(poe2Profile);
+      createPreview({
+        arcStraightened: true,
+        mirrored: true,
+        rotationDegrees: 90,
+      }),
+    ).toEqual(createPreview());
+  });
+
+  it("uses saved aura reference bounds when no live source bounds are available", () => {
+    const preview = createCropLayoutPreview(
+      {
+        id: "profile-1",
+        name: "Default",
+        game: "poe2",
+        targetFps: 30,
+        captureTarget: null,
+        cropRegions: [
+          {
+            id: "crop-1",
+            label: "Aura 8",
+            x: 2378,
+            y: 1191,
+            width: 23,
+            height: 220,
+            referenceWidth: 2560,
+            referenceHeight: 1440,
+          },
+        ],
+        overlayPlacements: [
+          {
+            id: "placement-1",
+            cropRegionId: "crop-1",
+            x: 1408,
+            y: 456,
+            scale: 1,
+            opacity: 1,
+            referenceWidth: 2560,
+            referenceHeight: 1440,
+          },
+        ],
+        createdAt: new Date(0).toISOString(),
+        updatedAt: new Date(0).toISOString(),
+      },
+      null,
+      "crop-1",
+    );
+
+    expect(preview.bounds).toEqual({ width: 2560, height: 1440 });
+    expect(preview.boxes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "source",
+          x: 2378,
+          y: 1191,
+        }),
+        expect.objectContaining({
+          kind: "aura",
+          x: 1408,
+          y: 456,
+        }),
+      ]),
+    );
   });
 
   it("filters preview boxes to the selected aura when requested", () => {
@@ -282,6 +453,75 @@ describe("CropLayoutPreview utils", () => {
           },
         ],
         null,
+      ),
+    ).toEqual({ width: 2560, height: 1440 });
+  });
+
+  it("uses persisted capture target dimensions when no matching source is available", () => {
+    expect(
+      resolveCropPreviewSourceBounds(
+        {
+          id: "profile-1",
+          name: "Default",
+          game: "poe1",
+          targetFps: 30,
+          captureTarget: {
+            height: 1440,
+            id: "display-primary",
+            kind: "display",
+            label: "Primary",
+            width: 2560,
+          },
+          cropRegions: [crop],
+          overlayPlacements: [],
+          createdAt: new Date(0).toISOString(),
+          updatedAt: new Date(0).toISOString(),
+        },
+        [],
+        null,
+      ),
+    ).toEqual({ width: 2560, height: 1440 });
+  });
+
+  it("keeps source bounds tied to the profile-matched source", () => {
+    expect(
+      resolveCropPreviewSourceBounds(
+        {
+          id: "profile-1",
+          name: "Default",
+          game: "poe1",
+          targetFps: 30,
+          captureTarget: {
+            id: "display-primary",
+            kind: "display",
+            label: "Primary",
+          },
+          cropRegions: [crop],
+          overlayPlacements: [],
+          createdAt: new Date(0).toISOString(),
+          updatedAt: new Date(0).toISOString(),
+        },
+        [
+          {
+            displayId: "display-primary",
+            height: 1440,
+            id: "screen:primary",
+            kind: "screen",
+            name: "Primary",
+            thumbnailDataUrl: null,
+            width: 2560,
+          },
+          {
+            displayId: "display-secondary",
+            height: 1080,
+            id: "screen:secondary",
+            kind: "screen",
+            name: "Secondary",
+            thumbnailDataUrl: null,
+            width: 1920,
+          },
+        ],
+        "screen:secondary",
       ),
     ).toEqual({ width: 2560, height: 1440 });
   });

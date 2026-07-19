@@ -219,6 +219,7 @@ interface DashboardE2EOptions {
   replayClipOperationDelayMs?: number;
   selectedPaths?: Array<string | null>;
   poeProcessState?: PoeProcessState;
+  profile?: Profile;
   setupState?: SetupState;
   skipDashboardShellChecks?: boolean;
   initialHash?: string;
@@ -307,7 +308,7 @@ function createDashboardE2EFixture(
       width: 2560,
     },
   ];
-  const profile: Profile = {
+  const profile: Profile = options.profile ?? {
     captureTarget: {
       height: 1440,
       id: "1",
@@ -1302,10 +1303,12 @@ async function setupDashboardE2E(
 
             return unsubscribe;
           },
+          selectCropRegion: async () => null,
           setAuraLocked: async (locked) => {
             emitAuraLock(locked);
           },
           setRecorderMode: async (mode) => mode,
+          showAura: async () => undefined,
           showRecorder: async () => {
             recorderOverlayRequested = true;
             emitRecorderVisibility(true);

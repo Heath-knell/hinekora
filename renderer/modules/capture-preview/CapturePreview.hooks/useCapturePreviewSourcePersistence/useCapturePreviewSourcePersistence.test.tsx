@@ -42,7 +42,9 @@ vi.mock("~/renderer/store", () => ({
       items: CaptureProfile[];
       selectedProfileId: string | null;
       select: (id: string) => void;
-      update: (input: Partial<CaptureProfile> & { id: string }) => void;
+      update: (
+        input: Partial<CaptureProfile> & { id: string },
+      ) => Promise<void>;
     }) => T,
   ) =>
     selector({
@@ -104,6 +106,7 @@ describe("useCapturePreviewSourcePersistence", () => {
     storeMocks.isRecorderActive = false;
     storeMocks.profileItems = [profile];
     storeMocks.selectedProfileId = profile.id;
+    storeMocks.updateProfile.mockResolvedValue(undefined);
   });
 
   afterEach(() => {

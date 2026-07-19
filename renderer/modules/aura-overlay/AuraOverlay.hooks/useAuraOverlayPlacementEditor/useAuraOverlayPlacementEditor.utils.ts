@@ -1,4 +1,5 @@
 import {
+  AuraLabelSettings,
   AuraPlacementScaleSettings,
   AuraPointPlacementSettings,
   type CropRegion,
@@ -29,9 +30,16 @@ function createPlacementPropertiesUpdate(
   fallbackReferenceViewport: AuraVideoSize | null,
 ): AuraPlacementPropertiesUpdate {
   const nextPlacement: OverlayPlacement = { ...placement };
-  const nextCrop = crop;
+  let nextCrop = crop;
   if (crop.shape !== "arc") {
     delete nextPlacement.arcStraightened;
+  }
+
+  if (patch.label !== undefined) {
+    const label = patch.label.trim().slice(0, AuraLabelSettings.maxLength);
+    if (label.length > 0) {
+      nextCrop = { ...nextCrop, label };
+    }
   }
 
   if (patch.scale !== undefined) {
@@ -40,6 +48,10 @@ function createPlacementPropertiesUpdate(
       AuraPlacementScaleSettings.minScale,
       AuraPlacementScaleSettings.maxScale,
     );
+  }
+
+  if (patch.opacity !== undefined) {
+    nextPlacement.opacity = clamp(Math.round(patch.opacity * 100) / 100, 0, 1);
   }
 
   if (patch.mirrored !== undefined) {

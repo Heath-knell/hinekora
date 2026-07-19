@@ -14,9 +14,6 @@ import {
 export const cropNumberFields = ["x", "y", "width", "height"] as const;
 export type CropNumberField = (typeof cropNumberFields)[number];
 
-export const placementNumberFields = ["x", "y", "scale", "opacity"] as const;
-export type PlacementNumberField = (typeof placementNumberFields)[number];
-
 interface PlacementViewport {
   width: number;
   height: number;
@@ -53,12 +50,6 @@ export function isCropNumberField(
   value: string | undefined,
 ): value is CropNumberField {
   return cropNumberFields.includes(value as CropNumberField);
-}
-
-export function isPlacementNumberField(
-  value: string | undefined,
-): value is PlacementNumberField {
-  return placementNumberFields.includes(value as PlacementNumberField);
 }
 
 export function clamp(value: number, min: number, max: number): number {

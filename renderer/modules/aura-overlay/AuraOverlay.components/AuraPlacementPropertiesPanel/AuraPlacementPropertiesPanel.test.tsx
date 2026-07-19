@@ -43,6 +43,7 @@ describe("AuraPlacementPropertiesPanel", () => {
         <AuraPlacementPropertiesPanel
           displayHeight={80}
           displayWidth={120}
+          label="Aura name"
           placement={placement}
           side="right"
           visibleThickness={20}
@@ -87,6 +88,7 @@ describe("AuraPlacementPropertiesPanel", () => {
         <AuraPlacementPropertiesPanel
           displayHeight={80}
           displayWidth={120}
+          label="Aura name"
           placement={{ ...placement, scale: 2 }}
           side="right"
           visibleThickness={20}
@@ -123,6 +125,7 @@ describe("AuraPlacementPropertiesPanel", () => {
         <AuraPlacementPropertiesPanel
           displayHeight={80}
           displayWidth={120}
+          label="Aura name"
           placement={placement}
           side="right"
           visibleThickness={20}
@@ -147,5 +150,94 @@ describe("AuraPlacementPropertiesPanel", () => {
     expect(onChange).toHaveBeenCalledWith("placement-1", {
       rotationDegrees: 90,
     });
+  });
+
+  it("commits opacity and name changes", async () => {
+    const onChange = vi.fn();
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <AuraPlacementPropertiesPanel
+          displayHeight={80}
+          displayWidth={120}
+          label="Aura name"
+          placement={placement}
+          side="right"
+          onChange={onChange}
+        />,
+      );
+    });
+
+    const nameInput = container.querySelector<HTMLInputElement>(
+      'input[name="label"]',
+    );
+    const opacityInput = container.querySelector<HTMLInputElement>(
+      'input[name="opacity"]',
+    );
+    expect(nameInput).toBeInstanceOf(HTMLInputElement);
+    expect(nameInput?.maxLength).toBe(80);
+    expect(nameInput?.parentElement?.className).toContain(
+      "propertiesNameField",
+    );
+    expect(opacityInput).toBeInstanceOf(HTMLInputElement);
+
+    await act(async () => {
+      nameInput?.focus();
+      setInputValue(nameInput as HTMLInputElement, "Renamed aura");
+    });
+
+    await act(async () => {
+      nameInput?.blur();
+    });
+
+    await act(async () => {
+      opacityInput?.focus();
+      setInputValue(opacityInput as HTMLInputElement, "0.45");
+    });
+
+    expect(onChange).toHaveBeenCalledWith("placement-1", {
+      label: "Renamed aura",
+    });
+    expect(onChange).toHaveBeenCalledWith("placement-1", {
+      opacity: 0.45,
+      recordHistory: true,
+    });
+  });
+
+  it("restores the placement name without committing when Escape is pressed", async () => {
+    const onChange = vi.fn();
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <AuraPlacementPropertiesPanel
+          displayHeight={80}
+          displayWidth={120}
+          label="Aura name"
+          placement={placement}
+          side="right"
+          onChange={onChange}
+        />,
+      );
+    });
+
+    const nameInput = container.querySelector<HTMLInputElement>(
+      'input[name="label"]',
+    );
+    await act(async () => {
+      nameInput?.focus();
+      setInputValue(nameInput as HTMLInputElement, "Discard me");
+      nameInput?.dispatchEvent(
+        new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }),
+      );
+    });
+
+    expect(nameInput?.value).toBe("Aura name");
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

@@ -157,11 +157,13 @@ function useAuraOverlayPlacementResize({
           ? { ...draftPlacement, ...referenceDimensions }
           : placement,
       ),
-    }).finally(() => {
-      if (resizeStateRef.current === releasedResizeState) {
-        commitResizeState(null);
-      }
-    });
+    })
+      .catch(() => undefined)
+      .finally(() => {
+        if (resizeStateRef.current === releasedResizeState) {
+          commitResizeState(null);
+        }
+      });
   };
 
   const handleResizePointerCancel = (event: PointerEvent<HTMLElement>) => {
