@@ -35,4 +35,25 @@ describe("Modal", () => {
     expect(modalBox?.classList.contains("bg-base-100")).toBe(true);
     expect(modalBox?.classList.contains("bg-base-300")).toBe(false);
   });
+
+  it("prevents native cancellation when escape closing is disabled", async () => {
+    const modalRef = createRef<ModalHandle>();
+
+    await act(async () => {
+      root.render(
+        <Modal ref={modalRef} closeOnEscape={false}>
+          Content
+        </Modal>,
+      );
+    });
+    const dialog = document.body.querySelector("dialog");
+    const cancelEvent = new Event("cancel", {
+      bubbles: true,
+      cancelable: true,
+    });
+
+    act(() => dialog?.dispatchEvent(cancelEvent));
+
+    expect(cancelEvent.defaultPrevented).toBe(true);
+  });
 });

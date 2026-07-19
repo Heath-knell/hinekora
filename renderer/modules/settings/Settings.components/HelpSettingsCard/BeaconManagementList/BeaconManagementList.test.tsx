@@ -50,7 +50,7 @@ describe("BeaconManagementList", () => {
     expect(container.textContent).toContain("Aura Manager");
     expect(container.textContent).toContain("Editor");
     expect(container.textContent).toContain("1 / 2 dismissed");
-    expect(container.textContent).toContain("2 / 4 dismissed");
+    expect(container.textContent).toContain("1 / 3 dismissed");
     expect(container.textContent).toContain("3 / 5 dismissed");
   });
 

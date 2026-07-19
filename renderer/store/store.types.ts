@@ -98,13 +98,16 @@ export interface ProfilesSlice {
     error: string | null;
     selectedProfileId: string | null;
     hydrate: () => Promise<void>;
-    create: (name: string) => Promise<void>;
+    create: (name: string, game?: Profile["game"]) => Promise<void>;
+    duplicate: (sourceId: string, name: string) => Promise<void>;
     update: (input: ProfileUpdateInput) => Promise<void>;
     updateFromCurrent: (
       id: string,
       createInput: (profile: Profile) => Omit<ProfileUpdateInput, "id"> | null,
     ) => Promise<void>;
     delete: (id: string) => Promise<void>;
+    deleteAll: (fallbackId: string) => Promise<void>;
+    flush: (id: string) => Promise<void>;
     select: (id: string) => void;
     startListening: () => () => void;
   };

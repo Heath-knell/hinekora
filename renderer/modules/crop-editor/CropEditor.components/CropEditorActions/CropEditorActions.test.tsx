@@ -4,25 +4,17 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const storeMocks = vi.hoisted(() => ({
-  setAuraOverlayLocked: vi.fn(),
-  selectAura: vi.fn(),
+  closeProfileActionDialog: vi.fn(),
+  flushProfile: vi.fn(),
+  openProfileActionDialog: vi.fn(),
+  selectProfile: vi.fn(),
   useCropEditorShallow: vi.fn(),
-  usePoeProcessSelector: vi.fn(),
   useProfilesShallow: vi.fn(),
   useSettingsSelector: vi.fn(),
-  updateProfile: vi.fn(),
-}));
-
-const electronMocks = vi.hoisted(() => ({
-  minimize: vi.fn(),
-  selectCropRegion: vi.fn(),
-  setAuraLocked: vi.fn(),
-  showAura: vi.fn(),
 }));
 
 vi.mock("~/renderer/store", () => ({
   useCropEditorShallow: storeMocks.useCropEditorShallow,
-  usePoeProcessSelector: storeMocks.usePoeProcessSelector,
   useProfilesShallow: storeMocks.useProfilesShallow,
   useSettingsSelector: storeMocks.useSettingsSelector,
 }));
@@ -32,7 +24,7 @@ import { CropEditorActions } from "./CropEditorActions";
 const profile = {
   id: "profile-1",
   name: "Default",
-  game: "poe1",
+  game: "poe1" as const,
   targetFps: 30,
   captureTarget: null,
   cropRegions: [],
@@ -42,391 +34,212 @@ const profile = {
 };
 let roots: Root[] = [];
 
-function createTestRoot(container: Element): Root {
+function renderActions(): HTMLElement {
+  const container = document.createElement("div");
+  document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  return root;
+  act(() => root.render(<CropEditorActions />));
+
+  return container;
 }
 
-function createRunningPoe1ProcessState() {
-  return {
-    game: "poe1" as const,
-    isRunning: true as const,
-    pid: 4241,
-    processName: "PathOfExile.exe",
-    windowTitle: "Path of Exile",
-  };
-}
-
-async function openAddAuraMenu(container: HTMLElement): Promise<void> {
-  const trigger = container.querySelector<HTMLElement>(
-    '[aria-haspopup="menu"]',
+function getButton(container: ParentNode, name: string): HTMLButtonElement {
+  const button = [...container.querySelectorAll("button")].find((item) =>
+    item.textContent?.replace(/\s+/g, " ").trim().startsWith(name),
   );
-  expect(trigger).toBeInstanceOf(HTMLButtonElement);
-  await act(async () => {
-    trigger?.click();
-  });
+  expect(button).toBeInstanceOf(HTMLButtonElement);
+
+  return button as HTMLButtonElement;
 }
 
 describe("CropEditorActions", () => {
   beforeEach(() => {
     roots = [];
     vi.clearAllMocks();
-    electronMocks.minimize.mockResolvedValue(undefined);
-    electronMocks.selectCropRegion.mockResolvedValue({
-      x: 100,
-      y: 120,
-      width: 50,
-      height: 60,
-      viewportWidth: 1920,
-      viewportHeight: 1080,
-    });
-    electronMocks.setAuraLocked.mockResolvedValue(undefined);
-    electronMocks.showAura.mockResolvedValue(undefined);
-    storeMocks.updateProfile.mockResolvedValue(undefined);
+    storeMocks.flushProfile.mockResolvedValue(undefined);
     storeMocks.useProfilesShallow.mockImplementation((selector) =>
       selector({
+        create: vi.fn(),
+        delete: vi.fn(),
+        deleteAll: vi.fn(),
+        duplicate: vi.fn(),
+        error: null,
+        flush: storeMocks.flushProfile,
         items: [profile],
-        selectedProfileId: "profile-1",
-        select: vi.fn(),
-        update: storeMocks.updateProfile,
+        select: storeMocks.selectProfile,
+        selectedProfileId: profile.id,
+        update: vi.fn(),
       }),
     );
     storeMocks.useCropEditorShallow.mockImplementation((selector) =>
       selector({
-        auraOverlayLocked: true,
-        selectAura: storeMocks.selectAura,
-        setAuraOverlayLocked: storeMocks.setAuraOverlayLocked,
-      }),
-    );
-    storeMocks.usePoeProcessSelector.mockImplementation((selector) =>
-      selector({
-        state: {
-          isRunning: false,
-          processName: "",
-        },
+        closeProfileActionDialog: storeMocks.closeProfileActionDialog,
+        openProfileActionDialog: storeMocks.openProfileActionDialog,
+        profileActionDialog: null,
       }),
     );
     storeMocks.useSettingsSelector.mockImplementation((selector) =>
-      selector({
-        value: {
-          activeGame: "poe1",
-        },
-      }),
+      selector({ value: { activeGame: "poe1" } }),
     );
-    Object.defineProperty(window, "electron", {
-      configurable: true,
-      value: {
-        mainWindow: {
-          minimize: electronMocks.minimize,
-        },
-        overlayWindows: {
-          selectCropRegion: electronMocks.selectCropRegion,
-          setAuraLocked: electronMocks.setAuraLocked,
-          showAura: electronMocks.showAura,
-        },
-      },
-    });
   });
 
   afterEach(() => {
     for (const root of roots) {
-      root.unmount();
+      act(() => root.unmount());
     }
     document.body.replaceChildren();
-    vi.restoreAllMocks();
   });
 
-  it("renders the disabled add aura page action with its explanation", () => {
+  it("renders profile actions instead of the add aura workflow", () => {
     const html = renderToStaticMarkup(<CropEditorActions />);
 
-    expect(html).toContain("Add aura");
-    expect(html).not.toContain("Add new aura");
-    expect(html).not.toContain('role="menu"');
+    expect(html).toContain("Profile actions");
+    expect(html).toContain("Save changes");
+    expect(html).toContain("Add new profile");
+    expect(html).toContain("Edit current profile");
+    expect(html).toContain("Duplicate profile");
+    expect(html).toContain("Delete current profile");
+    expect(html).toContain("Delete all profiles");
+    expect(html).not.toContain("Add aura");
     expect(html).toContain("select-sm");
     expect(html).toContain("btn-sm");
-    expect(html).not.toContain("mt-2 flex");
-    expect(html).not.toContain("radiogroup");
-    expect(html).not.toContain("Unlock");
-    expect(html).toContain("Start the selected Path of Exile game");
-    expect(html).toContain("disabled");
   });
 
-  it("renders the three add choices under one add aura trigger", async () => {
-    storeMocks.usePoeProcessSelector.mockImplementation((selector) =>
+  it("selects another compatible aura profile", () => {
+    const secondProfile = { ...profile, id: "profile-2", name: "Bossing" };
+    storeMocks.useProfilesShallow.mockImplementation((selector) =>
       selector({
-        state: createRunningPoe1ProcessState(),
+        flush: storeMocks.flushProfile,
+        error: null,
+        items: [profile, secondProfile],
+        select: storeMocks.selectProfile,
+        selectedProfileId: profile.id,
       }),
     );
-    const container = document.createElement("div");
-    document.body.append(container);
-    const root = createTestRoot(container);
-
-    await act(async () => {
-      root.render(<CropEditorActions />);
-      await Promise.resolve();
-    });
-    await openAddAuraMenu(container);
-
-    expect(container.querySelectorAll('[aria-haspopup="menu"]')).toHaveLength(
-      1,
+    const container = renderActions();
+    const select = container.querySelector<HTMLSelectElement>(
+      '[aria-label="Aura profile"]',
     );
-    expect(container.querySelectorAll('[role="menuitem"]')).toHaveLength(3);
+    expect(select).toBeInstanceOf(HTMLSelectElement);
+
+    act(() => {
+      if (select) {
+        select.value = secondProfile.id;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+
+    expect(storeMocks.selectProfile).toHaveBeenCalledWith(secondProfile.id);
   });
 
-  it("closes the add aura menu after choosing an action", async () => {
-    storeMocks.usePoeProcessSelector.mockImplementation((selector) =>
-      selector({ state: createRunningPoe1ProcessState() }),
-    );
-    electronMocks.selectCropRegion.mockResolvedValueOnce(null);
-    const container = document.createElement("div");
-    document.body.append(container);
-    const root = createTestRoot(container);
+  it("opens profile workflows from the menu", () => {
+    const container = renderActions();
 
-    await act(async () => {
-      root.render(<CropEditorActions />);
-    });
-    const menu = container.querySelector('[data-onboarding="aura-new-aura"]');
-    const trigger = container.querySelector<HTMLElement>(
-      '[aria-haspopup="menu"]',
-    );
-    expect(menu).toBeInstanceOf(HTMLDivElement);
-    expect(trigger).toBeInstanceOf(HTMLElement);
+    act(() => getButton(container, "Add new profile").click());
+    act(() => getButton(container, "Edit current profile").click());
+    act(() => getButton(container, "Duplicate profile").click());
+    act(() => getButton(container, "Delete current profile").click());
+    act(() => getButton(container, "Delete all profiles").click());
 
-    await act(async () => {
-      trigger?.click();
-    });
-    const addButton = [...container.querySelectorAll("button")].find((button) =>
-      button.textContent?.includes("Add new aura"),
-    );
-    expect(addButton).toBeDefined();
-    expect(container.querySelectorAll('[role="menuitem"]')).toHaveLength(3);
-
-    await act(async () => {
-      addButton?.click();
-      await Promise.resolve();
-    });
-
-    expect(container.querySelectorAll('[role="menuitem"]')).toHaveLength(0);
+    expect(storeMocks.openProfileActionDialog.mock.calls).toEqual([
+      ["create"],
+      ["edit"],
+      ["duplicate"],
+      ["delete-current"],
+      ["delete-all"],
+    ]);
   });
 
-  it("unlocks the aura overlay before selecting a new aura region", async () => {
-    storeMocks.usePoeProcessSelector.mockImplementation((selector) =>
-      selector({
-        state: createRunningPoe1ProcessState(),
-      }),
-    );
-    vi.spyOn(crypto, "randomUUID")
-      .mockReturnValueOnce("00000000-0000-4000-8000-000000000001")
-      .mockReturnValueOnce("00000000-0000-4000-8000-000000000002");
-    const container = document.createElement("div");
-    document.body.append(container);
-    const root = createTestRoot(container);
+  it("dismisses profile actions on outside interaction and escape", () => {
+    const container = renderActions();
+    const details = container.querySelector("details");
+    expect(details).toBeInstanceOf(HTMLDetailsElement);
+    details?.setAttribute("open", "");
 
-    await act(async () => {
-      root.render(<CropEditorActions />);
-      await Promise.resolve();
-    });
-
-    await openAddAuraMenu(container);
-
-    const addButton = [...container.querySelectorAll("button")].find((button) =>
-      button.textContent?.includes("Add new aura"),
-    );
-
-    expect(addButton).toBeDefined();
-    await act(async () => {
-      addButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    const unlockCallOrder =
-      electronMocks.setAuraLocked.mock.invocationCallOrder[0];
-    const selectCallOrder =
-      electronMocks.selectCropRegion.mock.invocationCallOrder[0];
-
-    expect(storeMocks.setAuraOverlayLocked).toHaveBeenCalledWith(false);
-    expect(electronMocks.setAuraLocked).toHaveBeenCalledWith(false);
-    expect(unlockCallOrder).toBeDefined();
-    expect(selectCallOrder).toBeDefined();
-    expect(unlockCallOrder).toBeLessThan(selectCallOrder ?? 0);
-    expect(electronMocks.minimize).toHaveBeenCalledTimes(1);
-    expect(electronMocks.selectCropRegion).toHaveBeenCalledTimes(1);
-    expect(electronMocks.selectCropRegion).toHaveBeenCalledWith({
-      shape: "rect",
-    });
-    expect(storeMocks.updateProfile).toHaveBeenCalledWith({
-      id: "profile-1",
-      cropRegions: [
-        {
-          id: "00000000-0000-4000-8000-000000000001",
-          label: "Aura 1",
-          x: 100,
-          y: 120,
-          width: 50,
-          height: 60,
-          referenceWidth: 1920,
-          referenceHeight: 1080,
-        },
-      ],
-      overlayPlacements: [
-        expect.objectContaining({
-          id: "00000000-0000-4000-8000-000000000002",
-          cropRegionId: "00000000-0000-4000-8000-000000000001",
-          x: 935,
-          y: 510,
-          scale: 1,
-          opacity: 1,
-          referenceWidth: 1920,
-          referenceHeight: 1080,
-        }),
-      ],
-    });
-    expect(storeMocks.selectAura).toHaveBeenCalledWith(
-      "00000000-0000-4000-8000-000000000001",
-    );
-    expect(electronMocks.showAura).toHaveBeenCalledTimes(1);
-    expect(electronMocks.showAura).toHaveBeenCalledWith("profile-1");
-  });
-
-  it("keeps an already unlocked aura overlay unlocked without another lock call", async () => {
-    storeMocks.useCropEditorShallow.mockImplementation((selector) =>
-      selector({
-        auraOverlayLocked: false,
-        selectAura: storeMocks.selectAura,
-        setAuraOverlayLocked: storeMocks.setAuraOverlayLocked,
-      }),
-    );
-    storeMocks.usePoeProcessSelector.mockImplementation((selector) =>
-      selector({
-        state: createRunningPoe1ProcessState(),
-      }),
-    );
-    electronMocks.selectCropRegion.mockResolvedValue(null);
-    const container = document.createElement("div");
-    document.body.append(container);
-    const root = createTestRoot(container);
-
-    await act(async () => {
-      root.render(<CropEditorActions />);
-      await Promise.resolve();
-    });
-
-    await openAddAuraMenu(container);
-
-    const addButton = [...container.querySelectorAll("button")].find((button) =>
-      button.textContent?.includes("Add new aura"),
-    );
-
-    await act(async () => {
-      addButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(storeMocks.setAuraOverlayLocked).not.toHaveBeenCalled();
-    expect(electronMocks.setAuraLocked).not.toHaveBeenCalled();
-    expect(electronMocks.selectCropRegion).toHaveBeenCalledTimes(1);
-    expect(electronMocks.selectCropRegion).toHaveBeenCalledWith({
-      shape: "rect",
-    });
-  });
-
-  it("creates an arched aura from the arched aura action", async () => {
-    storeMocks.usePoeProcessSelector.mockImplementation((selector) =>
-      selector({
-        state: createRunningPoe1ProcessState(),
-      }),
-    );
-    electronMocks.selectCropRegion.mockResolvedValue({
-      shape: "arc",
-      x: 90,
-      y: 90,
-      width: 140,
-      height: 80,
-      arc: {
-        startX: 10,
-        startY: 70,
-        endX: 130,
-        endY: 70,
-        controlX: 70,
-        controlY: 10,
-        thickness: 20,
-      },
-      viewportWidth: 1920,
-      viewportHeight: 1080,
-    });
-    vi.spyOn(crypto, "randomUUID")
-      .mockReturnValueOnce("00000000-0000-4000-8000-000000000001")
-      .mockReturnValueOnce("00000000-0000-4000-8000-000000000002");
-    const container = document.createElement("div");
-    document.body.append(container);
-    const root = createTestRoot(container);
-
-    await act(async () => {
-      root.render(<CropEditorActions />);
-      await Promise.resolve();
-    });
-
-    await openAddAuraMenu(container);
-
-    const addButton = [...container.querySelectorAll("button")].find((button) =>
-      button.textContent?.includes("Add arched aura"),
-    );
-
-    await act(async () => {
-      addButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(electronMocks.selectCropRegion).toHaveBeenCalledWith({
-      shape: "arc",
-    });
-    expect(storeMocks.updateProfile).toHaveBeenCalledWith(
-      expect.objectContaining({
-        cropRegions: [
-          expect.objectContaining({
-            label: "Arched aura 1",
-            shape: "arc",
-            arc: expect.objectContaining({
-              controlX: 70,
-              controlY: 10,
-              thickness: 20,
-            }),
-          }),
-        ],
-      }),
-    );
-  });
-
-  it("shows add aura failures", async () => {
-    storeMocks.usePoeProcessSelector.mockImplementation((selector) =>
-      selector({ state: createRunningPoe1ProcessState() }),
-    );
-    storeMocks.updateProfile.mockRejectedValueOnce(new Error("Save failed"));
-    const container = document.createElement("div");
-    document.body.append(container);
-    const root = createTestRoot(container);
-
-    await act(async () => {
-      root.render(<CropEditorActions />);
-    });
-    await openAddAuraMenu(container);
-    const addButton = [...container.querySelectorAll("button")].find((button) =>
-      button.textContent?.includes("Add new aura"),
-    );
-    await act(async () => {
-      addButton?.click();
-    });
-
-    await vi.waitFor(() => {
-      expect(container.querySelector('[role="alert"]')?.textContent).toContain(
-        "Save failed",
+    act(() => {
+      document.body.dispatchEvent(
+        new PointerEvent("pointerdown", { bubbles: true }),
       );
     });
+    expect(details?.hasAttribute("open")).toBe(false);
+
+    details?.setAttribute("open", "");
+    act(() => {
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }),
+      );
+    });
+    expect(details?.hasAttribute("open")).toBe(false);
+  });
+
+  it("shows profile save failures in Aura Manager", () => {
+    storeMocks.useProfilesShallow.mockImplementation((selector) =>
+      selector({
+        create: vi.fn(),
+        delete: vi.fn(),
+        deleteAll: vi.fn(),
+        duplicate: vi.fn(),
+        error: "Save failed",
+        flush: storeMocks.flushProfile,
+        items: [profile],
+        select: storeMocks.selectProfile,
+        selectedProfileId: profile.id,
+        update: vi.fn(),
+      }),
+    );
+
+    const container = renderActions();
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      "Save failed",
+    );
+  });
+
+  it("supports profile keyboard shortcuts and explicit save", async () => {
+    const container = renderActions();
+
+    act(() => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", { ctrlKey: true, key: "n" }),
+      );
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", { ctrlKey: true, key: "e" }),
+      );
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", { ctrlKey: true, key: "d" }),
+      );
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", { ctrlKey: true, key: "s" }),
+      );
+    });
+    await act(async () => Promise.resolve());
+    act(() => getButton(container, "Save changes").click());
+    await act(async () => Promise.resolve());
+
+    expect(storeMocks.openProfileActionDialog.mock.calls).toEqual([
+      ["create"],
+      ["edit"],
+      ["delete-current"],
+    ]);
+    expect(storeMocks.flushProfile).toHaveBeenCalledTimes(2);
+    expect(storeMocks.flushProfile).toHaveBeenCalledWith(profile.id);
+  });
+
+  it("does not open profile dialogs from editing fields", () => {
+    const container = renderActions();
+    const select = container.querySelector('[aria-label="Aura profile"]');
+
+    act(() => {
+      select?.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          bubbles: true,
+          ctrlKey: true,
+          key: "n",
+        }),
+      );
+    });
+
+    expect(storeMocks.openProfileActionDialog).not.toHaveBeenCalled();
   });
 });

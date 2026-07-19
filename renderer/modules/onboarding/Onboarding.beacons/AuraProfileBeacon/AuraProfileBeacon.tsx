@@ -7,7 +7,7 @@ function AuraProfileBeacon(props: PopoverComponentProps) {
   return (
     <Popover
       title="Aura profile"
-      subtitle="Choose which capture profile the Aura Manager should edit."
+      subtitle="Choose which aura profile the Aura Manager should edit."
       {...props}
     >
       <div className="space-y-3">
@@ -26,8 +26,8 @@ function AuraProfileBeacon(props: PopoverComponentProps) {
             <li className="flex items-start gap-2">
               <span className="mt-0.5 text-accent">•</span>
               <span>
-                For now, profile names and profile details are managed from
-                Settings.
+                Use Profile actions to create, rename, copy, save, or delete
+                aura profiles without leaving this page.
               </span>
             </li>
           </ul>

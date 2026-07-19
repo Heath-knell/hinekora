@@ -58,10 +58,16 @@ describe("CropEditor slice", () => {
     store.getState().cropEditor.setAuraOverlayLocked(false);
     store.getState().cropEditor.selectAura("crop-1");
     store.getState().cropEditor.setShowAllAurasInPreview(true);
+    store.getState().cropEditor.openProfileActionDialog("edit");
+
+    expect(store.getState().cropEditor.profileActionDialog).toBe("edit");
+
+    store.getState().cropEditor.closeProfileActionDialog();
     store.getState().cropEditor.selectAura(null);
 
     expect(store.getState().cropEditor.auraOverlayLocked).toBe(false);
     expect(store.getState().cropEditor.selectedAuraCropRegionId).toBeNull();
     expect(store.getState().cropEditor.showAllAurasInPreview).toBe(true);
+    expect(store.getState().cropEditor.profileActionDialog).toBeNull();
   });
 });

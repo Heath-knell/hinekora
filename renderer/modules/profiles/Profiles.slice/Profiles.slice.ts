@@ -148,12 +148,19 @@ export const createProfilesSlice: BoundStoreStateCreator<ProfilesSlice> = (
     try {
       const updated = await window.electron.profiles.update(batch.input);
       if (!queue.isCancelled && queue.pending === null) {
+        let selectedProfileId: string | null = null;
         set((state) => {
-          state.profiles.items = replaceProfile(state.profiles.items, updated);
-          state.profiles.selectedProfileId = updated.id;
+          const items = replaceProfile(state.profiles.items, updated);
+          selectedProfileId = resolveSelectedProfileId(
+            items,
+            updated.id,
+            getActiveGame(get),
+          );
+          state.profiles.items = items;
+          state.profiles.selectedProfileId = selectedProfileId;
           state.profiles.error = null;
         });
-        persistSelectedProfileId(updated.id);
+        persistSelectedProfileId(selectedProfileId);
       }
     } catch (error) {
       if (!queue.isCancelled && queue.pending) {
@@ -222,6 +229,46 @@ export const createProfilesSlice: BoundStoreStateCreator<ProfilesSlice> = (
     }
     await queue.completion.promise;
   };
+  const flushProfileUpdates = async (profileId: string): Promise<void> => {
+    const queue = updateQueues.get(profileId);
+    if (!queue) {
+      return;
+    }
+
+    if (!queue.isRunning && queue.pending) {
+      if (queue.timer) {
+        clearTimeout(queue.timer);
+        queue.timer = null;
+      }
+      void flushUpdateQueue(profileId, queue);
+    }
+
+    await queue.completion.promise;
+  };
+  const recoverProfilesAfterMutationFailure = async (
+    error: unknown,
+    fallbackMessage: string,
+  ): Promise<void> => {
+    let recoveredItems: Profile[] | null = null;
+    try {
+      recoveredItems = await window.electron.profiles.list();
+    } catch {
+      // Preserve local state when authoritative recovery also fails.
+    }
+
+    set((state) => {
+      if (recoveredItems) {
+        state.profiles.items = recoveredItems;
+        state.profiles.selectedProfileId = resolveSelectedProfileId(
+          recoveredItems,
+          state.profiles.selectedProfileId,
+          getActiveGame(get),
+        );
+      }
+      state.profiles.error =
+        error instanceof Error ? error.message : fallbackMessage;
+    });
+  };
 
   return {
     profiles: {
@@ -272,14 +319,47 @@ export const createProfilesSlice: BoundStoreStateCreator<ProfilesSlice> = (
           });
         }
       },
-      create: async (name: string) => {
+      create: async (name: string, game = null) => {
         markProfilesChanged();
-        const created = await window.electron.profiles.create({ name });
+        const created = await window.electron.profiles.create({ game, name });
+        let selectedProfileId: string | null = null;
         set((state) => {
-          state.profiles.items = replaceProfile(state.profiles.items, created);
-          state.profiles.selectedProfileId = created.id;
+          const items = replaceProfile(state.profiles.items, created);
+          selectedProfileId = resolveSelectedProfileId(
+            items,
+            created.id,
+            getActiveGame(get),
+          );
+          state.profiles.items = items;
+          state.profiles.selectedProfileId = selectedProfileId;
+          state.profiles.error = null;
         });
-        persistSelectedProfileId(created.id);
+        persistSelectedProfileId(selectedProfileId);
+      },
+      duplicate: async (sourceId: string, name: string) => {
+        markProfilesChanged();
+        try {
+          await flushProfileUpdates(sourceId);
+          const duplicated = await window.electron.profiles.duplicate({
+            name,
+            sourceId,
+          });
+          set((state) => {
+            state.profiles.items = replaceProfile(
+              state.profiles.items,
+              duplicated,
+            );
+            state.profiles.selectedProfileId = duplicated.id;
+            state.profiles.error = null;
+          });
+          persistSelectedProfileId(duplicated.id);
+        } catch (error) {
+          await recoverProfilesAfterMutationFailure(
+            error,
+            "Unable to duplicate profile",
+          );
+          throw error;
+        }
       },
       update: async (input: ProfileUpdateInput) => {
         if (deletingProfileIds.has(input.id)) {
@@ -307,33 +387,75 @@ export const createProfilesSlice: BoundStoreStateCreator<ProfilesSlice> = (
         await enqueueUpdate(input);
       },
       delete: async (id: string) => {
+        const profile = get().profiles.items.find((item) => item.id === id);
+        if (!profile) {
+          return;
+        }
+
         markProfilesChanged();
         deletingProfileIds.add(id);
         try {
           await cancelProfileUpdates(id);
-          await window.electron.profiles.delete(id);
-          const remainingItems = get().profiles.items.filter(
-            (item) => item.id !== id,
-          );
+          const items = await window.electron.profiles.delete(id);
           const selectedProfileId = resolveSelectedProfileId(
-            remainingItems,
-            get().profiles.selectedProfileId === id
-              ? null
-              : get().profiles.selectedProfileId,
+            items,
+            get().profiles.selectedProfileId,
             getActiveGame(get),
           );
           set((state) => {
-            state.profiles.items = state.profiles.items.filter(
-              (item) => item.id !== id,
-            );
+            state.profiles.items = items;
             state.profiles.selectedProfileId = selectedProfileId;
             state.profiles.error = null;
           });
           persistSelectedProfileId(selectedProfileId);
+        } catch (error) {
+          await recoverProfilesAfterMutationFailure(
+            error,
+            "Unable to delete profile",
+          );
+          throw error;
         } finally {
           deletingProfileIds.delete(id);
         }
       },
+      deleteAll: async (fallbackId: string) => {
+        const items = get().profiles.items;
+        if (items.length === 0) {
+          return;
+        }
+
+        markProfilesChanged();
+        for (const item of items) {
+          deletingProfileIds.add(item.id);
+        }
+        try {
+          await Promise.all(items.map((item) => cancelProfileUpdates(item.id)));
+          const remainingItems =
+            await window.electron.profiles.deleteAll(fallbackId);
+          const selectedProfileId = resolveSelectedProfileId(
+            remainingItems,
+            fallbackId,
+            getActiveGame(get),
+          );
+          set((state) => {
+            state.profiles.items = remainingItems;
+            state.profiles.selectedProfileId = selectedProfileId;
+            state.profiles.error = null;
+          });
+          persistSelectedProfileId(selectedProfileId);
+        } catch (error) {
+          await recoverProfilesAfterMutationFailure(
+            error,
+            "Unable to delete all profiles",
+          );
+          throw error;
+        } finally {
+          for (const item of items) {
+            deletingProfileIds.delete(item.id);
+          }
+        }
+      },
+      flush: flushProfileUpdates,
       select: (id: string) => {
         markProfilesChanged();
         set((state) => {

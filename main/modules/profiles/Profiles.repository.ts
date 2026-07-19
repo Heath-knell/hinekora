@@ -5,7 +5,6 @@ import {
   type Profile,
   type ProfileCreateInput,
   type ProfileUpdateInput,
-  ProfileUpdateInputSchema,
 } from "~/types";
 import { mapProfileRow } from "./Profiles.mapper";
 
@@ -31,8 +30,7 @@ class ProfilesRepository {
   }
 
   update(input: ProfileUpdateInput): Profile {
-    const parsed = ProfileUpdateInputSchema.parse(input);
-    const existing = this.get(parsed.id);
+    const existing = this.get(input.id);
 
     if (!existing) {
       throw new Error("Profile not found");
@@ -40,15 +38,15 @@ class ProfilesRepository {
 
     const updated: Profile = {
       ...existing,
-      game: parsed.game === undefined ? existing.game : parsed.game,
-      name: parsed.name ?? existing.name,
-      targetFps: parsed.targetFps ?? existing.targetFps,
+      game: input.game === undefined ? existing.game : input.game,
+      name: input.name ?? existing.name,
+      targetFps: input.targetFps ?? existing.targetFps,
       captureTarget:
-        parsed.captureTarget === undefined
+        input.captureTarget === undefined
           ? existing.captureTarget
-          : parsed.captureTarget,
-      cropRegions: parsed.cropRegions ?? existing.cropRegions,
-      overlayPlacements: parsed.overlayPlacements ?? existing.overlayPlacements,
+          : input.captureTarget,
+      cropRegions: input.cropRegions ?? existing.cropRegions,
+      overlayPlacements: input.overlayPlacements ?? existing.overlayPlacements,
       updatedAt: new Date().toISOString(),
     };
 
@@ -88,6 +86,18 @@ class ProfilesRepository {
     );
   }
 
+  count(): number {
+    const row = this.database.queryOne(
+      this.database.kysely
+        .selectFrom("profiles")
+        .select((expressionBuilder) =>
+          expressionBuilder.fn.countAll<number>().as("count"),
+        ),
+    );
+
+    return Number(row?.count ?? 0);
+  }
+
   replaceAll(profiles: Profile[]): void {
     this.database.transaction(() => {
       this.database.runQuery(this.database.kysely.deleteFrom("profiles"));
@@ -97,7 +107,7 @@ class ProfilesRepository {
     });
   }
 
-  private get(id: string): Profile | null {
+  get(id: string): Profile | null {
     const row = this.database.queryOne(
       this.database.kysely
         .selectFrom("profiles")

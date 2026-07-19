@@ -13,11 +13,11 @@ import type {
   EditorExportResolution,
 } from "~/main/modules/editor";
 import type { ModalHandle } from "~/renderer/components/Modal/Modal";
+import { ShortcutCombo } from "~/renderer/components/ShortcutCombo/ShortcutCombo";
 import { useEditorShallow } from "~/renderer/store";
 
 import { editorShortcutEventNames } from "../../Editor.utils/EditorShortcuts.utils";
 import { EditorSaveDialog } from "../EditorSaveDialog/EditorSaveDialog";
-import { EditorShortcutCombo } from "../EditorShortcutCombo/EditorShortcutCombo";
 import {
   createEditorFileNameDraft,
   createEditorOutputFileName,
@@ -141,7 +141,7 @@ function EditorSaveActions({
     >
       Save
       {variant === "menu" ? (
-        <EditorShortcutCombo keys={["Ctrl", "S"]} />
+        <ShortcutCombo keys={["Ctrl", "S"]} />
       ) : (
         <FiSave size={15} />
       )}
@@ -158,7 +158,7 @@ function EditorSaveActions({
           className="flex h-8 w-full cursor-not-allowed items-center justify-between gap-3 rounded-md px-3 text-left text-base-content/45 text-sm"
         >
           <span>Save</span>
-          <EditorShortcutCombo keys={["Ctrl", "S"]} />
+          <ShortcutCombo keys={["Ctrl", "S"]} />
         </span>
       </div>
     ) : null;

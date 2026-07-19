@@ -42,11 +42,8 @@ const poe2WindowSource: CapturePreviewSource = {
 interface SettingsProfileCase {
   activeCaptureRowName: string;
   captureName: string;
-  existingAuraId: string;
-  existingAuraName: string;
   existingCaptureId: string;
   existingCaptureName: string;
-  auraName: string;
   game: GameId;
   label: string;
 }
@@ -54,10 +51,7 @@ interface SettingsProfileCase {
 const settingsProfileCases: SettingsProfileCase[] = [
   {
     activeCaptureRowName: "PoE 2 Capture",
-    auraName: "Boss PoE 2 Aura",
     captureName: "Boss PoE 2 Capture",
-    existingAuraId: "profile-1",
-    existingAuraName: "PoE 2",
     existingCaptureId: "capture-profile-1",
     existingCaptureName: "PoE 2 Capture",
     game: "poe2",
@@ -65,10 +59,7 @@ const settingsProfileCases: SettingsProfileCase[] = [
   },
   {
     activeCaptureRowName: "Default PoE 1 Profile",
-    auraName: "Boss PoE 1 Aura",
     captureName: "Boss PoE 1 Capture",
-    existingAuraId: "profile-poe1",
-    existingAuraName: "PoE 1",
     existingCaptureId: "capture-profile-poe1",
     existingCaptureName: "PoE 1 Capture",
     game: "poe1",
@@ -109,32 +100,6 @@ async function getCreatedCaptureProfileId(
   );
   if (!createdProfile) {
     throw new Error(`Expected capture profile "${name}" to be created`);
-  }
-
-  return createdProfile.id;
-}
-
-async function getCreatedAuraProfileId(
-  page: Page,
-  name: string,
-): Promise<string> {
-  await expect
-    .poll(async () => {
-      const calls = await getDashboardE2ECalls(page);
-
-      return (
-        calls.profileCreates.find((profile) => profile.name === name)?.id ??
-        null
-      );
-    })
-    .not.toBeNull();
-
-  const calls = await getDashboardE2ECalls(page);
-  const createdProfile = calls.profileCreates.find(
-    (profile) => profile.name === name,
-  );
-  if (!createdProfile) {
-    throw new Error(`Expected aura profile "${name}" to be created`);
   }
 
   return createdProfile.id;
@@ -395,7 +360,7 @@ test("covers capture profile game switching, source sync, field persistence, and
 });
 
 for (const profileCase of settingsProfileCases) {
-  test(`covers ${profileCase.label} settings capture and aura profile management`, async ({
+  test(`covers ${profileCase.label} settings capture profile management`, async ({
     page,
   }) => {
     await setupDashboardE2E(page, { activeGame: profileCase.game });
@@ -484,94 +449,15 @@ for (const profileCase of settingsProfileCases) {
         ]),
       );
 
-    const auraProfilesPanel = getProfilePanel(page, "Aura Profiles");
-    await expect(
-      auraProfilesPanel.getByRole("combobox", {
-        name: /^Game scope for /,
-      }),
-    ).toHaveCount(2);
-    await expect(
-      auraProfilesPanel.getByRole("combobox", {
-        name: `Game scope for ${profileCase.existingAuraName}`,
-      }),
-    ).toHaveValue("all");
-    await expect(
-      getProfileRow(auraProfilesPanel, profileCase.existingAuraName),
-    ).toHaveClass(/border-primary/);
-
-    await auraProfilesPanel
-      .getByRole("textbox", { name: "Aura profile name" })
-      .fill(profileCase.auraName);
-    await expect(
-      auraProfilesPanel.getByRole("textbox", { name: "Aura profile name" }),
-    ).toHaveValue(profileCase.auraName);
-    await auraProfilesPanel.getByRole("button", { name: "Add" }).click();
-    const createdAuraProfileId = await getCreatedAuraProfileId(
-      page,
-      profileCase.auraName,
-    );
-    await expect
-      .poll(async () => {
-        const calls = await getDashboardE2ECalls(page);
-
-        return calls.profileCreates;
-      })
-      .toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            game: null,
-            name: profileCase.auraName,
-          }),
-        ]),
-      );
-    await expect(
-      auraProfilesPanel.getByRole("combobox", {
-        name: `Game scope for ${profileCase.auraName}`,
-      }),
-    ).toHaveValue("all");
-
-    await auraProfilesPanel
-      .getByRole("button", {
-        exact: true,
-        name: profileCase.existingAuraName,
-      })
-      .click();
-    await auraProfilesPanel
-      .getByRole("button", { exact: true, name: profileCase.auraName })
-      .click();
-    await expect
-      .poll(async () => {
-        const calls = await getDashboardE2ECalls(page);
-
-        return calls.profileSelects;
-      })
-      .toEqual(
-        expect.arrayContaining([
-          profileCase.existingAuraId,
-          createdAuraProfileId,
-        ]),
-      );
-
     await captureProfilesPanel
       .getByRole("button", { name: `Delete ${profileCase.captureName}` })
       .click();
-    await auraProfilesPanel
-      .getByRole("button", { name: `Delete ${profileCase.auraName}` })
-      .click();
     await expect
       .poll(async () => {
         const calls = await getDashboardE2ECalls(page);
 
-        return {
-          captureProfileDeletes: calls.captureProfileDeletes,
-          profileDeletes: calls.profileDeletes,
-        };
+        return calls.captureProfileDeletes;
       })
-      .toEqual({
-        captureProfileDeletes: expect.arrayContaining([
-          createdCaptureProfileId,
-        ]),
-        profileDeletes: expect.arrayContaining([createdAuraProfileId]),
-      });
+      .toEqual(expect.arrayContaining([createdCaptureProfileId]));
   });
 }

@@ -3,6 +3,7 @@ export { ProfilesChannel } from "./Profiles.channels";
 export type {
   Profile,
   ProfileCreateInput,
+  ProfileDuplicateInput,
   ProfileUpdateInput,
 } from "./Profiles.dto";
 export { mapProfileRow } from "./Profiles.mapper";

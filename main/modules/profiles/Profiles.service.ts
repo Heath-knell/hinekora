@@ -16,12 +16,15 @@ import {
 } from "~/main/utils/ipc-window-roles";
 
 import {
+  createDefaultProfile,
   type GameId,
   hasRenderableAuraPlacements,
   isProfileAvailableForGame,
   type Profile,
   type ProfileCreateInput,
   ProfileCreateInputSchema,
+  type ProfileDuplicateInput,
+  ProfileDuplicateInputSchema,
   type ProfileUpdateInput,
   ProfileUpdateInputSchema,
   resolveActiveGameProfile,
@@ -36,6 +39,7 @@ const profileChangeWindowRoles = new Set([
   WindowName.RecorderOverlay,
 ]);
 const PROFILES_SCOPE = "profiles";
+const DEFAULT_AURA_PROFILE_NAME = "Default Aura Profile";
 
 class ProfilesService {
   private static instance: ProfilesService | null = null;
@@ -76,7 +80,7 @@ class ProfilesService {
       return existingProfile;
     }
 
-    return this.create({ name: "Default Aura Profile" });
+    return this.create({ name: DEFAULT_AURA_PROFILE_NAME });
   }
 
   create(input: ProfileCreateInput): Profile {
@@ -88,6 +92,38 @@ class ProfilesService {
     return profile;
   }
 
+  duplicate(input: ProfileDuplicateInput): Profile {
+    const parsed = ProfileDuplicateInputSchema.parse(input);
+    const database = DatabaseService.getInstance();
+    const duplicated = database.transaction(() => {
+      const source = this.repository.get(parsed.sourceId);
+      if (!source) {
+        throw new IpcValidationError(
+          ProfilesChannel.Duplicate,
+          "source profile was not found",
+        );
+      }
+
+      const emptyProfile = createDefaultProfile({
+        game: source.game,
+        name: parsed.name,
+      });
+      const profile: Profile = {
+        ...emptyProfile,
+        captureTarget: source.captureTarget,
+        cropRegions: source.cropRegions,
+        overlayPlacements: source.overlayPlacements,
+        targetFps: source.targetFps,
+      };
+      this.repository.upsert(profile);
+
+      return profile;
+    });
+    this.publishProfilesChanged();
+
+    return duplicated;
+  }
+
   update(input: ProfileUpdateInput): Profile {
     const profile = this.repository.update(
       ProfileUpdateInputSchema.parse(input),
@@ -97,9 +133,48 @@ class ProfilesService {
     return profile;
   }
 
-  delete(id: string): void {
-    this.repository.delete(id);
-    this.publishProfilesChanged();
+  delete(id: string): Profile[] {
+    const database = DatabaseService.getInstance();
+    let remainingProfiles: Profile[] = [];
+    database.transaction(() => {
+      const profile = this.repository.get(id);
+      if (!profile) {
+        throw new IpcValidationError(
+          ProfilesChannel.Delete,
+          "profile was not found",
+        );
+      }
+
+      if (this.repository.count() === 1) {
+        this.repository.upsert(createResetProfile(profile));
+      } else {
+        this.repository.delete(id);
+      }
+      remainingProfiles = this.list();
+    });
+    this.publishProfilesChanged(remainingProfiles);
+
+    return remainingProfiles;
+  }
+
+  deleteAll(fallbackId: string): Profile[] {
+    const database = DatabaseService.getInstance();
+    let remainingProfiles: Profile[] = [];
+    database.transaction(() => {
+      const fallback = this.repository.get(fallbackId);
+      if (!fallback) {
+        throw new IpcValidationError(
+          ProfilesChannel.DeleteAll,
+          "fallback profile was not found",
+        );
+      }
+
+      this.repository.replaceAll([createResetProfile(fallback)]);
+      remainingProfiles = this.list();
+    });
+    this.publishProfilesChanged(remainingProfiles);
+
+    return remainingProfiles;
   }
 
   select(id: string): void {
@@ -131,9 +206,7 @@ class ProfilesService {
     this.publishProfilesChanged();
   }
 
-  private publishProfilesChanged(): void {
-    const profiles = this.list();
-
+  private publishProfilesChanged(profiles = this.list()): void {
     for (const listener of this.changeListeners) {
       try {
         listener(profiles);
@@ -175,6 +248,18 @@ class ProfilesService {
       },
     );
     registerGuardedIpcHandler(
+      ProfilesChannel.Duplicate,
+      [WindowName.Main],
+      (_event, input: unknown) => {
+        try {
+          assertObject(input, "profile", ProfilesChannel.Duplicate);
+          return this.duplicate(input as ProfileDuplicateInput);
+        } catch (error) {
+          return handleValidationError(error);
+        }
+      },
+    );
+    registerGuardedIpcHandler(
       ProfilesChannel.Update,
       [WindowName.Main, WindowName.AuraOverlay],
       (_event, input: unknown) => {
@@ -195,7 +280,22 @@ class ProfilesService {
             min: 1,
             max: 128,
           });
-          this.delete(id);
+          return this.delete(id);
+        } catch (error) {
+          return handleValidationError(error);
+        }
+      },
+    );
+    registerGuardedIpcHandler(
+      ProfilesChannel.DeleteAll,
+      [WindowName.Main],
+      (_event, fallbackId: unknown) => {
+        try {
+          assertString(fallbackId, "fallbackId", ProfilesChannel.DeleteAll, {
+            min: 1,
+            max: 128,
+          });
+          return this.deleteAll(fallbackId);
         } catch (error) {
           return handleValidationError(error);
         }
@@ -217,6 +317,19 @@ class ProfilesService {
       },
     );
   }
+}
+
+function createResetProfile(profile: Profile): Profile {
+  return {
+    ...profile,
+    captureTarget: null,
+    cropRegions: [],
+    game: null,
+    name: DEFAULT_AURA_PROFILE_NAME,
+    overlayPlacements: [],
+    targetFps: 30,
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 function resolveProfileForGame(

@@ -248,9 +248,16 @@ export function createCoordinateReferenceDimensions(
   };
 }
 
+export const AuraProfileNameSettings = { maxLength: 80 } as const;
+export const ProfileNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(AuraProfileNameSettings.maxLength);
+
 export const ProfileSchema = z.object({
   id: z.string().min(1).max(128),
-  name: z.string().min(1).max(80),
+  name: ProfileNameSchema,
   game: GameIdSchema.nullable(),
   targetFps: z.number().int().min(1).max(240),
   captureTarget: CaptureTargetSchema.nullable(),
@@ -262,14 +269,20 @@ export const ProfileSchema = z.object({
 export type Profile = z.infer<typeof ProfileSchema>;
 
 export const ProfileCreateInputSchema = z.object({
-  name: z.string().min(1).max(80),
+  name: ProfileNameSchema,
   game: GameIdSchema.nullable().default(null),
 });
 export type ProfileCreateInput = z.input<typeof ProfileCreateInputSchema>;
 
+export const ProfileDuplicateInputSchema = z.object({
+  sourceId: z.string().min(1).max(128),
+  name: ProfileNameSchema,
+});
+export type ProfileDuplicateInput = z.infer<typeof ProfileDuplicateInputSchema>;
+
 export const ProfileUpdateInputSchema = z.object({
   id: z.string().min(1).max(128),
-  name: z.string().min(1).max(80).optional(),
+  name: ProfileNameSchema.optional(),
   game: GameIdSchema.nullable().optional(),
   targetFps: z.number().int().min(1).max(240).optional(),
   captureTarget: CaptureTargetSchema.nullable().optional(),

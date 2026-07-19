@@ -7,7 +7,6 @@ import {
 import type { ComponentType } from "react";
 
 import { AuraLockBeacon } from "../Onboarding.beacons/AuraLockBeacon/AuraLockBeacon";
-import { AuraNewAuraBeacon } from "../Onboarding.beacons/AuraNewAuraBeacon/AuraNewAuraBeacon";
 import { AuraProfileBeacon } from "../Onboarding.beacons/AuraProfileBeacon/AuraProfileBeacon";
 import { AuraSourcePositionBeacon } from "../Onboarding.beacons/AuraSourcePositionBeacon/AuraSourcePositionBeacon";
 import { CaptureModeBeacon } from "../Onboarding.beacons/CaptureModeBeacon/CaptureModeBeacon";
@@ -140,17 +139,6 @@ const beaconVisualConfigById = {
     },
     popover: {
       component: AuraLockBeacon as ComponentType<unknown>,
-      anchorPoint: AnchorPoint.BottomRight,
-      offset: { y: 10 },
-    },
-  },
-  "aura-new-aura": {
-    trigger: {
-      anchorPoint: AnchorPoint.BottomCenter,
-      offset: { y: 5 },
-    },
-    popover: {
-      component: AuraNewAuraBeacon as ComponentType<unknown>,
       anchorPoint: AnchorPoint.BottomRight,
       offset: { y: 10 },
     },

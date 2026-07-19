@@ -176,8 +176,90 @@ describe("ProfilesService", () => {
     });
 
     service.delete("replacement");
-    expect(service.list()).toEqual([]);
+    expect(service.list()).toEqual([
+      expect.objectContaining({
+        id: "replacement",
+        game: null,
+        name: "Default Aura Profile",
+        cropRegions: [],
+        overlayPlacements: [],
+      }),
+    ]);
     expect(send).toHaveBeenCalledTimes(5);
+  });
+
+  it("duplicates profiles and keeps destructive lifecycle changes atomic", () => {
+    DatabaseService.getInstance(":memory:");
+    electronMocks.getAllWindows.mockReturnValue([]);
+    const service = new ProfilesService();
+    const source = service.create({ name: "PoE 2", game: "poe2" });
+    service.update({
+      id: source.id,
+      cropRegions: [
+        {
+          id: "crop-1",
+          label: "Aura 1",
+          x: 1,
+          y: 2,
+          width: 3,
+          height: 4,
+        },
+      ],
+      targetFps: 45,
+    });
+
+    const duplicate = service.duplicate({
+      sourceId: source.id,
+      name: "PoE 2 Copy",
+    });
+
+    expect(duplicate).toMatchObject({
+      game: "poe2",
+      name: "PoE 2 Copy",
+      targetFps: 45,
+      cropRegions: [expect.objectContaining({ id: "crop-1" })],
+    });
+    expect(duplicate.id).not.toBe(source.id);
+
+    const listSpy = vi.spyOn(service, "list");
+    expect(service.delete(source.id)).toEqual([duplicate]);
+    expect(listSpy).toHaveBeenCalledOnce();
+    listSpy.mockClear();
+    expect(service.delete(duplicate.id)).toEqual([
+      expect.objectContaining({
+        id: duplicate.id,
+        game: null,
+        name: "Default Aura Profile",
+        cropRegions: [],
+      }),
+    ]);
+    expect(listSpy).toHaveBeenCalledOnce();
+  });
+
+  it("deletes all profiles into one global empty default", () => {
+    DatabaseService.getInstance(":memory:");
+    electronMocks.getAllWindows.mockReturnValue([]);
+    const service = new ProfilesService();
+    const poe1 = service.create({ name: "PoE 1", game: "poe1" });
+    service.create({ name: "PoE 2", game: "poe2" });
+
+    const listSpy = vi.spyOn(service, "list");
+    expect(service.deleteAll(poe1.id)).toEqual([
+      expect.objectContaining({
+        id: poe1.id,
+        game: null,
+        name: "Default Aura Profile",
+        captureTarget: null,
+        cropRegions: [],
+        overlayPlacements: [],
+        targetFps: 30,
+      }),
+    ]);
+    expect(listSpy).toHaveBeenCalledOnce();
+    expect(() => service.deleteAll("missing-profile")).toThrow(
+      "fallback profile was not found",
+    );
+    expect(service.list()).toHaveLength(1);
   });
 
   it("registers IPC handlers with validation", async () => {
@@ -214,11 +296,34 @@ describe("ProfilesService", () => {
       await handlers.get(ProfilesChannel.Update)?.({}, { id, name: "Updated" }),
     ).toMatchObject({ id, name: "Updated" });
 
+    const duplicated = await handlers.get(ProfilesChannel.Duplicate)?.(
+      {},
+      {
+        sourceId: id,
+        name: "IPC Profile Copy",
+      },
+    );
+    expect(duplicated).toMatchObject({
+      game: "poe1",
+      name: "IPC Profile Copy",
+    });
+
     await handlers.get(ProfilesChannel.Select)?.({}, id);
     expect(SettingsStoreService.getInstance().get().selectedProfileId).toBe(id);
 
-    await handlers.get(ProfilesChannel.Delete)?.({}, id);
-    expect(await handlers.get(ProfilesChannel.List)?.({})).toEqual([]);
+    expect(await handlers.get(ProfilesChannel.Delete)?.({}, id)).toEqual([
+      expect.objectContaining({ name: "IPC Profile Copy" }),
+    ]);
+    const duplicateId = (duplicated as { id: string }).id;
+    expect(
+      await handlers.get(ProfilesChannel.DeleteAll)?.({}, duplicateId),
+    ).toEqual([
+      expect.objectContaining({
+        id: duplicateId,
+        game: null,
+        name: "Default Aura Profile",
+      }),
+    ]);
     expect(await handlers.get(ProfilesChannel.Create)?.({}, null)).toEqual({
       ok: false,
       error: "profile must be an object",
@@ -227,9 +332,32 @@ describe("ProfilesService", () => {
       ok: false,
       error: "profile must be an object",
     });
+    expect(await handlers.get(ProfilesChannel.Duplicate)?.({}, null)).toEqual({
+      ok: false,
+      error: "profile must be an object",
+    });
+    expect(
+      await handlers.get(ProfilesChannel.Create)?.({}, { name: "   " }),
+    ).toMatchObject({ ok: false });
+    expect(
+      await handlers.get(ProfilesChannel.Duplicate)?.(
+        {},
+        { sourceId: duplicateId, name: "   " },
+      ),
+    ).toMatchObject({ ok: false });
+    expect(
+      await handlers.get(ProfilesChannel.Update)?.(
+        {},
+        { id: duplicateId, name: "   " },
+      ),
+    ).toMatchObject({ ok: false });
     expect(await handlers.get(ProfilesChannel.Delete)?.({}, "")).toEqual({
       ok: false,
       error: "id is too short",
+    });
+    expect(await handlers.get(ProfilesChannel.DeleteAll)?.({}, "")).toEqual({
+      ok: false,
+      error: "fallbackId is too short",
     });
     expect(await handlers.get(ProfilesChannel.Select)?.({}, "")).toEqual({
       ok: false,

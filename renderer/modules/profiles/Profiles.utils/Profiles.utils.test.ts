@@ -2,11 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import type { Profile } from "~/types";
 import {
-  formatProfileGameScope,
   getProfilesForGame,
   isProfileAvailableForGame,
   resolveActiveGameProfile,
-  sortProfilesForDisplay,
 } from "./Profiles.utils";
 
 function createProfile(overrides: Partial<Profile> = {}): Profile {
@@ -113,34 +111,11 @@ describe("resolveActiveGameProfile", () => {
     expect(resolveActiveGameProfile(profiles, "profile-1", "poe2")).toBeNull();
   });
 
-  it("keeps global profiles before game-scoped profiles for stable settings rows", () => {
-    const profiles = [
-      createProfile({ game: "poe2", id: "poe2-b", name: "Bossing" }),
-      createProfile({ game: "poe1", id: "poe1-b", name: "Mapping" }),
-      createProfile({ game: null, id: "global-b", name: "Shared B" }),
-      createProfile({ game: "poe2", id: "poe2-a", name: "Default PoE 2" }),
-      createProfile({ game: "poe1", id: "poe1-a", name: "Default PoE 1" }),
-      createProfile({ game: null, id: "global-a", name: "Shared A" }),
-    ];
-
-    expect(sortProfilesForDisplay(profiles).map(({ id }) => id)).toEqual([
-      "global-a",
-      "global-b",
-      "poe1-a",
-      "poe1-b",
-      "poe2-b",
-      "poe2-a",
-    ]);
-  });
-
-  it("formats and checks optional game scope", () => {
+  it("checks optional game scope", () => {
     const globalProfile = createProfile({ game: null });
     const poe1Profile = createProfile({ game: "poe1" });
     const poe2Profile = createProfile({ game: "poe2" });
 
-    expect(formatProfileGameScope(null)).toBe("All games");
-    expect(formatProfileGameScope("poe1")).toBe("PoE 1");
-    expect(formatProfileGameScope("poe2")).toBe("PoE 2");
     expect(isProfileAvailableForGame(globalProfile, "poe2")).toBe(true);
     expect(isProfileAvailableForGame(poe1Profile, "poe1")).toBe(true);
     expect(isProfileAvailableForGame(poe2Profile, "poe1")).toBe(false);

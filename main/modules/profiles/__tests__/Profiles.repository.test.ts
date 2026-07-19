@@ -28,7 +28,10 @@ describe("ProfilesRepository", () => {
     });
 
     expect(repository.list()).toEqual([created]);
+    expect(repository.count()).toBe(1);
     expect(created.game).toBeNull();
+    expect(repository.get(created.id)).toEqual(created);
+    expect(repository.get("missing-profile")).toBeNull();
 
     const updated = repository.update({
       id: created.id,
@@ -63,6 +66,7 @@ describe("ProfilesRepository", () => {
 
     repository.delete(created.id);
     expect(repository.list()).toEqual([]);
+    expect(repository.count()).toBe(0);
 
     const replacement = createDefaultProfile({
       name: "Replacement",

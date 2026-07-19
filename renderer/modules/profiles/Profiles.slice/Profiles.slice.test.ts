@@ -86,7 +86,9 @@ describe("Profiles slice", () => {
   const createdProfile = createProfile({ id: "created", name: "Created" });
   const profiles = [createProfile(), createProfile({ id: "profile-2" })];
   const createProfileApi = vi.fn();
+  const deleteAllProfiles = vi.fn();
   const deleteProfile = vi.fn();
+  const duplicateProfile = vi.fn();
   const listProfiles = vi.fn();
   const selectProfile = vi.fn();
   const updateProfile = vi.fn();
@@ -97,7 +99,9 @@ describe("Profiles slice", () => {
     vi.resetAllMocks();
     changedListener = null;
     createProfileApi.mockResolvedValue(createdProfile);
-    deleteProfile.mockResolvedValue(undefined);
+    deleteAllProfiles.mockResolvedValue([createdProfile]);
+    deleteProfile.mockResolvedValue([]);
+    duplicateProfile.mockResolvedValue(createdProfile);
     listProfiles.mockResolvedValue(profiles);
     selectProfile.mockResolvedValue(undefined);
     updateProfile.mockResolvedValue(profiles[1]);
@@ -109,6 +113,8 @@ describe("Profiles slice", () => {
         profiles: {
           create: createProfileApi,
           delete: deleteProfile,
+          deleteAll: deleteAllProfiles,
+          duplicate: duplicateProfile,
           list: listProfiles,
           select: selectProfile,
           update: updateProfile,
@@ -317,12 +323,17 @@ describe("Profiles slice", () => {
       ...createDefaultSettings(),
       activeGame: "poe2",
     });
+    store.setState((state) => ({
+      profiles: { ...state.profiles, error: "Previous failure" },
+    }));
 
-    await store.getState().profiles.create("Mapper");
+    await store.getState().profiles.create("Mapper", "poe2");
     expect(createProfileApi).toHaveBeenCalledWith({
+      game: "poe2",
       name: "Mapper",
     });
     expect(store.getState().profiles.selectedProfileId).toBe("created");
+    expect(store.getState().profiles.error).toBeNull();
 
     await store
       .getState()
@@ -332,6 +343,156 @@ describe("Profiles slice", () => {
       name: "Renamed",
     });
     expect(store.getState().profiles.selectedProfileId).toBe("profile-2");
+  });
+
+  it("does not select a profile scoped to another game", async () => {
+    const poe1Profile = createProfile({
+      game: "poe1",
+      id: "poe1-created",
+      name: "PoE 1",
+    });
+    const poe2Profile = createProfile({
+      game: "poe2",
+      id: "poe2-current",
+      name: "PoE 2",
+    });
+    createProfileApi.mockResolvedValueOnce(poe1Profile);
+    updateProfile.mockResolvedValueOnce({ ...poe2Profile, game: "poe1" });
+    const store = createTestStoreWithSettings({
+      ...createDefaultSettings(),
+      activeGame: "poe2",
+      selectedProfileId: poe2Profile.id,
+    });
+    store.setState((state) => ({
+      profiles: {
+        ...state.profiles,
+        items: [poe2Profile],
+        selectedProfileId: poe2Profile.id,
+      },
+    }));
+
+    await store.getState().profiles.create("PoE 1", "poe1");
+
+    expect(store.getState().profiles.selectedProfileId).toBe(poe2Profile.id);
+
+    await store
+      .getState()
+      .profiles.update({ id: poe2Profile.id, game: "poe1" });
+
+    expect(store.getState().profiles.selectedProfileId).toBeNull();
+    expect(selectProfile).not.toHaveBeenCalledWith(poe1Profile.id);
+    expect(updateSettings).toHaveBeenCalledWith({ selectedProfileId: null });
+  });
+
+  it("duplicates an existing profile into an independently selected profile", async () => {
+    const source = createRenderableProfile({
+      game: "poe2",
+      id: "source",
+      name: "Bossing",
+      targetFps: 45,
+    });
+    const created = createProfile({
+      game: "poe2",
+      id: "duplicate",
+      name: "Bossing Copy",
+    });
+    const duplicated = {
+      ...created,
+      ...source,
+      id: created.id,
+      name: created.name,
+    };
+    duplicateProfile.mockResolvedValueOnce(duplicated);
+    const store = createTestStore();
+    store.setState((state) => ({
+      profiles: {
+        ...state.profiles,
+        items: [source],
+        selectedProfileId: source.id,
+      },
+    }));
+
+    await store.getState().profiles.duplicate(source.id, "Bossing Copy");
+
+    expect(duplicateProfile).toHaveBeenCalledWith({
+      name: "Bossing Copy",
+      sourceId: source.id,
+    });
+    expect(store.getState().profiles.items).toContainEqual(duplicated);
+    expect(store.getState().profiles.selectedProfileId).toBe(created.id);
+  });
+
+  it("flushes pending source edits before duplicating a profile", async () => {
+    const source = createRenderableProfile({
+      id: "source",
+      name: "Bossing",
+      targetFps: 30,
+    });
+    let persistedSource = source;
+    updateProfile.mockImplementationOnce(async (input) => {
+      persistedSource = { ...persistedSource, ...input };
+      return persistedSource;
+    });
+    duplicateProfile.mockImplementationOnce(async (input) => ({
+      ...persistedSource,
+      id: "duplicate",
+      name: input.name,
+    }));
+    const store = createTestStore();
+    store.setState((state) => ({
+      profiles: {
+        ...state.profiles,
+        items: [source],
+        selectedProfileId: source.id,
+      },
+    }));
+
+    const updateRequest = store
+      .getState()
+      .profiles.update({ id: source.id, targetFps: 60 });
+    await store.getState().profiles.duplicate(source.id, "Bossing Copy");
+    await updateRequest;
+
+    expect(updateProfile).toHaveBeenCalledWith({
+      id: source.id,
+      targetFps: 60,
+    });
+    expect(updateProfile.mock.invocationCallOrder[0]).toBeLessThan(
+      duplicateProfile.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(store.getState().profiles.items).toContainEqual(
+      expect.objectContaining({
+        id: "duplicate",
+        name: "Bossing Copy",
+        targetFps: 60,
+      }),
+    );
+  });
+
+  it("recovers authoritative profiles when duplication fails", async () => {
+    const source = createRenderableProfile({ id: "source" });
+    duplicateProfile.mockRejectedValueOnce(new Error("copy failed"));
+    listProfiles.mockResolvedValueOnce([source]);
+    const store = createTestStore();
+    store.setState((state) => ({
+      profiles: {
+        ...state.profiles,
+        items: [source],
+        selectedProfileId: source.id,
+      },
+    }));
+
+    await expect(
+      store.getState().profiles.duplicate(source.id, "Copy"),
+    ).rejects.toThrow("copy failed");
+
+    expect(duplicateProfile).toHaveBeenCalledWith({
+      name: "Copy",
+      sourceId: source.id,
+    });
+    expect(deleteProfile).not.toHaveBeenCalled();
+    expect(store.getState().profiles.items).toEqual([source]);
+    expect(store.getState().profiles.error).toBe("copy failed");
   });
 
   it("persists the selected profile after profile updates", async () => {
@@ -436,6 +597,152 @@ describe("Profiles slice", () => {
       name: "Final",
       targetFps: 45,
     });
+  });
+
+  it("flushes a queued profile edit on demand", async () => {
+    vi.useFakeTimers();
+    const initialProfile = createProfile();
+    updateProfile.mockImplementation(async (input) => ({
+      ...initialProfile,
+      ...input,
+    }));
+    const store = createTestStore();
+    store.setState((state) => ({
+      profiles: {
+        ...state.profiles,
+        items: [initialProfile],
+        selectedProfileId: initialProfile.id,
+      },
+    }));
+
+    const updateRequest = store
+      .getState()
+      .profiles.update({ id: initialProfile.id, name: "Saved now" });
+    expect(updateProfile).not.toHaveBeenCalled();
+
+    await store.getState().profiles.flush(initialProfile.id);
+    await updateRequest;
+
+    expect(updateProfile).toHaveBeenCalledOnce();
+    expect(updateProfile).toHaveBeenCalledWith({
+      id: initialProfile.id,
+      name: "Saved now",
+    });
+  });
+
+  it("uses the authoritative global reset returned when deleting the final profile", async () => {
+    const initialProfile = createRenderableProfile({ name: "Only profile" });
+    const resetProfile = {
+      ...initialProfile,
+      captureTarget: null,
+      cropRegions: [],
+      game: null,
+      name: "Default Aura Profile",
+      overlayPlacements: [],
+      targetFps: 30,
+    };
+    deleteProfile.mockResolvedValueOnce([resetProfile]);
+    const store = createTestStore();
+    store.setState((state) => ({
+      profiles: {
+        ...state.profiles,
+        items: [initialProfile],
+        selectedProfileId: initialProfile.id,
+      },
+    }));
+
+    await store.getState().profiles.delete(initialProfile.id);
+
+    expect(deleteProfile).toHaveBeenCalledWith(initialProfile.id);
+    expect(updateProfile).not.toHaveBeenCalled();
+    expect(store.getState().profiles.items).toEqual([resetProfile]);
+  });
+
+  it("accepts an authoritative result with no active-game profile", async () => {
+    const poe1Profile = createRenderableProfile({
+      game: "poe1",
+      id: "poe1-profile",
+    });
+    const poe2Profile = createProfile({
+      game: "poe2",
+      id: "poe2-profile",
+    });
+    deleteProfile.mockResolvedValueOnce([poe2Profile]);
+    const store = createTestStoreWithSettings({
+      ...createDefaultSettings(),
+      activeGame: "poe1",
+    });
+    store.setState((state) => ({
+      profiles: {
+        ...state.profiles,
+        items: [poe1Profile, poe2Profile],
+        selectedProfileId: poe1Profile.id,
+      },
+    }));
+
+    await store.getState().profiles.delete(poe1Profile.id);
+
+    expect(deleteProfile).toHaveBeenCalledWith(poe1Profile.id);
+    expect(store.getState().profiles.items).toEqual([poe2Profile]);
+    expect(store.getState().profiles.selectedProfileId).toBeNull();
+  });
+
+  it("replaces all profiles with the authoritative global fallback", async () => {
+    const fallback = createRenderableProfile({ id: "fallback" });
+    const second = createProfile({ id: "second" });
+    const third = createProfile({ id: "third" });
+    const reset = {
+      ...fallback,
+      captureTarget: null,
+      cropRegions: [],
+      game: null,
+      name: "Default Aura Profile",
+      overlayPlacements: [],
+      targetFps: 30,
+    };
+    deleteAllProfiles.mockResolvedValueOnce([reset]);
+    const store = createTestStore();
+    store.setState((state) => ({
+      profiles: {
+        ...state.profiles,
+        items: [fallback, second, third],
+        selectedProfileId: fallback.id,
+      },
+    }));
+
+    await store.getState().profiles.deleteAll(fallback.id);
+
+    expect(deleteAllProfiles).toHaveBeenCalledWith(fallback.id);
+    expect(deleteProfile).not.toHaveBeenCalled();
+    expect(store.getState().profiles.items).toEqual([reset]);
+    expect(store.getState().profiles.selectedProfileId).toBe(fallback.id);
+  });
+
+  it("recovers authoritative profiles after destructive operations fail", async () => {
+    const initialProfile = createRenderableProfile();
+    deleteProfile.mockRejectedValueOnce(new Error("delete failed"));
+    deleteAllProfiles.mockRejectedValueOnce(new Error("delete all failed"));
+    listProfiles.mockResolvedValue([initialProfile]);
+    const store = createTestStore();
+    store.setState((state) => ({
+      profiles: {
+        ...state.profiles,
+        items: [initialProfile],
+        selectedProfileId: initialProfile.id,
+      },
+    }));
+
+    await expect(
+      store.getState().profiles.delete(initialProfile.id),
+    ).rejects.toThrow("delete failed");
+    expect(store.getState().profiles.items).toEqual([initialProfile]);
+    expect(store.getState().profiles.error).toBe("delete failed");
+
+    await expect(
+      store.getState().profiles.deleteAll(initialProfile.id),
+    ).rejects.toThrow("delete all failed");
+    expect(store.getState().profiles.items).toEqual([initialProfile]);
+    expect(store.getState().profiles.error).toBe("delete all failed");
   });
 
   it("flushes continuous profile edits at the bounded maximum latency", async () => {

@@ -23,6 +23,7 @@ import {
   normalizePersistedRecordingOutputResolution,
   normalizeRecordingEncoderChoice,
   ProfileCreateInputSchema,
+  ProfileDuplicateInputSchema,
   ProfileSchema,
   ProfileUpdateInputSchema,
   RecorderOverlayBoundsSchema,
@@ -534,11 +535,42 @@ describe("shared schemas", () => {
       game: null,
     });
     expect(
+      ProfileDuplicateInputSchema.parse({
+        sourceId: "profile-1",
+        name: "Mapper Copy",
+      }),
+    ).toEqual({ sourceId: "profile-1", name: "Mapper Copy" });
+    expect(
       ProfileUpdateInputSchema.parse({ id: "profile-1", game: null }),
     ).toEqual({
       id: "profile-1",
       game: null,
     });
+    expect(
+      ProfileCreateInputSchema.parse({ name: "  Mapper  " }),
+    ).toMatchObject({ name: "Mapper" });
+    expect(
+      ProfileDuplicateInputSchema.parse({
+        sourceId: "profile-1",
+        name: "  Mapper Copy  ",
+      }),
+    ).toMatchObject({ name: "Mapper Copy" });
+    expect(
+      ProfileUpdateInputSchema.parse({
+        id: "profile-1",
+        name: "  Updated  ",
+      }),
+    ).toMatchObject({ name: "Updated" });
+    expect(() => ProfileCreateInputSchema.parse({ name: "   " })).toThrow();
+    expect(() =>
+      ProfileDuplicateInputSchema.parse({
+        sourceId: "profile-1",
+        name: "   ",
+      }),
+    ).toThrow();
+    expect(() =>
+      ProfileUpdateInputSchema.parse({ id: "profile-1", name: "   " }),
+    ).toThrow();
   });
 
   it("normalizes legacy aura placement scales to the minimum scale", () => {

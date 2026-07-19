@@ -1,3 +1,13 @@
-import type { Profile, ProfileCreateInput, ProfileUpdateInput } from "~/types";
+import type {
+  Profile,
+  ProfileCreateInput,
+  ProfileDuplicateInput,
+  ProfileUpdateInput,
+} from "~/types";
 
-export type { Profile, ProfileCreateInput, ProfileUpdateInput };
+export type {
+  Profile,
+  ProfileCreateInput,
+  ProfileDuplicateInput,
+  ProfileUpdateInput,
+};

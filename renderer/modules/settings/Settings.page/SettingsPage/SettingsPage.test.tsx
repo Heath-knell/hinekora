@@ -51,9 +51,9 @@ vi.mock(
   }),
 );
 vi.mock(
-  "~/renderer/modules/profiles/Profiles.components/ProfilesPanel/ProfilesPanel",
+  "~/renderer/modules/capture-profiles/CaptureProfiles.components/CaptureProfilesPanel/CaptureProfilesPanel",
   () => ({
-    ProfilesPanel: () => <div>Profiles panel</div>,
+    CaptureProfilesPanel: () => <div>Capture profiles panel</div>,
   }),
 );
 
@@ -167,6 +167,14 @@ describe("SettingsPage", () => {
         .querySelector("#settings-tab-overlay")
         ?.getAttribute("aria-selected"),
     ).toBe("true");
+  });
+
+  it("keeps capture profiles and transfer actions without aura profiles", async () => {
+    await renderSettingsPage("Profiles");
+
+    expect(container.textContent).toContain("Capture profiles panel");
+    expect(container.textContent).toContain("Profile transfer card");
+    expect(container.textContent).not.toContain("Aura Profiles");
   });
 
   it("maps settings categories to stable route slugs", () => {

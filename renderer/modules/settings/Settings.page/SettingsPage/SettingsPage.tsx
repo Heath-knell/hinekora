@@ -6,7 +6,6 @@ import { PageContent } from "~/renderer/components/PageContent/PageContent";
 import { PageHeader } from "~/renderer/components/PageHeader/PageHeader";
 import { type TabItem, Tabs } from "~/renderer/components/Tabs/Tabs";
 import { CaptureProfilesPanel } from "~/renderer/modules/capture-profiles/CaptureProfiles.components/CaptureProfilesPanel/CaptureProfilesPanel";
-import { ProfilesPanel } from "~/renderer/modules/profiles/Profiles.components/ProfilesPanel/ProfilesPanel";
 
 import { AppSettingsCard } from "../../Settings.components/AppSettingsCard/AppSettingsCard";
 import { GameLogSettingsCard } from "../../Settings.components/GameLogSettingsCard/GameLogSettingsCard";
@@ -130,9 +129,8 @@ function SettingsPage({
               {activeCategory === "Help" && <HelpSettingsCard />}
               {activeCategory === "Profiles" && (
                 <>
-                  <div className="col-span-12 grid gap-3 lg:grid-cols-2">
+                  <div className="col-span-12 grid gap-3">
                     <CaptureProfilesPanel />
-                    <ProfilesPanel />
                   </div>
                   <ProfileTransferSettingsCard />
                 </>

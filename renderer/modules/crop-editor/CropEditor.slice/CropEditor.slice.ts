@@ -1,13 +1,23 @@
 import type { BoundStoreStateCreator } from "~/renderer/store/store.types";
 
+type AuraProfileActionDialog =
+  | "create"
+  | "edit"
+  | "duplicate"
+  | "delete-current"
+  | "delete-all";
+
 interface CropEditorSlice {
   cropEditor: {
     auraOverlayLocked: boolean;
+    profileActionDialog: AuraProfileActionDialog | null;
     selectedAuraCropRegionId: string | null;
     showAllAurasInPreview: boolean;
     hydrate: () => Promise<void>;
     startListening: () => () => void;
     setAuraOverlayLocked: (locked: boolean) => void;
+    openProfileActionDialog: (dialog: AuraProfileActionDialog) => void;
+    closeProfileActionDialog: () => void;
     selectAura: (cropRegionId: string | null) => void;
     setShowAllAurasInPreview: (showAllAurasInPreview: boolean) => void;
   };
@@ -18,6 +28,7 @@ export const createCropEditorSlice: BoundStoreStateCreator<CropEditorSlice> = (
 ) => ({
   cropEditor: {
     auraOverlayLocked: true,
+    profileActionDialog: null,
     selectedAuraCropRegionId: null,
     showAllAurasInPreview: false,
     hydrate: async () => {
@@ -36,6 +47,16 @@ export const createCropEditorSlice: BoundStoreStateCreator<CropEditorSlice> = (
     setAuraOverlayLocked: (auraOverlayLocked) => {
       set((state) => {
         state.cropEditor.auraOverlayLocked = auraOverlayLocked;
+      });
+    },
+    openProfileActionDialog: (profileActionDialog) => {
+      set((state) => {
+        state.cropEditor.profileActionDialog = profileActionDialog;
+      });
+    },
+    closeProfileActionDialog: () => {
+      set((state) => {
+        state.cropEditor.profileActionDialog = null;
       });
     },
     selectAura: (selectedAuraCropRegionId) => {

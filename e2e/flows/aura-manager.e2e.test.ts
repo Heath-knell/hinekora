@@ -107,19 +107,125 @@ test("renders and edits the Aura Manager workflow", async ({ page }) => {
     tabs.getByRole("tab", { name: "Arched aura 1" }).locator("svg"),
   ).toBeVisible();
 
-  const addAuraButton = page.getByRole("button", {
+  const profileActionsButton = page.getByText("Profile actions", {
     exact: true,
-    name: "Add aura",
   });
-  await expect(addAuraButton).toBeEnabled();
-  await addAuraButton.click();
-  await expect(page.getByRole("menuitem")).toHaveText([
-    "Add new aura",
-    "Add arched aura",
-    "Add pointer aura",
-  ]);
-  await page.getByRole("menuitem", { name: "Add new aura" }).click();
-  await expect(page.getByRole("menuitem")).toBeHidden();
+  await expect(profileActionsButton).toBeVisible();
+  await profileActionsButton.click();
+  await expect(
+    page.getByRole("button", { name: /Save changes/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Add new profile/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Edit current profile/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Duplicate profile" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Delete current profile/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Delete all profiles" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Add aura", exact: true }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("heading", { exact: true, name: "Aura Manager" })
+    .click();
+  await expect(
+    page.getByRole("button", { name: /Save changes/ }),
+  ).not.toBeVisible();
+
+  await page.keyboard.press("Control+e");
+  await expect(
+    page.getByRole("heading", { name: "Edit current profile" }),
+  ).toBeVisible();
+  const profileNameInput = page.getByLabel("Profile name");
+  await profileNameInput.fill("PoE 2 Updated");
+  await page.getByLabel("Game availability").selectOption("all");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect
+    .poll(async () => {
+      const calls = await getDashboardE2ECalls(page);
+
+      return calls.profileUpdates.some(
+        (update) =>
+          update.id === auraManagerProfile.id &&
+          update.name === "PoE 2 Updated" &&
+          update.game === null,
+      );
+    })
+    .toBe(true);
+  await expect(
+    page.getByRole("combobox", { name: "Aura profile" }),
+  ).toHaveValue("profile-1");
+
+  await profileActionsButton.click();
+  await page.getByRole("button", { name: /Add new profile/ }).click();
+  await page.getByLabel("Profile name").fill("Temporary PoE 2");
+  await page.getByLabel("Game availability").selectOption("poe2");
+  await page.getByRole("button", { name: "Add profile" }).click();
+  await expect
+    .poll(async () => {
+      const calls = await getDashboardE2ECalls(page);
+
+      return calls.profileCreates.find(
+        (profile) => profile.name === "Temporary PoE 2",
+      );
+    })
+    .toMatchObject({ game: "poe2", name: "Temporary PoE 2" });
+  const temporaryProfile = (
+    await getDashboardE2ECalls(page)
+  ).profileCreates.find((profile) => profile.name === "Temporary PoE 2");
+  expect(temporaryProfile).toBeDefined();
+  await expect(
+    page.getByRole("combobox", { name: "Aura profile" }),
+  ).toHaveValue(temporaryProfile?.id ?? "");
+
+  await page.keyboard.press("Control+d");
+  await expect(
+    page.getByRole("heading", { name: "Delete current profile?" }),
+  ).toBeVisible();
+  await expect(page.getByRole("dialog").locator(".badge")).toHaveText(
+    "Temporary PoE 2",
+  );
+  await page.getByRole("button", { name: "Delete profile" }).click();
+  await expect
+    .poll(async () => (await getDashboardE2ECalls(page)).profileDeletes)
+    .toContain(temporaryProfile?.id);
+  await expect(
+    page.getByRole("combobox", { name: "Aura profile" }),
+  ).toHaveValue("profile-1");
+
+  await profileActionsButton.click();
+  await page.getByRole("button", { name: "Duplicate profile" }).click();
+  await page.getByLabel("Profile name").fill("PoE 2 Duplicate");
+  await page.getByRole("button", { name: "Duplicate profile" }).click();
+  await expect
+    .poll(async () => {
+      const calls = await getDashboardE2ECalls(page);
+
+      return calls.profileDuplicates.find(
+        (profile) => profile.name === "PoE 2 Duplicate",
+      );
+    })
+    .toMatchObject({ name: "PoE 2 Duplicate", sourceId: "profile-1" });
+  const duplicatedProfile = (
+    await getDashboardE2ECalls(page)
+  ).profileDuplicates.find((profile) => profile.name === "PoE 2 Duplicate");
+  expect(duplicatedProfile).toBeDefined();
+  await expect(
+    page.getByRole("combobox", { name: "Aura profile" }),
+  ).toHaveValue(duplicatedProfile?.id ?? "");
+  await page.keyboard.press("Control+d");
+  await page.getByRole("button", { name: "Delete profile" }).click();
+  await expect(
+    page.getByRole("combobox", { name: "Aura profile" }),
+  ).toHaveValue("profile-1");
 
   const auraPositionCard = page
     .getByRole("heading", { name: "Aura Position" })
@@ -229,4 +335,17 @@ test("renders and edits the Aura Manager workflow", async ({ page }) => {
   expect(rectangularOpacityBounds?.y ?? 0).toBeGreaterThan(
     rectangularScaleBounds?.y ?? 0,
   );
+
+  await profileActionsButton.click();
+  await page.getByRole("button", { name: "Delete all profiles" }).click();
+  await expect(
+    page.getByText("available to both games", { exact: false }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Delete all profiles" }).click();
+  await expect
+    .poll(async () => (await getDashboardE2ECalls(page)).profileDeleteAll)
+    .toContain("profile-1");
+  await expect(
+    page.getByRole("combobox", { name: "Aura profile" }),
+  ).toHaveValue("profile-1");
 });

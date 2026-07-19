@@ -1,6 +1,7 @@
 import { type MouseEvent, useRef } from "react";
 import { FiMoreHorizontal } from "react-icons/fi";
 
+import { ShortcutCombo } from "~/renderer/components/ShortcutCombo/ShortcutCombo";
 import { useEditorShallow, useSettingsSelector } from "~/renderer/store";
 
 import { EditorCopyActions } from "../EditorCopyActions/EditorCopyActions";
@@ -10,7 +11,6 @@ import { EditorDeleteEditAction } from "../EditorDeleteEditAction/EditorDeleteEd
 import { EditorNewEditAction } from "../EditorNewEditAction/EditorNewEditAction";
 import { EditorProjectRetentionToggle } from "../EditorProjectRetentionToggle/EditorProjectRetentionToggle";
 import { EditorSaveActions } from "../EditorSaveActions/EditorSaveActions";
-import { EditorShortcutCombo } from "../EditorShortcutCombo/EditorShortcutCombo";
 
 function EditorActionsMenu() {
   const detailsRef = useRef<HTMLDetailsElement>(null);
@@ -86,7 +86,7 @@ function EditorActionsMenu() {
             onClick={handleToggleBookmarks}
           >
             {bookmarksLabel}
-            <EditorShortcutCombo keys={["Ctrl", "B"]} />
+            <ShortcutCombo keys={["Ctrl", "B"]} />
           </button>
         </li>
         <li className="list-none">
@@ -96,7 +96,7 @@ function EditorActionsMenu() {
             onClick={handleToggleHistory}
           >
             {historyLabel}
-            <EditorShortcutCombo keys={["Ctrl", "H"]} />
+            <ShortcutCombo keys={["Ctrl", "H"]} />
           </button>
         </li>
         <li className="list-none">

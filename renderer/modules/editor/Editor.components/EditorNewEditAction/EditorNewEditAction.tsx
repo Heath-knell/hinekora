@@ -1,9 +1,8 @@
 import clsx from "clsx";
 import { FiFilePlus } from "react-icons/fi";
 
+import { ShortcutCombo } from "~/renderer/components/ShortcutCombo/ShortcutCombo";
 import { useEditorShallow } from "~/renderer/store";
-
-import { EditorShortcutCombo } from "../EditorShortcutCombo/EditorShortcutCombo";
 
 interface EditorNewEditActionProps {
   disabled?: boolean;
@@ -40,7 +39,7 @@ function EditorNewEditAction({
     >
       New edit
       {variant === "menu" ? (
-        <EditorShortcutCombo keys={["Ctrl", "N"]} />
+        <ShortcutCombo keys={["Ctrl", "N"]} />
       ) : (
         <FiFilePlus size={15} />
       )}

@@ -64,11 +64,6 @@ const onboardingBeaconRegistry = [
         selector: "[data-onboarding='aura-lock-toggle']",
       },
       {
-        id: "aura-new-aura",
-        label: "New aura",
-        selector: "[data-onboarding='aura-new-aura']",
-      },
-      {
         id: "aura-source-position",
         label: "Source and position",
         selector: "[data-onboarding='aura-source-position']",

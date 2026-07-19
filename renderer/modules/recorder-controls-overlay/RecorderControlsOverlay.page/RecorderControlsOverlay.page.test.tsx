@@ -186,7 +186,10 @@ describe("RecorderControlsOverlayPage", () => {
     profilesState = {
       create: vi.fn().mockResolvedValue(undefined),
       delete: vi.fn().mockResolvedValue(undefined),
+      deleteAll: vi.fn().mockResolvedValue(undefined),
+      duplicate: vi.fn().mockResolvedValue(undefined),
       error: null,
+      flush: vi.fn().mockResolvedValue(undefined),
       hydrate: vi.fn().mockResolvedValue(undefined),
       isLoading: false,
       items: [

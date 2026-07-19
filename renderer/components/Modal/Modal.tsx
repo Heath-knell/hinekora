@@ -2,6 +2,7 @@ import clsx from "clsx";
 import {
   forwardRef,
   type ReactNode,
+  type SyntheticEvent,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -19,6 +20,7 @@ interface ModalProps {
   children: ReactNode;
   className?: string;
   closeOnBackdrop?: boolean;
+  closeOnEscape?: boolean;
   onClose?: () => void;
   size?: "sm" | "md" | "lg";
   surface?: "base-100" | "base-200" | "base-300";
@@ -42,6 +44,7 @@ const Modal = forwardRef<ModalHandle, ModalProps>(function Modal(
     children,
     className,
     closeOnBackdrop = true,
+    closeOnEscape = true,
     onClose,
     size = "md",
     surface = "base-300",
@@ -100,6 +103,11 @@ const Modal = forwardRef<ModalHandle, ModalProps>(function Modal(
     hideScrim();
     onClose?.();
   };
+  const handleCancel = (event: SyntheticEvent<HTMLDialogElement>) => {
+    if (!closeOnEscape) {
+      event.preventDefault();
+    }
+  };
 
   const modal = (
     <>
@@ -115,6 +123,7 @@ const Modal = forwardRef<ModalHandle, ModalProps>(function Modal(
       <dialog
         ref={dialogRef}
         className="modal modal-bottom !bg-transparent outline-none focus:outline-none focus-visible:outline-none sm:modal-middle"
+        onCancel={handleCancel}
         onClose={handleClose}
       >
         {closeOnBackdrop && (

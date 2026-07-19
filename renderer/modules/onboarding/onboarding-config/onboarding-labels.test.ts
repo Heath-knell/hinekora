@@ -19,7 +19,6 @@ describe("onboarding labels", () => {
       "capture-settings",
       "aura-profile-select",
       "aura-lock-toggle",
-      "aura-new-aura",
       "aura-source-position",
       "editor-my-media",
       "editor-preview-source",

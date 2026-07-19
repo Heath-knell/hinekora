@@ -1,8 +1,8 @@
-interface EditorShortcutComboProps {
+interface ShortcutComboProps {
   keys: string[];
 }
 
-function EditorShortcutCombo({ keys }: EditorShortcutComboProps) {
+function ShortcutCombo({ keys }: ShortcutComboProps) {
   return (
     <span className="flex items-center gap-1">
       {keys.map((key) => (
@@ -14,4 +14,4 @@ function EditorShortcutCombo({ keys }: EditorShortcutComboProps) {
   );
 }
 
-export { EditorShortcutCombo };
+export { ShortcutCombo };

@@ -1,9 +1,9 @@
 import clsx from "clsx";
 import { FiCheck, FiClipboard } from "react-icons/fi";
 
+import { ShortcutCombo } from "~/renderer/components/ShortcutCombo/ShortcutCombo";
 import { useEditorShallow } from "~/renderer/store";
 
-import { EditorShortcutCombo } from "../EditorShortcutCombo/EditorShortcutCombo";
 import { createCopyDisabledReason } from "./EditorCopyActions.utils";
 
 interface EditorCopyActionsProps {
@@ -84,7 +84,7 @@ function EditorCopyActions({
       ) : isCopied ? (
         <FiCheck size={15} />
       ) : variant === "menu" ? (
-        <EditorShortcutCombo keys={["Ctrl", "C"]} />
+        <ShortcutCombo keys={["Ctrl", "C"]} />
       ) : (
         <FiClipboard size={15} />
       )}
@@ -111,7 +111,7 @@ function EditorCopyActions({
           ) : isCopied ? (
             <FiCheck size={15} />
           ) : variant === "menu" ? (
-            <EditorShortcutCombo keys={["Ctrl", "C"]} />
+            <ShortcutCombo keys={["Ctrl", "C"]} />
           ) : (
             <FiClipboard size={15} />
           )}

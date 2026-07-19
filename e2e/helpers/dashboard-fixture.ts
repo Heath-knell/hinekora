@@ -57,6 +57,7 @@ import {
   type GameId,
   type ManagedRecorderStatus,
   type Profile,
+  type ProfileDuplicateInput,
   type ProfileUpdateInput,
   recordingOutputResolutionDimensions,
 } from "../../types";
@@ -98,7 +99,9 @@ interface DashboardE2ECalls {
   mainWindowActions: string[];
   pathSelectionRequests: AppSelectPathInput[];
   profileCreates: Array<{ game: GameId | null; id: string; name: string }>;
+  profileDeleteAll: string[];
   profileDeletes: string[];
+  profileDuplicates: Array<ProfileDuplicateInput & { id: string }>;
   profileSelects: string[];
   profileUpdates: ProfileUpdateInput[];
   recorderOverlayToggles: number;
@@ -638,7 +641,9 @@ async function setupDashboardE2E(
         mainWindowOpenEditorClipCalls: [],
         pathSelectionRequests: [],
         profileCreates: [],
+        profileDeleteAll: [],
         profileDeletes: [],
+        profileDuplicates: [],
         profileSelects: [],
         profileUpdates: [],
         recorderOverlayToggles: 0,
@@ -1376,10 +1381,73 @@ async function setupDashboardE2E(
             },
             delete: async (id) => {
               calls.profileDeletes.push(id);
-              profilesById.delete(id);
+              const profile = profilesById.get(id);
+              if (!profile) {
+                throw new Error("Profile not found");
+              }
+              if (profilesById.size === 1) {
+                profilesById.set(id, {
+                  ...profile,
+                  captureTarget: null,
+                  cropRegions: [],
+                  game: null,
+                  name: "Default Aura Profile",
+                  overlayPlacements: [],
+                  targetFps: 30,
+                  updatedAt: fixture.now,
+                });
+              } else {
+                profilesById.delete(id);
+              }
               listeners.profileChanged?.(
                 clone(Array.from(profilesById.values())),
               );
+
+              return clone(Array.from(profilesById.values()));
+            },
+            deleteAll: async (fallbackId) => {
+              calls.profileDeleteAll.push(fallbackId);
+              const fallback = profilesById.get(fallbackId);
+              if (!fallback) {
+                throw new Error("Profile not found");
+              }
+              const reset: Profile = {
+                ...fallback,
+                captureTarget: null,
+                cropRegions: [],
+                game: null,
+                name: "Default Aura Profile",
+                overlayPlacements: [],
+                targetFps: 30,
+                updatedAt: fixture.now,
+              };
+              profilesById.clear();
+              profilesById.set(reset.id, reset);
+              listeners.profileChanged?.([clone(reset)]);
+
+              return [clone(reset)];
+            },
+            duplicate: async (input) => {
+              const source = profilesById.get(input.sourceId);
+              if (!source) {
+                throw new Error("Profile not found");
+              }
+              const duplicated: Profile = {
+                ...source,
+                id: `profile-${profilesById.size + 1}`,
+                name: input.name,
+                createdAt: fixture.now,
+                updatedAt: fixture.now,
+              };
+              calls.profileDuplicates.push(
+                clone({ ...input, id: duplicated.id }),
+              );
+              profilesById.set(duplicated.id, duplicated);
+              listeners.profileChanged?.(
+                clone(Array.from(profilesById.values())),
+              );
+
+              return clone(duplicated);
             },
             list: async () => clone(Array.from(profilesById.values())),
             onChanged: (callback) => {
@@ -1402,6 +1470,7 @@ async function setupDashboardE2E(
                     ? input.captureTarget
                     : profile.captureTarget,
                 cropRegions: input.cropRegions ?? profile.cropRegions,
+                game: input.game === undefined ? profile.game : input.game,
                 name: input.name ?? profile.name,
                 overlayPlacements:
                   input.overlayPlacements ?? profile.overlayPlacements,

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 
+import { ShortcutCombo } from "~/renderer/components/ShortcutCombo/ShortcutCombo";
+
 import { EditorDeleteConfirmationModal } from "../EditorDeleteConfirmationModal/EditorDeleteConfirmationModal";
-import { EditorShortcutCombo } from "../EditorShortcutCombo/EditorShortcutCombo";
 
 interface EditorDeleteActionProps {
   confirmDescription: string;
@@ -75,7 +76,7 @@ function EditorDeleteAction({
         onClick={handleOpenConfirm}
       >
         <span>{label}</span>
-        {shortcutKeys && <EditorShortcutCombo keys={shortcutKeys} />}
+        {shortcutKeys && <ShortcutCombo keys={shortcutKeys} />}
       </button>
       <EditorDeleteConfirmationModal
         confirmLabel={confirmLabel}
