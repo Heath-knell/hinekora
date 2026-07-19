@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FiTrash2 } from "react-icons/fi";
 
 import { PageContainer } from "~/renderer/components/PageContainer/PageContainer";
@@ -11,16 +11,47 @@ import { useMediaLibraryScope } from "~/renderer/modules/media-library/MediaLibr
 import { SavedEditsPanel } from "~/renderer/modules/saved-edits/SavedEdits.components/SavedEditsPanel/SavedEditsPanel";
 import { useSavedEditsShallow } from "~/renderer/store";
 
+const emptyLibraryMetadata = {
+  availableLeagues: [] as string[],
+  globalTotalCount: 0,
+};
+
 function SavedEditsPage() {
   const [isDeleteAllConfirmOpen, setDeleteAllConfirmOpen] = useState(false);
   const { isReady: isMediaScopeReady, scope } = useMediaLibraryScope();
-  const { deleteAllEdits, libraryPage } = useSavedEditsShallow(
+  const { deleteAllEdits, libraryPage, libraryQuery } = useSavedEditsShallow(
     (savedEdits) => ({
       deleteAllEdits: savedEdits.deleteAllEdits,
       libraryPage: savedEdits.libraryPage,
+      libraryQuery: savedEdits.libraryQuery,
     }),
   );
-  const hasSavedEdits = (libraryPage?.globalTotalCount ?? 0) > 0;
+  const currentLibraryPage =
+    libraryQuery?.game === scope.game ? libraryPage : null;
+  const lastKnownLibraryMetadataRef = useRef({
+    game: scope.game,
+    availableLeagues: [] as string[],
+    globalTotalCount: 0,
+  });
+
+  useEffect(() => {
+    if (!currentLibraryPage) {
+      return;
+    }
+
+    lastKnownLibraryMetadataRef.current = {
+      game: scope.game,
+      availableLeagues: [...currentLibraryPage.availableLeagues],
+      globalTotalCount: currentLibraryPage.globalTotalCount,
+    };
+  }, [currentLibraryPage, scope.game]);
+
+  const libraryMetadata =
+    currentLibraryPage ??
+    (lastKnownLibraryMetadataRef.current.game === scope.game
+      ? lastKnownLibraryMetadataRef.current
+      : emptyLibraryMetadata);
+  const hasSavedEdits = libraryMetadata.globalTotalCount > 0;
 
   const handleOpenDeleteAllConfirm = () => {
     if (!hasSavedEdits) {
@@ -65,7 +96,7 @@ function SavedEditsPage() {
       }
       leagueControl={
         <MediaLibraryLeagueControl
-          savedLeagues={libraryPage?.availableLeagues ?? []}
+          savedLeagues={libraryMetadata.availableLeagues}
         />
       }
     />

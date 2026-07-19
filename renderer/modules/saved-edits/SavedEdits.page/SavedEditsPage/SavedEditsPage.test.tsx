@@ -68,17 +68,87 @@ import { SavedEditsPage } from "./SavedEditsPage";
 
 let container: HTMLDivElement;
 let root: Root;
-const settingsSlice = {
-  value: {
-    activeGame: "poe2",
-    poe1SelectedLeague: "Standard",
-    poe2SelectedLeague: "Runes of Aldur",
-  },
-} as const;
+let settingsSlice = createSettingsSlice();
+
+type TestGameId = "poe1" | "poe2";
+type SavedEditsPageTestLibraryPage = {
+  availableLeagues: string[];
+  globalTotalCount: number;
+  totalCount: number;
+};
+type SavedEditsPageTestLibraryQuery = {
+  game: TestGameId;
+  league?: string;
+} | null;
+
+interface SavedEditsPageStateOverrides {
+  libraryPage?: SavedEditsPageTestLibraryPage | null;
+  libraryQuery?: SavedEditsPageTestLibraryQuery;
+}
+
+function createSettingsSlice(activeGame: TestGameId = "poe2") {
+  return {
+    value: {
+      activeGame,
+      poe1SelectedLeague: "Standard",
+      poe2SelectedLeague: "Runes of Aldur",
+    },
+  } as const;
+}
+
+function createLibraryPage(
+  overrides: Partial<SavedEditsPageTestLibraryPage> = {},
+): SavedEditsPageTestLibraryPage {
+  return {
+    availableLeagues: ["Runes of Aldur"],
+    globalTotalCount: 2,
+    totalCount: 2,
+    ...overrides,
+  };
+}
+
+function createLibraryQuery(
+  overrides: Partial<NonNullable<SavedEditsPageTestLibraryQuery>> = {},
+) {
+  return {
+    game: "poe2" as TestGameId,
+    league: "Runes of Aldur",
+    ...overrides,
+  };
+}
+
+function getLibraryLeagueOptionValues() {
+  return Array.from(
+    container.querySelectorAll<HTMLOptionElement>(
+      '[aria-label="Library league"] option',
+    ),
+  ).map((option) => option.value);
+}
+
+function mockSavedEditsState(
+  getOverrides: () => SavedEditsPageStateOverrides = () => ({}),
+) {
+  storeMocks.useSavedEditsShallow.mockImplementation((selector) => {
+    const overrides = getOverrides();
+
+    return selector({
+      deleteAllEdits: storeMocks.deleteAllEdits,
+      libraryPage:
+        overrides.libraryPage === undefined
+          ? createLibraryPage()
+          : overrides.libraryPage,
+      libraryQuery:
+        overrides.libraryQuery === undefined
+          ? createLibraryQuery()
+          : overrides.libraryQuery,
+    });
+  });
+}
 
 describe("SavedEditsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    settingsSlice = createSettingsSlice();
     HTMLDialogElement.prototype.showModal = function showModal() {
       this.open = true;
     };
@@ -86,16 +156,7 @@ describe("SavedEditsPage", () => {
       this.open = false;
       this.dispatchEvent(new Event("close"));
     };
-    storeMocks.useSavedEditsShallow.mockImplementation((selector) =>
-      selector({
-        deleteAllEdits: storeMocks.deleteAllEdits,
-        libraryPage: {
-          availableLeagues: ["Runes of Aldur"],
-          globalTotalCount: 2,
-          totalCount: 2,
-        },
-      }),
-    );
+    mockSavedEditsState();
     storeMocks.useSettingsSelector.mockImplementation((selector) =>
       selector(settingsSlice),
     );
@@ -141,16 +202,9 @@ describe("SavedEditsPage", () => {
   });
 
   it("keeps the global delete action available when the current filter is empty", async () => {
-    storeMocks.useSavedEditsShallow.mockImplementation((selector) =>
-      selector({
-        deleteAllEdits: storeMocks.deleteAllEdits,
-        libraryPage: {
-          availableLeagues: ["Runes of Aldur"],
-          globalTotalCount: 2,
-          totalCount: 0,
-        },
-      }),
-    );
+    mockSavedEditsState(() => ({
+      libraryPage: createLibraryPage({ totalCount: 0 }),
+    }));
 
     await act(async () => {
       root.render(<SavedEditsPage />);
@@ -163,17 +217,58 @@ describe("SavedEditsPage", () => {
     expect(deleteButton?.disabled).toBe(false);
   });
 
-  it("hides the global delete action when there are no saved edits", async () => {
-    storeMocks.useSavedEditsShallow.mockImplementation((selector) =>
-      selector({
-        deleteAllEdits: storeMocks.deleteAllEdits,
-        libraryPage: {
-          availableLeagues: [],
-          globalTotalCount: 0,
-          totalCount: 0,
-        },
-      }),
+  it("keeps page actions stable while the selected league reloads", async () => {
+    let libraryPage: SavedEditsPageTestLibraryPage | null = createLibraryPage();
+    let libraryQuery: SavedEditsPageTestLibraryQuery = createLibraryQuery();
+    mockSavedEditsState(() => ({ libraryPage, libraryQuery }));
+
+    await act(async () => {
+      root.render(<SavedEditsPage />);
+    });
+
+    const leagueSelect = container.querySelector<HTMLSelectElement>(
+      '[aria-label="Library league"]',
     );
+    leagueSelect?.focus();
+
+    await act(async () => {
+      libraryPage = null;
+      libraryQuery = null;
+      root.render(<SavedEditsPage />);
+    });
+
+    expect(document.activeElement).toBe(leagueSelect);
+    expect(container.textContent).toContain("Delete all edits");
+    expect(getLibraryLeagueOptionValues()).toContain("Runes of Aldur");
+  });
+
+  it("ignores saved edit metadata from a stale active-game page", async () => {
+    mockSavedEditsState();
+
+    await act(async () => {
+      root.render(<SavedEditsPage />);
+    });
+
+    expect(getLibraryLeagueOptionValues()).toContain("Runes of Aldur");
+
+    settingsSlice = createSettingsSlice("poe1");
+    await act(async () => {
+      root.render(<SavedEditsPage />);
+    });
+
+    expect(getLibraryLeagueOptionValues()).toContain("Mirage");
+    expect(getLibraryLeagueOptionValues()).not.toContain("Runes of Aldur");
+    expect(container.textContent).not.toContain("Delete all edits");
+  });
+
+  it("hides the global delete action when there are no saved edits", async () => {
+    mockSavedEditsState(() => ({
+      libraryPage: createLibraryPage({
+        availableLeagues: [],
+        globalTotalCount: 0,
+        totalCount: 0,
+      }),
+    }));
 
     await act(async () => {
       root.render(<SavedEditsPage />);
