@@ -11,7 +11,11 @@ import type {
   EditorWorkspace,
 } from "~/main/modules/editor";
 
-import type { EditorMediaFilter, QuickClipTrimRange } from "~/types";
+import type {
+  EditorMediaFilter,
+  EditorTimelinePlaybackRate,
+  QuickClipTrimRange,
+} from "~/types";
 import type {
   EditorTimelineGap,
   TimelineTrimEdge,
@@ -142,6 +146,9 @@ interface EditorSlice {
     setMediaPageIndex: (pageIndex: number) => void;
     setMediaRailTab: (tab: EditorMediaRailTab) => void;
     setSavedEditPageIndex: (pageIndex: number) => void;
+    setSelectedTimelineClipPlaybackRate: (
+      playbackRate: EditorTimelinePlaybackRate,
+    ) => void;
     setTimelineGapsHighlighted: (isHighlighted: boolean) => void;
     setHoveredTimelineGap: (gap: EditorTimelineGap | null) => void;
     setPlaybackSeconds: (seconds: number) => void;

@@ -8,7 +8,14 @@ import {
   IpcValidationError,
 } from "~/main/utils/ipc-validation";
 
-import { EditorMediaAssetCategorySchema, type GameId } from "~/types";
+import {
+  defaultEditorTimelinePlaybackRate,
+  EditorMediaAssetCategorySchema,
+  type EditorTimelinePlaybackRate,
+  editorTimelinePlaybackRates,
+  type GameId,
+  isEditorTimelinePlaybackRate,
+} from "~/types";
 import { EditorChannel } from "./Editor.channels";
 import type {
   EditorCopyToClipboardInput,
@@ -49,6 +56,8 @@ const editorTimelineEpsilonSeconds = 0.001;
 const editorMediaKinds: EditorMediaKind[] = ["clip", "recording"];
 const editorExportModes: EditorExportMode[] = ["overwrite", "new-file"];
 const editorExportResolutions: EditorExportResolution[] = ["720p", "1080p"];
+const minEditorTimelinePlaybackRate = Math.min(...editorTimelinePlaybackRates);
+const maxEditorTimelinePlaybackRate = Math.max(...editorTimelinePlaybackRates);
 
 function validateEditorWorkspaceQuery(value: unknown): EditorWorkspaceQuery {
   if (value === undefined) {
@@ -672,9 +681,11 @@ function validateEditorProjectSemantics(
         );
       }
 
+      const maximumClipDurationSeconds =
+        (clip.outSeconds - clip.inSeconds) / clip.playbackRate;
       if (
         clip.durationSeconds >
-        clip.outSeconds - clip.inSeconds + editorTimelineEpsilonSeconds
+        maximumClipDurationSeconds + editorTimelineEpsilonSeconds
       ) {
         throw new IpcValidationError(
           channel,
@@ -902,6 +913,7 @@ function validateEditorProjectClip(
     min: 0,
     max: 86_400,
   });
+  const playbackRate = validateEditorPlaybackRate(value.playbackRate, channel);
   if (value.outSeconds <= value.inSeconds) {
     throw new IpcValidationError(
       channel,
@@ -925,6 +937,7 @@ function validateEditorProjectClip(
           ),
     name: value.name,
     outSeconds: value.outSeconds,
+    playbackRate,
     ...(value.sourceInSeconds === undefined
       ? {}
       : {
@@ -1013,14 +1026,45 @@ function validateEditorExportClip(
       "clip out point must be after clip in point",
     );
   }
+  const playbackRate = validateEditorPlaybackRate(value.playbackRate, channel);
+  if (
+    value.durationSeconds >
+    (value.outSeconds - value.inSeconds) / playbackRate +
+      editorTimelineEpsilonSeconds
+  ) {
+    throw new IpcValidationError(
+      channel,
+      "clip duration must fit source range",
+    );
+  }
 
   return {
     durationSeconds: value.durationSeconds,
     inSeconds: value.inSeconds,
     outSeconds: value.outSeconds,
+    playbackRate,
     source: validateEditorMediaReference(value.source, channel),
     startSeconds: value.startSeconds,
   };
+}
+
+function validateEditorPlaybackRate(
+  value: unknown,
+  channel: EditorChannel,
+): EditorTimelinePlaybackRate {
+  if (value === undefined || value === null) {
+    return defaultEditorTimelinePlaybackRate;
+  }
+
+  assertNumber(value, "clip speed", channel, {
+    min: minEditorTimelinePlaybackRate,
+    max: maxEditorTimelinePlaybackRate,
+  });
+  if (!isEditorTimelinePlaybackRate(value)) {
+    throw new IpcValidationError(channel, "clip speed is invalid");
+  }
+
+  return value;
 }
 
 function validateEditorMediaReference(

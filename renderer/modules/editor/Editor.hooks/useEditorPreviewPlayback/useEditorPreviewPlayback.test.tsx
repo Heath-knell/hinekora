@@ -132,6 +132,52 @@ describe("useEditorPreviewPlayback", () => {
     expect(video?.currentTime).toBeCloseTo(1.5);
   });
 
+  it("applies selected clip speed while syncing preview playback", async () => {
+    const fastClip = createEditorTestTimelineClip(asset, {
+      durationSeconds: 1,
+      id: "timeline-fast",
+      inSeconds: 1,
+      outSeconds: 3,
+      playbackRate: 2,
+      startSeconds: 2,
+    });
+    configureEditorState({
+      playbackSeconds: 2.5,
+      project: createEditorTestProject(asset, {
+        durationSeconds: 3,
+        tracks: [
+          {
+            clips: [fastClip],
+            id: "video-track",
+            kind: "video",
+            label: "Video",
+          },
+        ],
+      }),
+      selectedClipId: "timeline-fast",
+    });
+    await renderHarness();
+    const video = container.querySelector<HTMLVideoElement>(
+      '[data-testid="preview-video"]',
+    );
+    if (!video) {
+      throw new Error("Expected preview video to render");
+    }
+
+    await act(async () => {
+      video.dispatchEvent(new Event("loadedmetadata", { bubbles: true }));
+    });
+    expect(video.currentTime).toBeCloseTo(2);
+    expect(video.playbackRate).toBe(2);
+
+    video.currentTime = 2.5;
+    await act(async () => {
+      video.dispatchEvent(new Event("timeupdate", { bubbles: true }));
+    });
+
+    expect(storeMocks.setPlaybackSeconds).toHaveBeenCalledWith(2.75);
+  });
+
   it("publishes known no-audio media metadata", async () => {
     await renderHarness();
     const video = container.querySelector<HTMLVideoElement>(

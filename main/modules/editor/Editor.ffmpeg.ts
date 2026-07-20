@@ -123,7 +123,7 @@ async function renderEditorExportWithFfmpegQueued(
                 "-ss",
                 formatFfmpegSeconds(segment.inSeconds),
                 "-t",
-                formatFfmpegSeconds(segment.durationSeconds),
+                formatFfmpegSeconds(segment.sourceDurationSeconds),
                 "-i",
                 segment.source.path,
               ]

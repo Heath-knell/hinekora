@@ -7,6 +7,7 @@ const storeMocks = vi.hoisted(() => ({
   redoProjectChange: vi.fn(),
   removeAllTimelineGaps: vi.fn(),
   removeTimelineClip: vi.fn(),
+  setSelectedTimelineClipPlaybackRate: vi.fn(),
   setZoom: vi.fn(),
   setTimelineGapsHighlighted: vi.fn(),
   splitTimelineClipAt: vi.fn(),
@@ -45,6 +46,8 @@ function configureEditorState(overrides: Record<string, unknown> = {}) {
     removeAllTimelineGaps: storeMocks.removeAllTimelineGaps,
     removeTimelineClip: storeMocks.removeTimelineClip,
     selectedClipId: "timeline-1",
+    setSelectedTimelineClipPlaybackRate:
+      storeMocks.setSelectedTimelineClipPlaybackRate,
     setZoom: storeMocks.setZoom,
     setTimelineGapsHighlighted: storeMocks.setTimelineGapsHighlighted,
     splitTimelineClipAt: storeMocks.splitTimelineClipAt,
@@ -82,10 +85,41 @@ describe("EditorTimelineTools", () => {
     vi.clearAllMocks();
   });
 
-  it("splits, mutes, and deletes the selected timeline clip", async () => {
+  it("splits, changes speed, mutes, and deletes the selected timeline clip", async () => {
     await renderTimelineTools();
     const splitButton = container.querySelector<HTMLButtonElement>(
       '[aria-label="Split"]',
+    );
+    const speedButton = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Clip speed: 1x"]',
+    );
+    expect(speedButton?.querySelector("svg")).not.toBe(null);
+    if (speedButton) {
+      speedButton.getBoundingClientRect = vi.fn(() => ({
+        bottom: 224,
+        height: 24,
+        left: 100,
+        right: 124,
+        top: 200,
+        width: 24,
+        x: 100,
+        y: 200,
+        toJSON: vi.fn(),
+      }));
+    }
+
+    await act(async () => {
+      speedButton?.click();
+    });
+
+    const speedMenu = document.querySelector<HTMLUListElement>(
+      '[aria-label="Clip speed options"]',
+    );
+    const defaultSpeedOption = document.querySelector<HTMLButtonElement>(
+      '[data-playback-rate="1"]',
+    );
+    const fastestSpeedOption = document.querySelector<HTMLButtonElement>(
+      '[data-playback-rate="16"]',
     );
     const muteButton = container.querySelector<HTMLButtonElement>(
       '[aria-label="Mute audio"]',
@@ -93,14 +127,23 @@ describe("EditorTimelineTools", () => {
     const deleteButton = container.querySelector<HTMLButtonElement>(
       '[aria-label="Delete selected clip"]',
     );
+    expect(speedMenu?.style.left).toBe("112px");
+    expect(speedMenu?.style.bottom).toBe(`${window.innerHeight - 196}px`);
+    expect(speedMenu?.className.includes("w-16")).toBe(true);
+    expect(speedMenu?.className.includes("-translate-x-1/2")).toBe(true);
+    expect(defaultSpeedOption?.getAttribute("aria-checked")).toBe("true");
 
     await act(async () => {
       splitButton?.click();
+      fastestSpeedOption?.click();
       muteButton?.click();
       deleteButton?.click();
     });
 
     expect(storeMocks.splitTimelineClipAt).toHaveBeenCalledWith(2);
+    expect(storeMocks.setSelectedTimelineClipPlaybackRate).toHaveBeenCalledWith(
+      16,
+    );
     expect(storeMocks.toggleProjectAudioMuted).toHaveBeenCalledTimes(1);
     expect(storeMocks.removeTimelineClip).toHaveBeenCalledWith("timeline-1");
   });
@@ -170,6 +213,9 @@ describe("EditorTimelineTools", () => {
     const muteButton = container.querySelector<HTMLButtonElement>(
       '[aria-label="Mute audio"]',
     );
+    const speedButton = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Clip speed: 1x"]',
+    );
     const deleteButton = container.querySelector<HTMLButtonElement>(
       '[aria-label="Delete selected clip"]',
     );
@@ -188,6 +234,7 @@ describe("EditorTimelineTools", () => {
       redoButton?.click();
       splitButton?.click();
       muteButton?.click();
+      speedButton?.click();
       fitButton?.click();
       deleteButton?.click();
     });
@@ -195,12 +242,19 @@ describe("EditorTimelineTools", () => {
     expect(undoButton?.disabled).toBe(true);
     expect(redoButton?.disabled).toBe(true);
     expect(splitButton?.disabled).toBe(true);
+    expect(speedButton?.disabled).toBe(true);
+    expect(container.querySelector('[aria-label="Clip speed options"]')).toBe(
+      null,
+    );
     expect(muteButton?.disabled).toBe(true);
     expect(deleteButton?.disabled).toBe(true);
     expect(fitButton?.disabled).toBe(true);
     expect(storeMocks.undoProjectChange).not.toHaveBeenCalled();
     expect(storeMocks.redoProjectChange).not.toHaveBeenCalled();
     expect(storeMocks.splitTimelineClipAt).not.toHaveBeenCalled();
+    expect(
+      storeMocks.setSelectedTimelineClipPlaybackRate,
+    ).not.toHaveBeenCalled();
     expect(storeMocks.toggleProjectAudioMuted).not.toHaveBeenCalled();
     expect(storeMocks.fitTimelineToEdit).not.toHaveBeenCalled();
     expect(storeMocks.setZoom).not.toHaveBeenCalled();

@@ -1,3 +1,8 @@
+import {
+  defaultEditorTimelinePlaybackRate,
+  type EditorTimelinePlaybackRate,
+  isEditorTimelinePlaybackRate,
+} from "~/types";
 import type {
   EditorExportClipInput,
   EditorExportResolution,
@@ -21,6 +26,7 @@ interface EditorExportGapSegment {
 
 interface EditorExportClipSegment extends EditorResolvedExportClip {
   kind: "clip";
+  sourceDurationSeconds: number;
 }
 
 type EditorExportSegment = EditorExportClipSegment | EditorExportGapSegment;
@@ -57,8 +63,15 @@ function createEditorExportSegments(
       first.inSeconds - second.inSeconds,
   )) {
     const startSeconds = roundToMilliseconds(Math.max(0, clip.startSeconds));
+    const playbackRate = normalizeEditorExportPlaybackRate(clip.playbackRate);
+    const sourceRangeDurationSeconds = roundToMilliseconds(
+      clip.outSeconds - clip.inSeconds,
+    );
+    const sourceDurationSeconds = roundToMilliseconds(
+      Math.min(sourceRangeDurationSeconds, clip.durationSeconds * playbackRate),
+    );
     const durationSeconds = roundToMilliseconds(
-      Math.min(clip.durationSeconds, clip.outSeconds - clip.inSeconds),
+      sourceDurationSeconds / playbackRate,
     );
     if (durationSeconds < minimumSegmentDurationSeconds) {
       continue;
@@ -72,6 +85,8 @@ function createEditorExportSegments(
       ...clip,
       durationSeconds,
       kind: "clip",
+      playbackRate,
+      sourceDurationSeconds,
       startSeconds,
     });
     cursorSeconds = roundToMilliseconds(
@@ -117,14 +132,18 @@ function createEditorExportFilterScript(input: {
 
     lines.push(
       `[${segment.inputIndex}:v:0]trim=duration=${formatFfmpegSeconds(
-        segment.durationSeconds,
-      )},setpts=PTS-STARTPTS,${createScaleFilter(size)}[${videoLabel}]`,
+        segment.sourceDurationSeconds,
+      )},${createVideoSpeedFilter(segment.playbackRate)},${createScaleFilter(
+        size,
+      )}[${videoLabel}]`,
     );
     lines.push(
       segment.hasAudio && !input.muteAudio
         ? `[${segment.inputIndex}:a:0]atrim=duration=${formatFfmpegSeconds(
-            segment.durationSeconds,
-          )},asetpts=PTS-STARTPTS[${audioLabel}]`
+            segment.sourceDurationSeconds,
+          )},asetpts=PTS-STARTPTS${createAudioSpeedFilterSuffix(
+            segment.playbackRate,
+          )}[${audioLabel}]`
         : `${createSilentAudioFilter(segment.durationSeconds)}[${audioLabel}]`,
     );
   });
@@ -166,8 +185,12 @@ function validateEditorExportTimeline(input: {
       first.inSeconds - second.inSeconds,
   )) {
     const startSeconds = roundToMilliseconds(clip.startSeconds);
+    const playbackRate = normalizeEditorExportPlaybackRate(clip.playbackRate);
+    const sourceRangeDurationSeconds = roundToMilliseconds(
+      clip.outSeconds - clip.inSeconds,
+    );
     const durationSeconds = roundToMilliseconds(
-      Math.min(clip.durationSeconds, clip.outSeconds - clip.inSeconds),
+      Math.min(clip.durationSeconds, sourceRangeDurationSeconds / playbackRate),
     );
     const endSeconds = roundToMilliseconds(startSeconds + durationSeconds);
 
@@ -213,10 +236,62 @@ function createScaleFilter(size: EditorExportSize): string {
   return `scale=${size.width}:${size.height}:force_original_aspect_ratio=decrease,pad=${size.width}:${size.height}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p`;
 }
 
+function normalizeEditorExportPlaybackRate(
+  playbackRate: number | undefined,
+): EditorTimelinePlaybackRate {
+  return typeof playbackRate === "number" &&
+    Number.isFinite(playbackRate) &&
+    isEditorTimelinePlaybackRate(playbackRate)
+    ? playbackRate
+    : defaultEditorTimelinePlaybackRate;
+}
+
+function createVideoSpeedFilter(playbackRate: number): string {
+  if (playbackRate === defaultEditorTimelinePlaybackRate) {
+    return "setpts=PTS-STARTPTS";
+  }
+
+  return `setpts=(PTS-STARTPTS)/${formatFfmpegRate(playbackRate)}`;
+}
+
+function createAudioSpeedFilterSuffix(playbackRate: number): string {
+  const filters = createAudioTempoFilters(playbackRate);
+  if (filters.length === 0) {
+    return "";
+  }
+
+  return `,${filters.join(",")}`;
+}
+
+function createAudioTempoFilters(playbackRate: number): string[] {
+  const filters: string[] = [];
+  let remainingRate = playbackRate;
+
+  while (remainingRate > 2) {
+    filters.push("atempo=2.000");
+    remainingRate /= 2;
+  }
+
+  while (remainingRate < 0.5) {
+    filters.push("atempo=0.500");
+    remainingRate /= 0.5;
+  }
+
+  if (remainingRate !== defaultEditorTimelinePlaybackRate) {
+    filters.push(`atempo=${formatFfmpegRate(remainingRate)}`);
+  }
+
+  return filters;
+}
+
 function createSilentAudioFilter(durationSeconds: number): string {
   return `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=duration=${formatFfmpegSeconds(
     durationSeconds,
   )},asetpts=PTS-STARTPTS`;
+}
+
+function formatFfmpegRate(rate: number): string {
+  return rate.toFixed(3);
 }
 
 function formatFfmpegSeconds(seconds: number): string {

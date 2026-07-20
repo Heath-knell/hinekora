@@ -15,6 +15,7 @@ import {
   calculateEditorTimelineDuration,
   calculateTimelineGaps,
 } from "../../Editor.utils/Editor.utils";
+import { EditorTimelineSpeedMenu } from "../EditorTimelineSpeedMenu/EditorTimelineSpeedMenu";
 import { EditorTimelineToolButton } from "../EditorTimelineToolButton/EditorTimelineToolButton";
 
 function EditorTimelineTools() {
@@ -156,6 +157,8 @@ function EditorTimelineTools() {
         tooltip="Split selected clip"
         onClick={handleSplitClip}
       />
+      <span aria-hidden="true" className="mx-1 h-5 w-px bg-base-content/15" />
+      <EditorTimelineSpeedMenu />
       {shouldShowAudioTools && (
         <>
           <span

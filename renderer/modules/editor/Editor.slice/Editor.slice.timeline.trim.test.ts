@@ -293,6 +293,57 @@ describe("Editor timeline trim slice", () => {
     expect(store.getState().editor.historyPastLabels.at(-1)).toBe("Split");
   });
 
+  it("maps split and trim points through clip speed", () => {
+    const store = createTestStore();
+    const asset = createEditorTestAsset({ durationSeconds: 10 });
+    const project = createEditorTestProject(asset);
+    const spedClip = createEditorTestTimelineClip(asset, {
+      durationSeconds: 5,
+      outSeconds: 10,
+      playbackRate: 2,
+    });
+    loadEditorProject(
+      store,
+      {
+        ...project,
+        durationSeconds: 5,
+        tracks: [{ ...project.tracks[0]!, clips: [spedClip] }],
+      },
+      [asset],
+    );
+
+    store.getState().editor.splitTimelineClipAt(2);
+
+    let clips = store.getState().editor.project?.tracks[0]?.clips ?? [];
+    expect(clips).toEqual([
+      expect.objectContaining({
+        durationSeconds: 2,
+        inSeconds: 0,
+        outSeconds: 4,
+        playbackRate: 2,
+      }),
+      expect.objectContaining({
+        durationSeconds: 3,
+        inSeconds: 4,
+        outSeconds: 10,
+        playbackRate: 2,
+      }),
+    ]);
+
+    store
+      .getState()
+      .editor.trimTimelineClipEdge(clips[1]?.id ?? "", "start", 3);
+
+    clips = store.getState().editor.project?.tracks[0]?.clips ?? [];
+    expect(clips[1]).toMatchObject({
+      durationSeconds: 2,
+      inSeconds: 6,
+      outSeconds: 10,
+      playbackRate: 2,
+      startSeconds: 3,
+    });
+  });
+
   it("splits and trims clips even when project asset metadata is missing", () => {
     const store = createTestStore();
     const asset = createEditorTestAsset({ durationSeconds: 10 });

@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   calculateTimelineProjectDuration,
+  defaultEditorTimelinePlaybackRate,
+  editorTimelinePlaybackRates,
+  isEditorTimelinePlaybackRate,
   normalizeTimelineProject,
 } from "./editor-timeline";
 
@@ -44,5 +47,14 @@ describe("editor timeline helpers", () => {
       { id: "timeline-a", startSeconds: 0 },
       { id: "timeline-b", startSeconds: 1 },
     ]);
+  });
+
+  it("recognizes supported playback rates", () => {
+    expect(editorTimelinePlaybackRates).toEqual([
+      0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 4, 8, 16,
+    ]);
+    expect(defaultEditorTimelinePlaybackRate).toBe(1);
+    expect(isEditorTimelinePlaybackRate(16)).toBe(true);
+    expect(isEditorTimelinePlaybackRate(1.1)).toBe(false);
   });
 });

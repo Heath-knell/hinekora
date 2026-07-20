@@ -127,6 +127,19 @@ describe("Editor validation", () => {
     expect(
       validateEditorExportInput({
         ...createEditorExportInput(),
+        clips: [
+          createEditorExportClipInput({
+            durationSeconds: 0.3125,
+            outSeconds: 5,
+            playbackRate: 16,
+          }),
+        ],
+        durationSeconds: 0.3125,
+      }).clips[0],
+    ).toMatchObject({ durationSeconds: 0.3125, playbackRate: 16 });
+    expect(
+      validateEditorExportInput({
+        ...createEditorExportInput(),
         muteAudio: true,
       }),
     ).toMatchObject({ muteAudio: true });
@@ -181,6 +194,29 @@ describe("Editor validation", () => {
         clips: [{ ...createEditorExportClipInput(), outSeconds: 0 }],
       }),
     ).toThrow("clip out point must be after clip in point");
+    expect(() =>
+      validateEditorExportInput({
+        ...createEditorExportInput(),
+        clips: [
+          {
+            ...createEditorExportClipInput(),
+            playbackRate: 1.1,
+          },
+        ],
+      }),
+    ).toThrow("clip speed is invalid");
+    expect(() =>
+      validateEditorExportInput({
+        ...createEditorExportInput(),
+        clips: [
+          createEditorExportClipInput({
+            durationSeconds: 3,
+            outSeconds: 5,
+            playbackRate: 2,
+          }),
+        ],
+      }),
+    ).toThrow("clip duration must fit source range");
     expect(() =>
       validateEditorExportInput({
         ...createEditorExportInput(),
@@ -448,6 +484,41 @@ describe("Editor validation", () => {
         },
       }).project.tracks[0]?.clips[0],
     ).toMatchObject({ sourceInSeconds: 1, sourceOutSeconds: 9 });
+    expect(
+      validateEditorSaveProjectInput({
+        project: {
+          ...project,
+          tracks: [
+            {
+              ...track,
+              clips: [
+                {
+                  ...clip,
+                  durationSeconds: 0.625,
+                  outSeconds: 10,
+                  playbackRate: 16,
+                },
+              ],
+            },
+          ],
+        },
+      }).project.tracks[0]?.clips[0],
+    ).toMatchObject({ durationSeconds: 0.625, playbackRate: 16 });
+    const legacyClip = { ...clip } as Partial<typeof clip>;
+    delete legacyClip.playbackRate;
+    expect(
+      validateEditorSaveProjectInput({
+        project: {
+          ...project,
+          tracks: [
+            {
+              ...track,
+              clips: [legacyClip],
+            },
+          ],
+        },
+      }).project.tracks[0]?.clips[0],
+    ).toMatchObject({ playbackRate: 1 });
     const clipWithoutSourceRange = { ...clip };
     delete clipWithoutSourceRange.sourceInSeconds;
     delete clipWithoutSourceRange.sourceOutSeconds;
@@ -662,6 +733,19 @@ describe("Editor validation", () => {
         },
       }),
     ).toThrow("clip color is invalid");
+    expect(() =>
+      validateEditorSaveProjectInput({
+        project: {
+          ...project,
+          tracks: [
+            {
+              ...track,
+              clips: [{ ...clip, playbackRate: 1.1 }],
+            },
+          ],
+        },
+      }),
+    ).toThrow("clip speed is invalid");
     expect(() =>
       validateEditorSaveProjectInput({
         project: {

@@ -57,6 +57,7 @@ const project: EditorProject = {
           mediaUrl: "hinekora-media://replay-clip/asset-1",
           name: "asset-1.mp4",
           outSeconds: 4,
+          playbackRate: 1,
           sourceInSeconds: 0,
           sourceOutSeconds: 10,
           startSeconds: 0,

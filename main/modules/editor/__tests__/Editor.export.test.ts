@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { defaultEditorTimelinePlaybackRate } from "~/types";
 import type { EditorExportClipInput } from "../Editor.dto";
 import {
   calculateEditorExportDuration,
@@ -17,6 +18,7 @@ function createClip(
     durationSeconds: 3,
     inSeconds: 0,
     outSeconds: 3,
+    playbackRate: defaultEditorTimelinePlaybackRate,
     source: { path: "C:\\Videos\\clip.mp4" },
     startSeconds: 0,
     ...overrides,
@@ -30,6 +32,7 @@ function createInputClip(
     durationSeconds: 3,
     inSeconds: 0,
     outSeconds: 3,
+    playbackRate: defaultEditorTimelinePlaybackRate,
     source: { id: "clip-1", kind: "clip" },
     startSeconds: 0,
     ...overrides,
@@ -126,6 +129,7 @@ describe("Editor export helpers", () => {
           hasAudio: true,
           inputIndex: 0,
           kind: "clip",
+          sourceDurationSeconds: 2,
         },
         {
           ...createClip({
@@ -136,6 +140,7 @@ describe("Editor export helpers", () => {
           hasAudio: false,
           inputIndex: 1,
           kind: "clip",
+          sourceDurationSeconds: 1,
         },
       ] satisfies EditorExportRenderSegment[],
     });
@@ -151,6 +156,84 @@ describe("Editor export helpers", () => {
     expect(script).toContain("[v0][a0][v1][a1][v2][a2]concat=n=3:v=1:a=1");
   });
 
+  it("creates video and audio speed filters for adjusted clips", () => {
+    const segments = createEditorExportSegments([
+      createClip({
+        durationSeconds: 1.5,
+        outSeconds: 3,
+        playbackRate: 2,
+      }),
+      createClip({
+        durationSeconds: 4,
+        inSeconds: 3,
+        outSeconds: 4,
+        playbackRate: 0.25,
+        startSeconds: 1.5,
+      }),
+      createClip({
+        durationSeconds: 1,
+        outSeconds: 16,
+        playbackRate: 16,
+        startSeconds: 5.5,
+      }),
+    ]);
+    const clipSegments = segments.filter((segment) => segment.kind === "clip");
+
+    expect(clipSegments).toMatchObject([
+      {
+        durationSeconds: 1.5,
+        playbackRate: 2,
+        sourceDurationSeconds: 3,
+      },
+      {
+        durationSeconds: 4,
+        playbackRate: 0.25,
+        sourceDurationSeconds: 1,
+      },
+      {
+        durationSeconds: 1,
+        playbackRate: 16,
+        sourceDurationSeconds: 16,
+      },
+    ]);
+
+    const script = createEditorExportFilterScript({
+      resolution: "1080p",
+      segments: [
+        {
+          ...clipSegments[0]!,
+          hasAudio: true,
+          inputIndex: 0,
+        },
+        {
+          ...clipSegments[1]!,
+          hasAudio: true,
+          inputIndex: 1,
+        },
+        {
+          ...clipSegments[2]!,
+          hasAudio: true,
+          inputIndex: 2,
+        },
+      ] satisfies EditorExportRenderSegment[],
+    });
+
+    expect(script).toContain("trim=duration=3.000,setpts=(PTS-STARTPTS)/2.000");
+    expect(script).toContain(
+      "atrim=duration=3.000,asetpts=PTS-STARTPTS,atempo=2.000",
+    );
+    expect(script).toContain("trim=duration=1.000,setpts=(PTS-STARTPTS)/0.250");
+    expect(script).toContain(
+      "atrim=duration=1.000,asetpts=PTS-STARTPTS,atempo=0.500,atempo=0.500",
+    );
+    expect(script).toContain(
+      "trim=duration=16.000,setpts=(PTS-STARTPTS)/16.000",
+    );
+    expect(script).toContain(
+      "atrim=duration=16.000,asetpts=PTS-STARTPTS,atempo=2.000,atempo=2.000,atempo=2.000,atempo=2.000",
+    );
+  });
+
   it("creates 1080p filters", () => {
     expect(
       createEditorExportFilterScript({
@@ -161,6 +244,7 @@ describe("Editor export helpers", () => {
             hasAudio: true,
             inputIndex: 0,
             kind: "clip",
+            sourceDurationSeconds: 1,
           },
         ],
       }),
@@ -177,6 +261,7 @@ describe("Editor export helpers", () => {
           hasAudio: true,
           inputIndex: 0,
           kind: "clip",
+          sourceDurationSeconds: 1,
         },
       ],
     });

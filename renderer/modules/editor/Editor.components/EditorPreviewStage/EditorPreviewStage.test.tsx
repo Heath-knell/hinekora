@@ -43,6 +43,7 @@ const project = createEditorTestProject(asset, {
           mediaUrl: asset.mediaUrl,
           name: asset.name,
           outSeconds: 2,
+          playbackRate: 1,
           startSeconds: 2,
           trackId: "video-track",
         },

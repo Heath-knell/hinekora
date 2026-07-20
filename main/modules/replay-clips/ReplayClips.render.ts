@@ -16,6 +16,7 @@ import { createSafePathLogFields, logWarn } from "~/main/utils/app-log";
 import { safeErrorMessage } from "~/main/utils/ipc-validation";
 import { copyRenderedFileToClipboard } from "~/main/utils/rendered-file-clipboard";
 
+import { defaultEditorTimelinePlaybackRate } from "~/types";
 import type {
   ReplayClipFileActionResult,
   ReplayClipTrimInput,
@@ -42,6 +43,7 @@ async function renderReplayClipQuickTrim(
     durationSeconds: trimDurationSeconds,
     inSeconds: input.trim.inSeconds,
     outSeconds: input.trim.outSeconds,
+    playbackRate: defaultEditorTimelinePlaybackRate,
     source: { path: input.sourcePath },
     startSeconds: 0,
   };

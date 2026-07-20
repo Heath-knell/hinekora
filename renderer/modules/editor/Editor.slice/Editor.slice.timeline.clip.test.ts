@@ -255,6 +255,76 @@ describe("Editor timeline clip slice", () => {
     expect(store.getState().editor.historyPastLabels.at(-1)).toBe("Move");
   });
 
+  it("changes selected clip speed and recalculates timeline duration", () => {
+    const store = createTestStore();
+    const asset = createEditorTestAsset({ durationSeconds: 10 });
+    const project = createEditorTestProject(asset);
+    loadEditorProject(store, project, [asset], {
+      selectedClipId: "timeline-1",
+    });
+
+    store.getState().editor.setSelectedTimelineClipPlaybackRate(2);
+
+    expect(store.getState().editor.project?.tracks[0]?.clips[0]).toMatchObject({
+      durationSeconds: 5,
+      playbackRate: 2,
+    });
+    expect(store.getState().editor.project?.durationSeconds).toBe(5);
+    expect(store.getState().editor.historyPastLabels.at(-1)).toBe("Speed 2x");
+    expect(store.getState().editor.historyPastSubtitles.at(-1)).toBe(
+      "asset-1.mp4",
+    );
+  });
+
+  it("pushes following clips when slowing a selected clip would overlap them", () => {
+    const store = createTestStore();
+    const asset = createEditorTestAsset({ durationSeconds: 10 });
+    const project = createEditorTestProject(asset);
+    const firstClip = createEditorTestTimelineClip(asset, {
+      id: "timeline-first",
+      startSeconds: 0,
+    });
+    const secondClip = createEditorTestTimelineClip(asset, {
+      id: "timeline-second",
+      startSeconds: 5,
+    });
+    loadEditorProject(
+      store,
+      {
+        ...project,
+        activeClipId: "timeline-first",
+        durationSeconds: 10,
+        tracks: [{ ...project.tracks[0]!, clips: [firstClip, secondClip] }],
+      },
+      [asset],
+      { selectedClipId: "timeline-first" },
+    );
+
+    store.getState().editor.setSelectedTimelineClipPlaybackRate(0.5);
+
+    const clips = store.getState().editor.project?.tracks[0]?.clips ?? [];
+    expect(clips[0]).toMatchObject({
+      durationSeconds: 10,
+      playbackRate: 0.5,
+      startSeconds: 0,
+    });
+    expect(clips[1]).toMatchObject({ startSeconds: 10 });
+    expect(store.getState().editor.project?.durationSeconds).toBe(15);
+  });
+
+  it("keeps project identity when selected clip speed cannot change", () => {
+    const store = createTestStore();
+    const asset = createEditorTestAsset();
+    const project = createEditorTestProject(asset);
+    loadEditorProject(store, project, [asset], {
+      selectedClipId: null,
+    });
+
+    store.getState().editor.setSelectedTimelineClipPlaybackRate(2);
+
+    expect(store.getState().editor.project).toBe(project);
+  });
+
   it("keeps project identity when a clip move cannot change the timeline", () => {
     const store = createTestStore();
     const asset = createEditorTestAsset();

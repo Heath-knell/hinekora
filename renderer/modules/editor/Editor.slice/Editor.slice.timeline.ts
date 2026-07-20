@@ -12,6 +12,7 @@ type EditorTimelineActions = Pick<
   | "removeTimelineClip"
   | "removeTimelineGap"
   | "setHoveredTimelineGap"
+  | "setSelectedTimelineClipPlaybackRate"
   | "setTimelineGapsHighlighted"
   | "splitTimelineClipAt"
   | "trimTimelineClipEdge"

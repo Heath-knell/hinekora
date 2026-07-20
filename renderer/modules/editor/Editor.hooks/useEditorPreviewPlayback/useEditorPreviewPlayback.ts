@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { useEditorShallow } from "~/renderer/store";
 
+import { defaultEditorTimelinePlaybackRate } from "~/types";
 import { publishEditorPlaybackVisualTime } from "../../Editor.utils/Editor.utils";
 import { useEditorPreviewFrame } from "../useEditorPreviewFrame/useEditorPreviewFrame";
 import { isPlaybackInsideClip } from "./useEditorPreviewPlayback.utils";
@@ -86,9 +87,12 @@ function useEditorPreviewPlayback() {
     previewClip?.mediaUrl ??
     (!hasTimelineClips ? selectedAsset?.mediaUrl : null);
   const title = previewClip?.name ?? selectedAsset?.name ?? "Preview";
+  const previewPlaybackRate =
+    previewClip?.playbackRate ?? defaultEditorTimelinePlaybackRate;
   const sourceSeconds = playbackClip
     ? playbackClip.inSeconds +
-      Math.max(0, playbackSeconds - playbackClip.startSeconds)
+      Math.max(0, playbackSeconds - playbackClip.startSeconds) *
+        (playbackClip.playbackRate ?? defaultEditorTimelinePlaybackRate)
     : (previewClip?.inSeconds ?? playbackSeconds);
 
   useEffect(() => {
@@ -137,6 +141,15 @@ function useEditorPreviewPlayback() {
 
   useEffect(() => {
     const video = videoRef.current;
+    if (!video) {
+      return;
+    }
+
+    video.playbackRate = previewPlaybackRate;
+  }, [previewPlaybackRate]);
+
+  useEffect(() => {
+    const video = videoRef.current;
     if (!video || !mediaUrl) {
       return;
     }
@@ -177,7 +190,9 @@ function useEditorPreviewPlayback() {
       }
 
       const nextPlaybackSeconds =
-        previewClip.startSeconds + video.currentTime - previewClip.inSeconds;
+        previewClip.startSeconds +
+        (video.currentTime - previewClip.inSeconds) /
+          (previewClip.playbackRate ?? defaultEditorTimelinePlaybackRate);
       const clipEndSeconds =
         previewClip.startSeconds + previewClip.durationSeconds;
 

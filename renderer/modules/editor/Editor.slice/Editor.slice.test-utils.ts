@@ -11,6 +11,7 @@ import type {
 import type { BoundStore } from "~/renderer/store/store.types";
 import { createBoundStoreForTests } from "~/renderer/test/createBoundStoreForTests";
 
+import { defaultEditorTimelinePlaybackRate } from "~/types";
 import { createEditorSlice } from "./Editor.slice";
 
 type EditorSliceTestStore = ReturnType<typeof createEditorSliceTestStore>;
@@ -210,6 +211,7 @@ function createEditorTestTimelineClip(
     mediaUrl: asset.mediaUrl,
     name: asset.name,
     outSeconds: 5,
+    playbackRate: defaultEditorTimelinePlaybackRate,
     sourceInSeconds: 0,
     sourceOutSeconds: asset.durationSeconds ?? 10,
     startSeconds: 0,

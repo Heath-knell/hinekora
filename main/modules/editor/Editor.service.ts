@@ -32,6 +32,7 @@ import { copyRenderedFileToClipboard } from "~/main/utils/rendered-file-clipboar
 
 import {
   calculateTimelineProjectDuration,
+  defaultEditorTimelinePlaybackRate,
   normalizeTimelineProject,
 } from "~/types";
 import { EditorChannel } from "./Editor.channels";
@@ -1070,10 +1071,12 @@ class EditorService {
       .map((clip) => ({
         durationSeconds: Math.min(
           clip.durationSeconds,
-          clip.outSeconds - clip.inSeconds,
+          (clip.outSeconds - clip.inSeconds) /
+            (clip.playbackRate ?? defaultEditorTimelinePlaybackRate),
         ),
         inSeconds: clip.inSeconds,
         outSeconds: clip.outSeconds,
+        playbackRate: clip.playbackRate ?? defaultEditorTimelinePlaybackRate,
         source: this.resolveExportSource(clip.source),
         startSeconds: clip.startSeconds,
       }));
@@ -1188,6 +1191,7 @@ function resolveRefreshedClipDurationPatch({
   const sourceDurationSeconds = normalizeAssetDuration(
     refreshedAsset.durationSeconds,
   );
+  const playbackRate = clip.playbackRate ?? defaultEditorTimelinePlaybackRate;
   const minimumDurationSeconds = Math.min(0.001, sourceDurationSeconds);
   const inSeconds = clampEditorSeconds(
     clip.inSeconds,
@@ -1201,14 +1205,15 @@ function resolveRefreshedClipDurationPatch({
   );
   const durationSeconds = clampEditorSeconds(
     clip.durationSeconds,
-    minimumDurationSeconds,
-    outSeconds - inSeconds,
+    minimumDurationSeconds / playbackRate,
+    (outSeconds - inSeconds) / playbackRate,
   );
 
   if (
     clip.durationSeconds === durationSeconds &&
     clip.inSeconds === inSeconds &&
     clip.outSeconds === outSeconds &&
+    clip.playbackRate === playbackRate &&
     clip.sourceInSeconds === 0 &&
     clip.sourceOutSeconds === sourceDurationSeconds
   ) {
@@ -1219,6 +1224,7 @@ function resolveRefreshedClipDurationPatch({
     durationSeconds,
     inSeconds,
     outSeconds,
+    playbackRate,
     sourceInSeconds: 0,
     sourceOutSeconds: sourceDurationSeconds,
   };

@@ -42,6 +42,7 @@ type EditorStateFields = Omit<
   | "setMediaPageIndex"
   | "setMediaRailTab"
   | "setSavedEditPageIndex"
+  | "setSelectedTimelineClipPlaybackRate"
   | "setHoveredTimelineGap"
   | "setTimelineGapsHighlighted"
   | "setPlaybackSeconds"

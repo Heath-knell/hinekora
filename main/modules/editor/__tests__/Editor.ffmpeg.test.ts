@@ -395,9 +395,11 @@ describe("probeEditorAudioStream", () => {
             inSeconds: 0,
             kind: "clip",
             outSeconds: 1,
+            playbackRate: 1,
             source: {
               path: sourcePath,
             },
+            sourceDurationSeconds: 1,
             startSeconds: 1,
           },
         ],
@@ -426,9 +428,11 @@ describe("probeEditorAudioStream", () => {
             inSeconds: 0,
             kind: "clip",
             outSeconds: 1,
+            playbackRate: 1,
             source: {
               path: sourcePath,
             },
+            sourceDurationSeconds: 1,
             startSeconds: 0,
           },
         ],

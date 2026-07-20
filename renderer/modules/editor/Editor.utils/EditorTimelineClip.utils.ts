@@ -3,6 +3,7 @@ import type {
   EditorTimelineClip,
 } from "~/main/modules/editor";
 
+import { defaultEditorTimelinePlaybackRate } from "~/types";
 import { normalizeEditorDuration } from "./EditorTime.utils";
 
 export {
@@ -36,6 +37,7 @@ function createTimelineClipFromAsset(input: {
     mediaUrl: input.asset.mediaUrl,
     name: input.asset.name,
     outSeconds: durationSeconds,
+    playbackRate: defaultEditorTimelinePlaybackRate,
     sourceInSeconds: 0,
     sourceOutSeconds: durationSeconds,
     startSeconds: input.startSeconds,

@@ -50,6 +50,7 @@ describe("Editor export slice", () => {
       | EditorExportInput
       | undefined;
     expect(exportInput?.exportRequestId).toEqual(expect.any(String));
+    expect(exportInput?.clips[0]).toMatchObject({ playbackRate: 1 });
 
     progressTracker.getExportProgressCallback()?.({
       exportRequestId: "stale-export-request",
@@ -177,6 +178,7 @@ describe("Editor export slice", () => {
       expect(editorApi.copyProjectToClipboard).toHaveBeenCalledWith(
         expect.objectContaining({
           durationSeconds: project.durationSeconds,
+          clips: [expect.objectContaining({ playbackRate: 1 })],
           muteAudio: true,
           resolution: "1080p",
         }),

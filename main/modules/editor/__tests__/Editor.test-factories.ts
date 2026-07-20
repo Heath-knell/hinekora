@@ -1,3 +1,4 @@
+import { defaultEditorTimelinePlaybackRate } from "~/types";
 import type {
   EditorExportClipInput,
   EditorExportInput,
@@ -43,6 +44,7 @@ function createEditorTimelineClip(
     mediaUrl: asset.mediaUrl,
     name: asset.name,
     outSeconds: durationSeconds,
+    playbackRate: defaultEditorTimelinePlaybackRate,
     sourceInSeconds: 0,
     sourceOutSeconds: durationSeconds,
     startSeconds: 0,
@@ -105,6 +107,7 @@ function createEditorExportClipInput(
     durationSeconds: 5,
     inSeconds: 0,
     outSeconds: 5,
+    playbackRate: defaultEditorTimelinePlaybackRate,
     source: { id: "clip-1", kind: "clip" },
     startSeconds: 0,
     ...overrides,

@@ -153,6 +153,49 @@ describe("editor recording bookmarks utilities", () => {
     });
   });
 
+  it("maps recording bookmarks through sped-up editor clips", () => {
+    const recordingAsset = createEditorTestAsset({
+      assetKey: "recording:recording-1",
+      category: "recording",
+      durationSeconds: 20,
+      id: "recording-1",
+      kind: "recording",
+    });
+    const project = createEditorTestProject(recordingAsset, {
+      tracks: [
+        {
+          clips: [
+            createEditorTestTimelineClip(recordingAsset, {
+              durationSeconds: 4,
+              id: "timeline-recording",
+              inSeconds: 3,
+              outSeconds: 11,
+              playbackRate: 2,
+              sourceOutSeconds: 20,
+              startSeconds: 10,
+            }),
+          ],
+          id: "video-track",
+          kind: "video",
+          label: "Video",
+        },
+      ],
+    });
+    const bookmark = createEditorTestRecordingBookmark({ offsetSeconds: 7 });
+
+    expect(
+      resolveEditorBookmarkTimelineItem({
+        bookmark,
+        project,
+        recordingAssetKey: recordingAsset.assetKey,
+        recordingClipId: "timeline-recording",
+      }),
+    ).toMatchObject({
+      durationSeconds: 2,
+      offsetSeconds: 12,
+    });
+  });
+
   it("omits bookmarks outside the visible editor recording clips", () => {
     const recordingAsset = createEditorTestAsset({
       assetKey: "recording:recording-1",

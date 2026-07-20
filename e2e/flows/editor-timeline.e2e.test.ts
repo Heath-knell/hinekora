@@ -734,6 +734,35 @@ test("covers timeline toolbar, playback controls, zoom, and keyboard shortcuts",
     offsetSeconds: 1,
     page,
   });
+  const clipSpeedButton = page.getByLabel("Clip speed: 1x");
+  await clipSpeedButton.click();
+  const clipSpeedMenu = page.getByRole("menu", {
+    name: "Clip speed options",
+  });
+  const [clipSpeedButtonBox, clipSpeedMenuBox] = await Promise.all([
+    clipSpeedButton.boundingBox(),
+    clipSpeedMenu.boundingBox(),
+  ]);
+  expect(clipSpeedButtonBox).not.toBeNull();
+  expect(clipSpeedMenuBox).not.toBeNull();
+  if (clipSpeedButtonBox && clipSpeedMenuBox) {
+    expect(
+      Math.abs(
+        clipSpeedButtonBox.x +
+          clipSpeedButtonBox.width / 2 -
+          (clipSpeedMenuBox.x + clipSpeedMenuBox.width / 2),
+      ),
+    ).toBeLessThanOrEqual(1);
+    expect(clipSpeedMenuBox.y + clipSpeedMenuBox.height).toBeLessThanOrEqual(
+      clipSpeedButtonBox.y,
+    );
+    expect(clipSpeedMenuBox.width).toBeLessThanOrEqual(64);
+  }
+  await page.getByRole("menuitemradio", { name: "16x" }).click();
+  await expect(page.getByLabel("Clip speed: 16x")).toBeVisible();
+  await page.getByLabel("Clip speed: 16x").click();
+  await page.getByRole("menuitemradio", { name: "1x" }).click();
+  await expect(page.getByLabel("Clip speed: 1x")).toBeVisible();
   await page.getByRole("button", { name: "Split" }).click();
   await expect(page.locator("[data-clip-body='true']")).toHaveCount(4);
 
@@ -1160,6 +1189,7 @@ function createEditorRecordingClip(
     mediaUrl: asset.mediaUrl,
     name: asset.name,
     outSeconds: input.durationSeconds,
+    playbackRate: 1,
     sourceInSeconds: 0,
     sourceOutSeconds: asset.durationSeconds ?? input.durationSeconds,
     startSeconds: input.startSeconds,

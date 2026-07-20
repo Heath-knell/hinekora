@@ -13,6 +13,7 @@ const clip: EditorTimelineClip = {
   mediaUrl: "hinekora-media://replay-clip/asset-1",
   name: "asset-1.mp4",
   outSeconds: 6,
+  playbackRate: 1,
   startSeconds: 3,
   trackId: "video-track",
 };

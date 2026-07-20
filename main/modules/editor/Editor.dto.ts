@@ -1,4 +1,8 @@
-import type { EditorMediaAssetCategory, GameId } from "~/types";
+import type {
+  EditorMediaAssetCategory,
+  EditorTimelinePlaybackRate,
+  GameId,
+} from "~/types";
 
 export type { EditorMediaAssetCategory } from "~/types";
 
@@ -61,6 +65,7 @@ export interface EditorTimelineClip {
   mediaUrl: string | null;
   name: string;
   outSeconds: number;
+  playbackRate: EditorTimelinePlaybackRate;
   sourceInSeconds?: number;
   sourceOutSeconds?: number;
   startSeconds: number;
@@ -144,6 +149,7 @@ export interface EditorExportClipInput {
   durationSeconds: number;
   inSeconds: number;
   outSeconds: number;
+  playbackRate: EditorTimelinePlaybackRate;
   source: EditorMediaReference;
   startSeconds: number;
 }

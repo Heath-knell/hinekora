@@ -1,6 +1,7 @@
 import type { RunRecordingDetail } from "~/main/modules/recording-storage";
 import type { ReplayClipSourceDetail } from "~/main/modules/replay-clips";
 
+import { defaultEditorTimelinePlaybackRate } from "~/types";
 import type {
   EditorMediaAsset,
   EditorProject,
@@ -169,6 +170,7 @@ function createTimelineClips(assets: EditorMediaAsset[]): EditorTimelineClip[] {
       mediaUrl: asset.mediaUrl,
       name: asset.name,
       outSeconds: durationSeconds,
+      playbackRate: defaultEditorTimelinePlaybackRate,
       sourceInSeconds: 0,
       sourceOutSeconds: durationSeconds,
       startSeconds: nextStartSeconds,

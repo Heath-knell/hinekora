@@ -1,7 +1,9 @@
+import type { EditorTimelinePlaybackRate } from "~/types";
 import {
   calculateTimelineDuration,
   createTimelineClipFromAsset,
   moveTimelineClipWithinTrack,
+  roundToMilliseconds,
 } from "../Editor.utils/Editor.utils";
 import type { EditorSliceActionContext } from "./Editor.slice.context";
 import type { EditorSlice } from "./Editor.slice.types";
@@ -12,7 +14,10 @@ import {
 
 type EditorTimelineClipActions = Pick<
   EditorSlice["editor"],
-  "addAssetToTimelineAt" | "moveTimelineClip" | "removeTimelineClip"
+  | "addAssetToTimelineAt"
+  | "moveTimelineClip"
+  | "removeTimelineClip"
+  | "setSelectedTimelineClipPlaybackRate"
 >;
 
 function createEditorTimelineClipActions({
@@ -155,7 +160,101 @@ function createEditorTimelineClipActions({
         { historyLabel: clipName ? `Delete ${clipName}` : "Delete" },
       );
     },
+    setSelectedTimelineClipPlaybackRate: (playbackRate) => {
+      const selectedClipId = get().editor.selectedClipId;
+      if (!selectedClipId) {
+        return;
+      }
+
+      const clipName =
+        get()
+          .editor.project?.tracks.flatMap((track) => track.clips)
+          .find((clip) => clip.id === selectedClipId)?.name ?? null;
+      updateProject(
+        (project) => {
+          let didChange = false;
+          const tracks = project.tracks.map((track) => {
+            const clipIndex = track.clips.findIndex(
+              (clip) => clip.id === selectedClipId,
+            );
+            if (clipIndex === -1) {
+              return track;
+            }
+
+            const clip = track.clips[clipIndex];
+            if (!clip || clip.playbackRate === playbackRate) {
+              return track;
+            }
+
+            didChange = true;
+            const durationSeconds = calculatePlaybackRateDuration({
+              inSeconds: clip.inSeconds,
+              outSeconds: clip.outSeconds,
+              playbackRate,
+            });
+            const clipEndSeconds = roundToMilliseconds(
+              clip.startSeconds + durationSeconds,
+            );
+            const nextClip = track.clips[clipIndex + 1];
+            const pushSeconds = roundToMilliseconds(
+              Math.max(
+                clipEndSeconds - (nextClip?.startSeconds ?? Infinity),
+                0,
+              ),
+            );
+
+            return {
+              ...track,
+              clips: track.clips.map((timelineClip, timelineClipIndex) =>
+                timelineClip.id === selectedClipId
+                  ? {
+                      ...timelineClip,
+                      durationSeconds,
+                      playbackRate,
+                    }
+                  : pushSeconds > 0 && timelineClipIndex > clipIndex
+                    ? {
+                        ...timelineClip,
+                        startSeconds: roundToMilliseconds(
+                          timelineClip.startSeconds + pushSeconds,
+                        ),
+                      }
+                    : timelineClip,
+              ),
+            };
+          });
+          if (!didChange) {
+            return project;
+          }
+
+          return {
+            ...project,
+            durationSeconds: calculateTimelineDuration(tracks),
+            tracks,
+            updatedAt: new Date().toISOString(),
+          };
+        },
+        {
+          historyLabel: `Speed ${formatPlaybackRateLabel(playbackRate)}`,
+          historySubtitle: clipName,
+        },
+      );
+    },
   };
+}
+
+function calculatePlaybackRateDuration(input: {
+  inSeconds: number;
+  outSeconds: number;
+  playbackRate: EditorTimelinePlaybackRate;
+}): number {
+  return roundToMilliseconds(
+    Math.max(0.001, (input.outSeconds - input.inSeconds) / input.playbackRate),
+  );
+}
+
+function formatPlaybackRateLabel(playbackRate: EditorTimelinePlaybackRate) {
+  return `${playbackRate}x`;
 }
 
 export { createEditorTimelineClipActions };

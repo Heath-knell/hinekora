@@ -5,6 +5,7 @@ import type {
   EditorTimelineClip,
 } from "~/main/modules/editor";
 
+import { defaultEditorTimelinePlaybackRate } from "~/types";
 import {
   calculateTimelineDuration,
   clampEditorTimelineZoom,
@@ -301,8 +302,13 @@ function createEditorWorkspaceActions({
                 return clip;
               }
 
+              const playbackRate =
+                clip.playbackRate ?? defaultEditorTimelinePlaybackRate;
+              const durationSeconds = roundToMilliseconds(
+                range.durationSeconds / playbackRate,
+              );
               didChangeClip =
-                clip.durationSeconds !== range.durationSeconds ||
+                clip.durationSeconds !== durationSeconds ||
                 clip.inSeconds !== range.inSeconds ||
                 clip.outSeconds !== range.outSeconds ||
                 clip.startSeconds !== 0;
@@ -313,9 +319,10 @@ function createEditorWorkspaceActions({
 
               const nextClip: EditorTimelineClip = {
                 ...clip,
-                durationSeconds: range.durationSeconds,
+                durationSeconds,
                 inSeconds: range.inSeconds,
                 outSeconds: range.outSeconds,
+                playbackRate,
                 sourceInSeconds: 0,
                 startSeconds: 0,
               };

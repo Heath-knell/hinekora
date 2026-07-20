@@ -1,3 +1,10 @@
+const editorTimelinePlaybackRates = [
+  0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 4, 8, 16,
+] as const;
+const defaultEditorTimelinePlaybackRate = 1;
+
+type EditorTimelinePlaybackRate = (typeof editorTimelinePlaybackRates)[number];
+
 interface TimelineClipLike {
   durationSeconds: number;
   id: string;
@@ -102,8 +109,18 @@ function roundTimelineSeconds(seconds: number): number {
   return Math.round(seconds * 1_000) / 1_000;
 }
 
+function isEditorTimelinePlaybackRate(
+  value: unknown,
+): value is EditorTimelinePlaybackRate {
+  return editorTimelinePlaybackRates.some((rate) => rate === value);
+}
+
 export {
   calculateTimelineProjectDuration,
+  defaultEditorTimelinePlaybackRate,
+  type EditorTimelinePlaybackRate,
+  editorTimelinePlaybackRates,
+  isEditorTimelinePlaybackRate,
   type NormalizeTimelineProjectOptions,
   normalizeTimelineProject,
 };

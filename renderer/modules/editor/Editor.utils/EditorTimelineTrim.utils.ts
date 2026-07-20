@@ -3,6 +3,7 @@ import type {
   EditorTimelineClip,
 } from "~/main/modules/editor";
 
+import { defaultEditorTimelinePlaybackRate } from "~/types";
 import {
   normalizeEditorDuration,
   roundToMilliseconds,
@@ -81,15 +82,18 @@ function trimTimelineClipStart(input: {
     clip: input.clip,
     sourceRange,
   });
+  const playbackRate =
+    input.clip.playbackRate ?? defaultEditorTimelinePlaybackRate;
   const clipEndSeconds = roundToMilliseconds(
     input.clip.startSeconds + input.clip.durationSeconds,
   );
   const earliestStartSeconds = Math.max(
     input.minStartSeconds,
-    clipEndSeconds - (currentRange.outSeconds - sourceRange.sourceInSeconds),
+    clipEndSeconds -
+      (currentRange.outSeconds - sourceRange.sourceInSeconds) / playbackRate,
   );
   const latestStartSeconds =
-    clipEndSeconds - currentRange.minimumDurationSeconds;
+    clipEndSeconds - currentRange.minimumDurationSeconds / playbackRate;
   const startSeconds = clampSeconds(
     input.timelineSeconds,
     earliestStartSeconds,
@@ -100,7 +104,9 @@ function trimTimelineClipStart(input: {
   return {
     ...input.clip,
     durationSeconds,
-    inSeconds: roundToMilliseconds(currentRange.outSeconds - durationSeconds),
+    inSeconds: roundToMilliseconds(
+      currentRange.outSeconds - durationSeconds * playbackRate,
+    ),
     outSeconds: currentRange.outSeconds,
     sourceInSeconds: sourceRange.sourceInSeconds,
     sourceOutSeconds: sourceRange.sourceOutSeconds,
@@ -122,14 +128,16 @@ function trimTimelineClipEnd(input: {
     clip: input.clip,
     sourceRange,
   });
+  const playbackRate =
+    input.clip.playbackRate ?? defaultEditorTimelinePlaybackRate;
   const earliestEndSeconds = roundToMilliseconds(
-    input.clip.startSeconds + currentRange.minimumDurationSeconds,
+    input.clip.startSeconds +
+      currentRange.minimumDurationSeconds / playbackRate,
   );
   const latestEndSeconds = Math.min(
     input.maxEndSeconds,
     input.clip.startSeconds +
-      sourceRange.sourceOutSeconds -
-      currentRange.inSeconds,
+      (sourceRange.sourceOutSeconds - currentRange.inSeconds) / playbackRate,
   );
   const endSeconds = clampSeconds(
     input.timelineSeconds,
@@ -144,7 +152,9 @@ function trimTimelineClipEnd(input: {
     ...input.clip,
     durationSeconds,
     inSeconds: currentRange.inSeconds,
-    outSeconds: roundToMilliseconds(currentRange.inSeconds + durationSeconds),
+    outSeconds: roundToMilliseconds(
+      currentRange.inSeconds + durationSeconds * playbackRate,
+    ),
     sourceInSeconds: sourceRange.sourceInSeconds,
     sourceOutSeconds: sourceRange.sourceOutSeconds,
   };
@@ -154,12 +164,14 @@ function resolveTimelineClipSourceRange(input: {
   assetDurationSeconds: number;
   clip: EditorTimelineClip;
 }): TimelineClipSourceRange {
+  const playbackRate =
+    input.clip.playbackRate ?? defaultEditorTimelinePlaybackRate;
   const assetDurationSeconds = normalizeEditorDuration(
     Math.max(
       input.assetDurationSeconds,
       input.clip.sourceOutSeconds ?? 0,
       input.clip.outSeconds,
-      input.clip.inSeconds + input.clip.durationSeconds,
+      input.clip.inSeconds + input.clip.durationSeconds * playbackRate,
     ),
   );
   const minimumDurationSeconds =

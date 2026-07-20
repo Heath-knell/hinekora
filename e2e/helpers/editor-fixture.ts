@@ -386,6 +386,7 @@ function createEditorE2EClip(
     mediaUrl: asset.mediaUrl,
     name: asset.name,
     outSeconds: input.durationSeconds,
+    playbackRate: 1,
     sourceInSeconds: 0,
     sourceOutSeconds: 10,
     startSeconds: input.startSeconds,

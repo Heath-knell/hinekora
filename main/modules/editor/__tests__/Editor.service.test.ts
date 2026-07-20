@@ -1056,6 +1056,7 @@ describe("EditorService IPC", () => {
       outSeconds: 20,
       sourceOutSeconds: 10,
     });
+    delete (staleClip as { playbackRate?: unknown }).playbackRate;
     const staleProject = createEditorProject({
       assets: [staleAsset],
       durationSeconds: 10,
@@ -1090,6 +1091,7 @@ describe("EditorService IPC", () => {
         durationSeconds: 0.001,
         inSeconds: 0,
         outSeconds: 0.001,
+        playbackRate: 1,
         sourceInSeconds: 0,
         sourceOutSeconds: 0.001,
       }),
@@ -1804,6 +1806,7 @@ describe("EditorService IPC", () => {
         durationSeconds: number;
         inSeconds: number;
         outSeconds: number;
+        playbackRate: number;
         source: { path: string };
         startSeconds: number;
       }>;
@@ -1822,13 +1825,18 @@ describe("EditorService IPC", () => {
       ).toMatchObject({ path: clipPath });
       expect(
         internals.createExportClips([
-          createExportClip({
-            durationSeconds: 1,
-            inSeconds: 2,
-            outSeconds: 3,
-            source: { id: "recording-1", kind: "recording" },
-            startSeconds: 2,
-          }),
+          (() => {
+            const legacyClip = createExportClip({
+              durationSeconds: 1,
+              inSeconds: 2,
+              outSeconds: 3,
+              source: { id: "recording-1", kind: "recording" },
+              startSeconds: 2,
+            });
+            delete (legacyClip as { playbackRate?: unknown }).playbackRate;
+
+            return legacyClip;
+          })(),
           createExportClip({
             durationSeconds: 5,
             outSeconds: 3,
@@ -1853,6 +1861,7 @@ describe("EditorService IPC", () => {
         {
           inSeconds: 2,
           durationSeconds: 1,
+          playbackRate: 1,
           source: { path: recordingPath },
           startSeconds: 2,
         },
@@ -2125,7 +2134,9 @@ describe("EditorService IPC", () => {
             inSeconds: 0,
             kind: "clip",
             outSeconds: 0.4,
+            playbackRate: 1,
             source: { path: sourcePath },
+            sourceDurationSeconds: 0.4,
             startSeconds: 0.2,
           },
         ],

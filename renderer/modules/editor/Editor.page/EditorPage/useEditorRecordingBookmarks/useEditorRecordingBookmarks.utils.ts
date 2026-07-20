@@ -5,6 +5,8 @@ import type {
   EditorTimelineClip,
 } from "~/main/modules/editor";
 
+import { defaultEditorTimelinePlaybackRate } from "~/types";
+
 interface EditorRecordingBookmarkSource {
   assetKey: string;
   clipId: string | null;
@@ -169,7 +171,9 @@ function resolveEditorBookmarkTimelineMapping(input: {
   }
 
   const timelineSeconds = roundEditorBookmarkSeconds(
-    clip.startSeconds + sourceSeconds - sourceStartSeconds,
+    clip.startSeconds +
+      (sourceSeconds - sourceStartSeconds) /
+        (clip.playbackRate ?? defaultEditorTimelinePlaybackRate),
   );
 
   return {
@@ -238,9 +242,14 @@ function resolveEditorBookmarkTimelineHighlightMapping(input: {
   }
 
   return {
-    durationSeconds: visibleDurationSeconds,
+    durationSeconds: roundEditorBookmarkSeconds(
+      visibleDurationSeconds /
+        (clip.playbackRate ?? defaultEditorTimelinePlaybackRate),
+    ),
     timelineSeconds: roundEditorBookmarkSeconds(
-      clip.startSeconds + visibleBookmarkStartSeconds - sourceStartSeconds,
+      clip.startSeconds +
+        (visibleBookmarkStartSeconds - sourceStartSeconds) /
+          (clip.playbackRate ?? defaultEditorTimelinePlaybackRate),
     ),
   };
 }
@@ -312,7 +321,12 @@ function toEditorRecordingBookmarkSource(
 }
 
 function resolveClipVisibleSourceEndSeconds(clip: EditorTimelineClip): number {
-  return Math.min(clip.outSeconds, clip.inSeconds + clip.durationSeconds);
+  return Math.min(
+    clip.outSeconds,
+    clip.inSeconds +
+      clip.durationSeconds *
+        (clip.playbackRate ?? defaultEditorTimelinePlaybackRate),
+  );
 }
 
 function resolveMappedBookmarkDurationSeconds(input: {
@@ -335,7 +349,8 @@ function resolveMappedBookmarkDurationSeconds(input: {
     input.sourceEndSeconds,
   );
   const mappedDurationSeconds = roundEditorBookmarkSeconds(
-    clippedEndSeconds - input.sourceSeconds,
+    (clippedEndSeconds - input.sourceSeconds) /
+      (input.clip.playbackRate ?? defaultEditorTimelinePlaybackRate),
   );
 
   return mappedDurationSeconds > 0 ? mappedDurationSeconds : null;
