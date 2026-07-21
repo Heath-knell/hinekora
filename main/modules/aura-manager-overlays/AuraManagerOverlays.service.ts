@@ -221,12 +221,12 @@ class AuraManagerOverlaysService {
     if (
       this.auraOverlayLocked &&
       !startAddingAura &&
+      profile.overlayPlacements.length > 0 &&
       !hasRenderableAuraPlacements(profile)
     ) {
       this.closeWindow("no-renderable-placements");
       return;
     }
-
     const window = this.auraWindow ?? this.createWindow();
     const canDispatchAddAuraRequest =
       startAddingAura &&
